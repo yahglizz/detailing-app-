@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+<style>
+/* ===== Mobile optimization (<=768px). Overrides target the inline styles
+   used throughout the page; !important wins because inline styles here
+   carry no !important of their own. ===== */
+/* NOTE: the .dc renderer re-emits inline styles as "prop: value" (colon+space,
+   comma+space), so selectors below match that normalized form, not the source. */
+@media (max-width: 768px) {
+  /* Nav: drop the desktop link row, tighten padding + quote button */
+  [style*="gap: 30px"][style*="text-transform: uppercase"] { display: none !important; }
+  nav[style] { padding: 14px 18px !important; gap: 12px !important; }
+  [style*="padding: 13px 22px"] { padding: 11px 15px !important; font-size: 12px !important; }
+
+  /* Section / container padding — reclaim horizontal space */
+  [style*="padding: 96px 32px"] { padding: 56px 20px !important; }
+  [style*="padding: 56px 32px 40px"] { padding: 40px 20px 28px !important; }
+  [style*="padding: 22px 32px"] { padding: 18px 20px !important; }
+  [style*="padding: 44px 32px 52px"] { padding: 28px 20px 36px !important; }
+
+  /* Collapse every multi-column grid to a single column */
+  [style*="grid-template-columns: repeat(3, 1fr)"],
+  [style*="grid-template-columns: 1fr 1.1fr"],
+  [style*="grid-template-columns: 1.4fr 1fr 1fr"],
+  [style*="grid-template-columns: 1fr auto"],
+  [style*="grid-template-columns: 1fr 1fr"] { grid-template-columns: 1fr !important; }
+
+  /* Membership CTA card: shrink its oversized inner padding */
+  [style*="rgba(112, 40, 201, 0.22)"] { padding: 26px !important; }
+
+  /* Headings scale down so they don't blow past the viewport */
+  [style*="font-size: 52px"] { font-size: 33px !important; }
+  [style*="font-size: 46px"] { font-size: 30px !important; }
+  [style*="font-size: 26px"] { font-size: 18px !important; }
+
+  /* Hero: let it size to content, trim the floating logo */
+  [style*="min-height: 600px"] { min-height: auto !important; }
+  [style*="max-width: 380px"] { max-width: 250px !important; }
+}
+</style>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&family=Great+Vibes&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    html{scroll-behavior:smooth}
+    body{background:#08080B;color:#D5D7DC;font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased}
+    a{color:#A855F7;text-decoration:none}
+    a:hover{color:#C084FC}
+    ::selection{background:#7028C9;color:#fff}
+    @keyframes glowpulse{0%,100%{opacity:.55}50%{opacity:.9}}
+    @keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+    @keyframes marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+    @keyframes badgeFloat{0%,100%{transform:translateY(0) rotate(-6deg)}50%{transform:translateY(-6px) rotate(6deg)}}
+    [data-reelrail]::-webkit-scrollbar{display:none}
+  </style>
+  <script src="./image-slot.js"></script>
+</helmet>
+
+<div style="max-width:100%;overflow-x:hidden;background:#08080B">
+
+  <!-- NAV -->
+  <header style="position:sticky;top:0;z-index:100;background:rgba(8,8,11,0.82);backdrop-filter:blur(14px);border-bottom:1px solid #34303A">
+    <nav style="max-width:1240px;margin:0 auto;padding:16px 32px;display:flex;align-items:center;justify-content:space-between;gap:24px">
+      <a href="#top" style="display:flex;align-items:center;gap:12px;color:#fff">
+        <img src="assets/bld-logo-transparent.png" alt="Brotherly Love" style="height:52px;width:auto;display:block" />
+        <span style="font-family:'League Spartan',sans-serif;font-weight:800;letter-spacing:1px;font-size:15px;line-height:1;color:#fff">BROTHERLY LOVE<br><span style="font-weight:500;font-size:10px;letter-spacing:3px;color:#A9A4AF">MINISTRY DETAILING</span></span>
+      </a>
+      <div style="display:flex;align-items:center;gap:30px;font-family:'League Spartan',sans-serif;font-weight:600;font-size:14px;letter-spacing:1px;text-transform:uppercase">
+        <a href="#services" style="color:#D5D7DC">Services</a>
+        <a href="#packages" style="color:#D5D7DC">Packages</a>
+        <a href="#gallery" style="color:#D5D7DC">Gallery</a>
+        <a href="#reviews" style="color:#D5D7DC">Reviews</a>
+        <a href="#quote" style="color:#D5D7DC">Contact</a>
+      </div>
+      <a onClick="{{ openModal }}" style="cursor:pointer;background:linear-gradient(135deg,#7028C9,#A855F7);color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:13px;padding:13px 22px;border-radius:10px;box-shadow:0 6px 20px rgba(112,40,201,.45)">Request a Quote</a>
+    </nav>
+  </header>
+
+  <!-- HERO -->
+  <section id="top" style="position:relative;padding:0;overflow:hidden;background:#08080B;display:flex;flex-direction:column">
+    <div style="position:absolute;inset:0;z-index:0"><video ref="{{ videoRef }}" src="assets/hero-video.mp4" autoplay muted loop playsinline style="width:100%;height:100%;object-fit:cover;display:block"></video></div>
+    <div style="position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(90deg,rgba(8,8,11,.94) 0%,rgba(8,8,11,.7) 34%,rgba(8,8,11,.2) 60%,rgba(8,8,11,.15) 100%),linear-gradient(180deg,rgba(8,8,11,.25) 0%,transparent 30%,rgba(8,8,11,.55) 100%)"></div>
+    <div style="position:relative;z-index:2;max-width:1240px;width:100%;margin:0 auto;padding:44px 32px 52px;min-height:600px;display:flex;flex-direction:column;justify-content:space-between;pointer-events:none">
+      <div style="pointer-events:auto;align-self:flex-start">
+        <img src="assets/bld-hero-logo.png" alt="Brotherly Love Ministry Detailing" style="width:100%;max-width:380px;height:auto;display:block;filter:drop-shadow(0 12px 44px rgba(168,85,247,.4));animation:floaty 6s ease-in-out infinite" />
+      </div>
+      <div style="pointer-events:auto;max-width:560px">
+        <div style="display:inline-flex;align-items:center;gap:9px;border:1px solid #34303A;background:rgba(20,18,23,.72);backdrop-filter:blur(6px);border-radius:999px;padding:6px 14px;margin-bottom:18px">
+          <span style="width:7px;height:7px;border-radius:50%;background:#32D583;box-shadow:0 0 8px #32D583"></span>
+          <span style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#D5D7DC;font-weight:600">Premium Mobile Detailing · Tri-State Area</span>
+        </div>
+        <h1 style="font-family:'League Spartan',sans-serif;font-weight:900;line-height:1;letter-spacing:-.5px;margin-bottom:16px;text-shadow:0 4px 30px rgba(0,0,0,.7)">
+          <span style="display:block;font-weight:600;font-size:26px;color:#D5D7DC;letter-spacing:0;margin-bottom:4px">Philadelphia's</span>
+          <span style="display:block;font-size:52px;color:#fff">Brotherly <span style="color:#A855F7;text-shadow:0 0 40px rgba(168,85,247,.7)">Standard</span> of Clean</span>
+        </h1>
+        <p style="font-size:16px;line-height:1.6;color:#D5D7DC;max-width:460px;margin-bottom:28px;text-shadow:0 2px 12px rgba(0,0,0,.7)">Premium mobile detailing built on faith, integrity, and unmatched attention to detail.</p>
+        <div style="display:flex;gap:14px;flex-wrap:wrap">
+          <a onClick="{{ openModal }}" style="cursor:pointer;background:linear-gradient(135deg,#7028C9,#A855F7);color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:15px;padding:16px 30px;border-radius:12px;box-shadow:0 10px 30px rgba(112,40,201,.5)">Book Your Detail</a>
+          <a href="#packages" style="border:1px solid #34303A;background:rgba(20,18,23,.72);backdrop-filter:blur(6px);color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:15px;padding:16px 30px;border-radius:12px">View Packages</a>
+        </div>
+      </div>
+    </div>
+    <!-- SCROLLING TRUST BAR -->
+    <div style="position:relative;z-index:2;border-top:1px solid #34303A;border-bottom:1px solid #34303A;background:rgba(14,13,17,.78);backdrop-filter:blur(6px);overflow:hidden">
+      <div style="display:flex;width:max-content;animation:marquee 30s linear infinite">
+        <div style="display:flex;align-items:center;gap:52px;padding:20px 26px">
+          <div style="display:flex;align-items:center;gap:12px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="13" height="10" rx="1.5"/><path d="M14 9h4l3 3v4h-7z"/><circle cx="6" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/></svg><div><div style="font-family:'League Spartan',sans-serif;font-weight:700;color:#fff;font-size:14px;letter-spacing:.5px">MOBILE DETAILING</div><div style="font-size:12px;color:#A9A4AF">We come to you</div></div></div>
+          <div style="display:flex;align-items:center;gap:12px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M8 8h8"/></svg><div><div style="font-family:'League Spartan',sans-serif;font-weight:700;color:#fff;font-size:14px;letter-spacing:.5px">FAITH-DRIVEN</div><div style="font-size:12px;color:#A9A4AF">Honest service</div></div></div>
+          <div style="display:flex;align-items:center;gap:12px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 6.1L20 11l-6.1 1.9L12 19l-1.9-6.1L4 11l6.1-1.9z"/></svg><div><div style="font-family:'League Spartan',sans-serif;font-weight:700;color:#fff;font-size:14px;letter-spacing:.5px">PRO PRODUCTS</div><div style="font-size:12px;color:#A9A4AF">Premium results</div></div></div>
+          <div style="display:flex;align-items:center;gap:12px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l2.6 5.7 6.2.6-4.7 4.1 1.4 6.1L12 16.9 6.5 20.1l1.4-6.1L3.2 9.8l6.2-.6z"/></svg><div><div style="font-family:'League Spartan',sans-serif;font-weight:700;color:#fff;font-size:14px;letter-spacing:.5px">SATISFACTION</div><div style="font-size:12px;color:#A9A4AF">100% focused</div></div></div>
+          <div style="display:flex;align-items:center;gap:12px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4-3 7-7 8-4-1-7-4-7-8V6z"/></svg><div><div style="font-family:'League Spartan',sans-serif;font-weight:700;color:#fff;font-size:14px;letter-spacing:.5px">FULLY INSURED</div><div style="font-size:12px;color:#A9A4AF">Peace of mind</div></div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:52px;padding:20px 26px" aria-hidden="true">
+          <div style="display:flex;align-items:center;gap:12px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="13" height="10" rx="1.5"/><path d="M14 9h4l3 3v4h-7z"/><circle cx="6" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/></svg><div><div style="font-family:'League Spartan',sans-serif;font-weight:700;color:#fff;font-size:14px;letter-spacing:.5px">MOBILE DETAILING</div><div style="font-size:12px;color:#A9A4AF">We come to you</div></div></div>
+          <div style="display:flex;align-items:center;gap:12px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M8 8h8"/></svg><div><div style="font-family:'League Spartan',sans-serif;font-weight:700;color:#fff;font-size:14px;letter-spacing:.5px">FAITH-DRIVEN</div><div style="font-size:12px;color:#A9A4AF">Honest service</div></div></div>
+          <div style="display:flex;align-items:center;gap:12px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 6.1L20 11l-6.1 1.9L12 19l-1.9-6.1L4 11l6.1-1.9z"/></svg><div><div style="font-family:'League Spartan',sans-serif;font-weight:700;color:#fff;font-size:14px;letter-spacing:.5px">PRO PRODUCTS</div><div style="font-size:12px;color:#A9A4AF">Premium results</div></div></div>
+          <div style="display:flex;align-items:center;gap:12px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l2.6 5.7 6.2.6-4.7 4.1 1.4 6.1L12 16.9 6.5 20.1l1.4-6.1L3.2 9.8l6.2-.6z"/></svg><div><div style="font-family:'League Spartan',sans-serif;font-weight:700;color:#fff;font-size:14px;letter-spacing:.5px">SATISFACTION</div><div style="font-size:12px;color:#A9A4AF">100% focused</div></div></div>
+          <div style="display:flex;align-items:center;gap:12px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4-3 7-7 8-4-1-7-4-7-8V6z"/></svg><div><div style="font-family:'League Spartan',sans-serif;font-weight:700;color:#fff;font-size:14px;letter-spacing:.5px">FULLY INSURED</div><div style="font-size:12px;color:#A9A4AF">Peace of mind</div></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SERVICES -->
+  <section id="services" style="max-width:1240px;margin:0 auto;padding:96px 32px">
+    <div style="text-align:center;margin-bottom:56px">
+      <div style="font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#A855F7;font-size:13px;margin-bottom:14px">What We Do</div>
+      <h2 style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:46px;color:#fff;letter-spacing:-.5px;line-height:1">EVERYTHING YOUR RIDE NEEDS</h2>
+      <p style="color:#A9A4AF;font-size:17px;margin-top:14px">Full-service detailing at honest, beginner-friendly prices.</p>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px">
+      <div style="background:#141217;border:1px solid #34303A;border-radius:16px;padding:28px"><div style="width:48px;height:48px;border-radius:12px;background:rgba(112,40,201,.14);border:1px solid #34303A;display:flex;align-items:center;justify-content:center;margin-bottom:16px"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></svg></div><h3 style="font-family:'League Spartan',sans-serif;font-weight:700;font-size:21px;color:#fff;margin-bottom:8px">Exterior Wash &amp; Wax</h3><p style="color:#A9A4AF;font-size:14px;line-height:1.6;margin-bottom:14px">Hand wash, wheels, tires, and a protective wax for a deep, lasting shine.</p><div style="color:#A855F7;font-family:'League Spartan',sans-serif;font-weight:700">Starting at <span style="color:#fff;font-size:20px">$45</span></div></div>
+      <div style="background:#141217;border:1px solid #34303A;border-radius:16px;padding:28px"><div style="width:48px;height:48px;border-radius:12px;background:rgba(112,40,201,.14);border:1px solid #34303A;display:flex;align-items:center;justify-content:center;margin-bottom:16px"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 6.1L20 11l-6.1 1.9L12 19l-1.9-6.1L4 11l6.1-1.9z"/></svg></div><h3 style="font-family:'League Spartan',sans-serif;font-weight:700;font-size:21px;color:#fff;margin-bottom:8px">Interior Detail</h3><p style="color:#A9A4AF;font-size:14px;line-height:1.6;margin-bottom:14px">Vacuum, steam clean, wipe-down, and protect for a fresh, like-new cabin.</p><div style="color:#A855F7;font-family:'League Spartan',sans-serif;font-weight:700">Starting at <span style="color:#fff;font-size:20px">$60</span></div></div>
+      <div style="background:#141217;border:1px solid #34303A;border-radius:16px;padding:28px"><div style="width:48px;height:48px;border-radius:12px;background:rgba(112,40,201,.14);border:1px solid #34303A;display:flex;align-items:center;justify-content:center;margin-bottom:16px"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16l1.6-4.4A2 2 0 0 1 7.5 10h9a2 2 0 0 1 1.9 1.6L20 16M4 16h16v3a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H7v1a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><circle cx="7.5" cy="16.5" r="1"/><circle cx="16.5" cy="16.5" r="1"/></svg></div><h3 style="font-family:'League Spartan',sans-serif;font-weight:700;font-size:21px;color:#fff;margin-bottom:8px">Full Detail</h3><p style="color:#A9A4AF;font-size:14px;line-height:1.6;margin-bottom:14px">Inside and out — the complete top-to-bottom treatment for your vehicle.</p><div style="color:#A855F7;font-family:'League Spartan',sans-serif;font-weight:700">Starting at <span style="color:#fff;font-size:20px">$120</span></div></div>
+      <div style="background:#141217;border:1px solid #34303A;border-radius:16px;padding:28px"><div style="width:48px;height:48px;border-radius:12px;background:rgba(112,40,201,.14);border:1px solid #34303A;display:flex;align-items:center;justify-content:center;margin-bottom:16px"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4-3 7-7 8-4-1-7-4-7-8V6z"/></svg></div><h3 style="font-family:'League Spartan',sans-serif;font-weight:700;font-size:21px;color:#fff;margin-bottom:8px">Ceramic Coating</h3><p style="color:#A9A4AF;font-size:14px;line-height:1.6;margin-bottom:14px">Long-term paint protection with a slick, glossy, easy-to-clean finish.</p><div style="color:#A855F7;font-family:'League Spartan',sans-serif;font-weight:700">Starting at <span style="color:#fff;font-size:20px">$199</span></div></div>
+      <div style="background:#141217;border:1px solid #34303A;border-radius:16px;padding:28px"><div style="width:48px;height:48px;border-radius:12px;background:rgba(112,40,201,.14);border:1px solid #34303A;display:flex;align-items:center;justify-content:center;margin-bottom:16px"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="11" r="4"/><path d="M12 3v1M12 18v3M4 11H3M21 11h-1M6 6l-.7-.7M18 6l.7-.7"/></svg></div><h3 style="font-family:'League Spartan',sans-serif;font-weight:700;font-size:21px;color:#fff;margin-bottom:8px">Headlight Restoration</h3><p style="color:#A9A4AF;font-size:14px;line-height:1.6;margin-bottom:14px">Cut the haze and restore clarity for brighter, safer night driving.</p><div style="color:#A855F7;font-family:'League Spartan',sans-serif;font-weight:700">Starting at <span style="color:#fff;font-size:20px">$40</span></div></div>
+      <div style="background:#141217;border:1px solid #34303A;border-radius:16px;padding:28px"><div style="width:48px;height:48px;border-radius:12px;background:rgba(112,40,201,.14);border:1px solid #34303A;display:flex;align-items:center;justify-content:center;margin-bottom:16px"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5a4 4 0 0 0-5.4 4.9L4 15.5 6.5 18l5.6-5.6A4 4 0 0 0 17 7l-2.3 2.3-1.8-1.8L15 5z"/></svg></div><h3 style="font-family:'League Spartan',sans-serif;font-weight:700;font-size:21px;color:#fff;margin-bottom:8px">Engine Bay &amp; Extras</h3><p style="color:#A9A4AF;font-size:14px;line-height:1.6;margin-bottom:14px">Engine bay cleaning, pet hair removal, odor treatment, and more add-ons.</p><div style="color:#A855F7;font-family:'League Spartan',sans-serif;font-weight:700">Starting at <span style="color:#fff;font-size:20px">$35</span></div></div>
+    </div>
+  </section>
+
+  <!-- PACKAGES & MEMBERSHIP -->
+  <section id="packages" style="background:radial-gradient(90% 70% at 50% 0,rgba(112,40,201,.16),transparent 60%),#0E0D11;border-top:1px solid #34303A;border-bottom:1px solid #34303A">
+    <div style="max-width:1240px;margin:0 auto;padding:96px 32px">
+      <div style="text-align:center;margin-bottom:56px">
+        <div style="font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#A855F7;font-size:13px;margin-bottom:14px">Packages &amp; Pricing</div>
+        <h2 style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:46px;color:#fff;letter-spacing:-.5px;line-height:1">SIMPLE, HONEST PRICING</h2>
+        <p style="color:#A9A4AF;font-size:17px;margin-top:14px">Honest per-visit prices — flip to Member for exclusive savings on every wash.</p>
+      </div>
+      <div style="display:flex;justify-content:center;align-items:center;gap:14px;margin-bottom:44px;flex-wrap:wrap">
+        <span style="font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:.5px;text-transform:uppercase;font-size:14px;color:{{ oneTimeColor }}">One-Time</span>
+        <button onClick="{{ toggle }}" style="width:64px;height:34px;border-radius:999px;border:1px solid #34303A;background:#0E0D11;padding:4px;cursor:pointer;display:flex;align-items:center">
+          <span style="width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#7028C9,#A855F7);box-shadow:0 4px 12px rgba(112,40,201,.6);transform:translateX({{ knobX }});transition:transform .28s cubic-bezier(.76,0,.24,1)"></span>
+        </button>
+        <span style="font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:.5px;text-transform:uppercase;font-size:14px;color:{{ memberColor }}">Member</span>
+        <span style="font-family:'League Spartan',sans-serif;font-weight:700;font-size:12px;color:#32D583;background:rgba(50,213,131,.12);border:1px solid rgba(50,213,131,.4);border-radius:999px;padding:5px 12px;opacity:{{ saveOpacity }};transition:opacity .3s">Save up to 20%</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px;align-items:stretch">
+        <sc-for list="{{ plans }}" as="plan" hint-placeholder-count="3">
+          <div onMouseMove="{{ tiltMove }}" onMouseLeave="{{ tiltLeave }}" style="position:relative;background:{{ plan.cardBg }};border:{{ plan.cardBorder }};border-radius:20px;padding:34px 30px 30px;display:flex;flex-direction:column;box-shadow:{{ plan.cardShadow }};transition:transform .12s ease,box-shadow .25s ease;will-change:transform">
+            <div style="position:absolute;top:-18px;right:-12px;width:76px;height:76px;border-radius:50%;background:{{ plan.badgeBg }};border:2px solid #08080B;box-shadow:0 8px 22px rgba(0,0,0,.55),0 0 0 1px rgba(168,85,247,.35);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;animation:badgeFloat 5s ease-in-out infinite">
+              <div style="font-family:'League Spartan',sans-serif;font-weight:900;font-size:20px;line-height:1">$<span>{{ plan.priceStr }}</span></div>
+              <div style="font-size:9px;font-weight:700;letter-spacing:.5px;opacity:.9;text-transform:uppercase">{{ plan.unitShort }}</div>
+            </div>
+            <h3 style="font-family:'League Spartan',sans-serif;font-weight:900;font-size:24px;color:#fff;margin-bottom:8px;padding-right:60px">{{ plan.name }}</h3>
+            <sc-if value="{{ plan.isPopular }}" hint-placeholder-val="{{ false }}">
+              <span style="align-self:flex-start;display:inline-block;background:linear-gradient(135deg,#7028C9,#A855F7);color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:10px;padding:5px 12px;border-radius:999px;margin-bottom:10px">★ Most Popular</span>
+            </sc-if>
+            <p style="color:#A9A4AF;font-size:13px;line-height:1.5;margin-bottom:6px">{{ plan.tagline }}</p>
+            <p style="color:#A855F7;font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;margin-bottom:22px">{{ plan.unitLabel }}</p>
+            <div style="display:flex;flex-direction:column;gap:10px;flex:1;margin-bottom:26px">
+              <sc-for list="{{ plan.features }}" as="feat" hint-placeholder-count="5">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <span style="flex:none;width:20px;height:20px;border-radius:6px;background:rgba(112,40,201,.18);border:1px solid #7028C9;display:flex;align-items:center;justify-content:center;color:#A855F7;font-size:11px;font-weight:800">✓</span>
+                  <span style="color:#D5D7DC;font-size:14px">{{ feat }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <a onClick="{{ openModal }}" style="cursor:pointer;text-align:center;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:14px;padding:15px;border-radius:12px;{{ plan.ctaStyle }}">Book This Wash</a>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- MEMBERSHIP -->
+      <div style="margin-top:28px;background:linear-gradient(120deg,rgba(112,40,201,.22),rgba(20,18,23,.9));border:1px solid #7028C9;border-radius:20px;padding:44px;display:grid;grid-template-columns:1fr auto;gap:40px;align-items:center">
+        <div>
+          <div style="display:inline-block;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#A855F7;font-size:12px;border:1px solid #7028C9;border-radius:999px;padding:6px 14px;margin-bottom:16px">Membership</div>
+          <h3 style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:34px;color:#fff;margin-bottom:12px">THE BROTHERHOOD CLUB</h3>
+          <p style="color:#D5D7DC;font-size:15px;line-height:1.6;max-width:560px;margin-bottom:20px">Keep your vehicle spotless year-round. Members get scheduled washes every month, priority booking, and exclusive savings on every detail.</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:560px;font-size:14px;color:#D5D7DC">
+            <div>✓ Set number of washes each month</div>
+            <div>✓ Priority scheduling</div>
+            <div>✓ Member-only pricing on details</div>
+            <div>✓ Free upgrades &amp; add-ons</div>
+            <div>✓ Skip the line, book first</div>
+            <div>✓ Cancel anytime</div>
+          </div>
+        </div>
+        <div style="text-align:center;background:#0E0D11;border:1px solid #34303A;border-radius:16px;padding:32px 40px">
+          <div style="font-family:'League Spartan',sans-serif;font-weight:700;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#A9A4AF">From</div>
+          <div style="font-family:'League Spartan',sans-serif;font-weight:900;font-size:52px;color:#A855F7;line-height:1">$49</div>
+          <div style="color:#A9A4AF;font-size:13px;margin-bottom:20px">/ month</div>
+          <a onClick="{{ openModal }}" style="cursor:pointer;display:block;background:linear-gradient(135deg,#7028C9,#A855F7);color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:14px;padding:15px 28px;border-radius:12px;box-shadow:0 10px 24px rgba(112,40,201,.5)">Join the Club</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- GALLERY -->
+  <section id="gallery" style="max-width:1240px;margin:0 auto;padding:96px 32px">
+    <div style="text-align:center;margin-bottom:56px">
+      <div style="font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#A855F7;font-size:13px;margin-bottom:14px">Our Work</div>
+      <h2 style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:46px;color:#fff;letter-spacing:-.5px;line-height:1">DETAILING REELS</h2>
+      <p style="color:#A9A4AF;font-size:17px;margin-top:14px">Swipe through our latest work. Tap a reel to add your own video clip.</p>
+    </div>
+    <div style="position:relative">
+      <button onClick="{{ scrollLeftReels }}" style="position:absolute;left:-6px;top:50%;transform:translateY(-50%);z-index:5;width:48px;height:48px;border-radius:50%;border:1px solid #34303A;background:rgba(20,18,23,.9);backdrop-filter:blur(6px);color:#fff;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 20px rgba(0,0,0,.5)" aria-label="Scroll left">‹</button>
+      <button onClick="{{ scrollRightReels }}" style="position:absolute;right:-6px;top:50%;transform:translateY(-50%);z-index:5;width:48px;height:48px;border-radius:50%;border:1px solid #34303A;background:rgba(20,18,23,.9);backdrop-filter:blur(6px);color:#fff;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 20px rgba(0,0,0,.5)" aria-label="Scroll right">›</button>
+      <div ref="{{ reelScrollerRef }}" data-reelrail style="display:flex;gap:20px;overflow-x:auto;scroll-snap-type:x mandatory;scroll-behavior:smooth;padding:12px 44px 24px;scrollbar-width:none;-ms-overflow-style:none">
+        <div style="flex:none;width:268px;aspect-ratio:9/16;scroll-snap-align:center;border-radius:20px;overflow:hidden;border:1px solid #34303A;background:linear-gradient(165deg,#1a1030,#0E0D11);position:relative;box-shadow:0 16px 38px rgba(0,0,0,.45);transition:transform .3s ease" style-hover="transform:translateY(-8px) scale(1.02)">
+          <video ref="{{ videoRef }}" src="assets/reel-1.mp4" autoplay muted loop playsinline style="width:100%;height:100%;object-fit:cover;display:block"></video>
+          <div style="position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(8,8,11,.25) 0%,transparent 22%,transparent 62%,rgba(8,8,11,.85) 100%);display:flex;flex-direction:column;justify-content:space-between;padding:14px">
+            <span style="align-self:flex-end;background:rgba(8,8,11,.6);border:1px solid rgba(168,85,247,.5);color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:10px;letter-spacing:1px;padding:4px 9px;border-radius:999px">REEL</span>
+            <div style="display:flex;align-items:center;gap:9px"><span style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#7028C9,#A855F7);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px">▶</span><span style="color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:13px">Full Detail</span></div>
+          </div>
+        </div>
+        <div style="flex:none;width:268px;aspect-ratio:9/16;scroll-snap-align:center;border-radius:20px;overflow:hidden;border:1px solid #34303A;background:linear-gradient(165deg,#1a1030,#0E0D11);position:relative;box-shadow:0 16px 38px rgba(0,0,0,.45);transition:transform .3s ease" style-hover="transform:translateY(-8px) scale(1.02)">
+          <video ref="{{ videoRef }}" src="assets/reel-2.mp4" autoplay muted loop playsinline style="width:100%;height:100%;object-fit:cover;display:block"></video>
+          <div style="position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(8,8,11,.25) 0%,transparent 22%,transparent 62%,rgba(8,8,11,.85) 100%);display:flex;flex-direction:column;justify-content:space-between;padding:14px">
+            <span style="align-self:flex-end;background:rgba(8,8,11,.6);border:1px solid rgba(168,85,247,.5);color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:10px;letter-spacing:1px;padding:4px 9px;border-radius:999px">REEL</span>
+            <div style="display:flex;align-items:center;gap:9px"><span style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#7028C9,#A855F7);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px">▶</span><span style="color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:13px">Interior Deep Clean</span></div>
+          </div>
+        </div>
+        <div style="flex:none;width:268px;aspect-ratio:9/16;scroll-snap-align:center;border-radius:20px;overflow:hidden;border:1px solid #34303A;background:linear-gradient(165deg,#1a1030,#0E0D11);position:relative;box-shadow:0 16px 38px rgba(0,0,0,.45);transition:transform .3s ease" style-hover="transform:translateY(-8px) scale(1.02)">
+          <video ref="{{ videoRef }}" src="assets/reel-3.mp4" autoplay muted loop playsinline style="width:100%;height:100%;object-fit:cover;display:block"></video>
+          <div style="position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(8,8,11,.25) 0%,transparent 22%,transparent 62%,rgba(8,8,11,.85) 100%);display:flex;flex-direction:column;justify-content:space-between;padding:14px">
+            <span style="align-self:flex-end;background:rgba(8,8,11,.6);border:1px solid rgba(168,85,247,.5);color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:10px;letter-spacing:1px;padding:4px 9px;border-radius:999px">REEL</span>
+            <div style="display:flex;align-items:center;gap:9px"><span style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#7028C9,#A855F7);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px">▶</span><span style="color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:13px">Ceramic Coating</span></div>
+          </div>
+        </div>
+        <div style="flex:none;width:268px;aspect-ratio:9/16;scroll-snap-align:center;border-radius:20px;overflow:hidden;border:1px solid #34303A;background:linear-gradient(165deg,#1a1030,#0E0D11);position:relative;box-shadow:0 16px 38px rgba(0,0,0,.45);transition:transform .3s ease" style-hover="transform:translateY(-8px) scale(1.02)">
+          <video ref="{{ videoRef }}" src="assets/reel-4.mp4" autoplay muted loop playsinline style="width:100%;height:100%;object-fit:cover;display:block"></video>
+          <div style="position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(8,8,11,.25) 0%,transparent 22%,transparent 62%,rgba(8,8,11,.85) 100%);display:flex;flex-direction:column;justify-content:space-between;padding:14px">
+            <span style="align-self:flex-end;background:rgba(8,8,11,.6);border:1px solid rgba(168,85,247,.5);color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:10px;letter-spacing:1px;padding:4px 9px;border-radius:999px">REEL</span>
+            <div style="display:flex;align-items:center;gap:9px"><span style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#7028C9,#A855F7);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px">▶</span><span style="color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:13px">Wheels &amp; Tires</span></div>
+          </div>
+        </div>
+        <div style="flex:none;width:268px;aspect-ratio:9/16;scroll-snap-align:center;border-radius:20px;overflow:hidden;border:1px solid #34303A;background:linear-gradient(165deg,#1a1030,#0E0D11);position:relative;box-shadow:0 16px 38px rgba(0,0,0,.45);transition:transform .3s ease" style-hover="transform:translateY(-8px) scale(1.02)">
+          <video ref="{{ videoRef }}" src="assets/reel-5.mp4" autoplay muted loop playsinline style="width:100%;height:100%;object-fit:cover;display:block"></video>
+          <div style="position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(8,8,11,.25) 0%,transparent 22%,transparent 62%,rgba(8,8,11,.85) 100%);display:flex;flex-direction:column;justify-content:space-between;padding:14px">
+            <span style="align-self:flex-end;background:rgba(8,8,11,.6);border:1px solid rgba(168,85,247,.5);color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:10px;letter-spacing:1px;padding:4px 9px;border-radius:999px">REEL</span>
+            <div style="display:flex;align-items:center;gap:9px"><span style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#7028C9,#A855F7);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px">▶</span><span style="color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:13px">Paint Correction</span></div>
+          </div>
+        </div>
+        <div style="flex:none;width:268px;aspect-ratio:9/16;scroll-snap-align:center;border-radius:20px;overflow:hidden;border:1px solid #34303A;background:linear-gradient(165deg,#1a1030,#0E0D11);position:relative;box-shadow:0 16px 38px rgba(0,0,0,.45);transition:transform .3s ease" style-hover="transform:translateY(-8px) scale(1.02)">
+          <video ref="{{ videoRef }}" src="assets/reel-6.mp4" autoplay muted loop playsinline style="width:100%;height:100%;object-fit:cover;display:block"></video>
+          <div style="position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(8,8,11,.25) 0%,transparent 22%,transparent 62%,rgba(8,8,11,.85) 100%);display:flex;flex-direction:column;justify-content:space-between;padding:14px">
+            <span style="align-self:flex-end;background:rgba(8,8,11,.6);border:1px solid rgba(168,85,247,.5);color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:10px;letter-spacing:1px;padding:4px 9px;border-radius:999px">REEL</span>
+            <div style="display:flex;align-items:center;gap:9px"><span style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#7028C9,#A855F7);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px">▶</span><span style="color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:13px">The Big Reveal</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- REVIEWS -->
+  <section id="reviews" style="background:#0E0D11;border-top:1px solid #34303A;border-bottom:1px solid #34303A">
+    <div style="max-width:1240px;margin:0 auto;padding:96px 32px">
+      <div style="text-align:center;margin-bottom:56px">
+        <div style="font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#A855F7;font-size:13px;margin-bottom:14px">Reviews</div>
+        <h2 style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:46px;color:#fff;letter-spacing:-.5px;line-height:1">WHAT OUR CLIENTS SAY</h2>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px">
+        <div style="background:#141217;border:1px solid #34303A;border-radius:16px;padding:30px"><div style="color:#F5B942;font-size:16px;letter-spacing:3px;margin-bottom:14px">★★★★★</div><p style="color:#D5D7DC;font-size:15px;line-height:1.7;margin-bottom:20px">"My car looked brand new when they finished. Professional, respectful, and they came right to my driveway. Can't recommend these brothers enough."</p><div style="font-family:'League Spartan',sans-serif;font-weight:700;color:#fff">Marcus T.</div><div style="color:#A9A4AF;font-size:13px">Philadelphia, PA</div></div>
+        <div style="background:#141217;border:1px solid #34303A;border-radius:16px;padding:30px"><div style="color:#F5B942;font-size:16px;letter-spacing:3px;margin-bottom:14px">★★★★★</div><p style="color:#D5D7DC;font-size:15px;line-height:1.7;margin-bottom:20px">"The membership is worth every penny. My SUV gets cleaned every month and I never have to think about it. Great prices, even better people."</p><div style="font-family:'League Spartan',sans-serif;font-weight:700;color:#fff">Denise R.</div><div style="color:#A9A4AF;font-size:13px">Cherry Hill, NJ</div></div>
+        <div style="background:#141217;border:1px solid #34303A;border-radius:16px;padding:30px"><div style="color:#F5B942;font-size:16px;letter-spacing:3px;margin-bottom:14px">★★★★★</div><p style="color:#D5D7DC;font-size:15px;line-height:1.7;margin-bottom:20px">"Faith-driven and detail-obsessed. You can tell they genuinely care. The ceramic coating still beads water months later. Top-tier work."</p><div style="font-family:'League Spartan',sans-serif;font-weight:700;color:#fff">Anthony &amp; Kim</div><div style="color:#A9A4AF;font-size:13px">Wilmington, DE</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- QUOTE / BOOKING -->
+  <section id="quote" style="position:relative;background:radial-gradient(90% 80% at 20% 30%,rgba(112,40,201,.24),transparent 60%),#08080B">
+    <div style="max-width:1240px;margin:0 auto;padding:96px 32px;display:grid;grid-template-columns:1fr 1.1fr;gap:56px;align-items:start">
+      <div>
+        <div style="font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#A855F7;font-size:13px;margin-bottom:14px">Get Started</div>
+        <h2 style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:46px;color:#fff;letter-spacing:-.5px;line-height:1;margin-bottom:18px">REQUEST YOUR<br>FREE QUOTE</h2>
+        <p style="color:#A9A4AF;font-size:16px;line-height:1.7;margin-bottom:30px">Tell us about your vehicle and what you're after. We'll get back to you fast with an honest price. Serving the entire tri-state area.</p>
+        <p style="font-family:'Great Vibes',cursive;font-size:30px;color:#A855F7;margin-bottom:34px">Clean Cars. Clear Minds. Christ First.</p>
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="display:flex;align-items:center;gap:14px"><span style="width:44px;height:44px;border-radius:11px;background:#141217;border:1px solid #34303A;display:flex;align-items:center;justify-content:center;font-size:18px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h3l2 5-2.5 1.5a11 11 0 0 0 5 5L17 12l5 2v3a2 2 0 0 1-2 2A16 16 0 0 1 4 5a2 2 0 0 1 2-2z"/></svg></span><div><div style="color:#A9A4AF;font-size:12px;text-transform:uppercase;letter-spacing:1px">Call or Text</div><div style="color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:18px">(215) 555-0123</div></div></div>
+          <div style="display:flex;align-items:center;gap:14px"><span style="width:44px;height:44px;border-radius:11px;background:#141217;border:1px solid #34303A;display:flex;align-items:center;justify-content:center;font-size:18px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg></span><div><div style="color:#A9A4AF;font-size:12px;text-transform:uppercase;letter-spacing:1px">Email</div><div style="color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:18px">hello@brotherlylovedetailing.com</div></div></div>
+          <div style="display:flex;align-items:center;gap:14px"><span style="width:44px;height:44px;border-radius:11px;background:#141217;border:1px solid #34303A;display:flex;align-items:center;justify-content:center;font-size:18px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.3 7-11a7 7 0 0 0-14 0c0 4.7 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></span><div><div style="color:#A9A4AF;font-size:12px;text-transform:uppercase;letter-spacing:1px">Service Area</div><div style="color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:18px">PA · NJ · DE Tri-State</div></div></div>
+        </div>
+      </div>
+
+      <div style="background:#141217;border:1px solid #34303A;border-radius:20px;padding:38px">
+        <sc-if value="{{ submitted }}" hint-placeholder-val="{{ false }}">
+          <div style="text-align:center;padding:40px 10px">
+            <div style="font-size:52px;margin-bottom:16px">✨</div>
+            <h3 style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:28px;color:#fff;margin-bottom:12px">Thank You{{ nameSuffix }}!</h3>
+            <p style="color:#A9A4AF;font-size:15px;line-height:1.6;max-width:340px;margin:0 auto 24px">Your quote request is in. One of the brothers will reach out shortly with your honest price. God bless!</p>
+            <button onClick="{{ reset }}" style="cursor:pointer;border:1px solid #34303A;background:#0E0D11;color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:13px;padding:13px 24px;border-radius:10px">Send another</button>
+          </div>
+        </sc-if>
+        <sc-if value="{{ notSubmitted }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-direction:column;gap:16px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+              <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Name</label><input value="{{ name }}" onInput="{{ onName }}" placeholder="Your name" style="width:100%;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none" style-focus="border-color:#A855F7" /></div>
+              <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Phone</label><input value="{{ phone }}" onInput="{{ onPhone }}" placeholder="(215) 555-0123" style="width:100%;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none" style-focus="border-color:#A855F7" /></div>
+            </div>
+            <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Email</label><input value="{{ email }}" onInput="{{ onEmail }}" placeholder="you@email.com" style="width:100%;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none" style-focus="border-color:#A855F7" /></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+              <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Vehicle</label><input value="{{ vehicle }}" onInput="{{ onVehicle }}" placeholder="Year, make, model" style="width:100%;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none" style-focus="border-color:#A855F7" /></div>
+              <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Service</label><select value="{{ service }}" onChange="{{ onService }}" style="width:100%;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none" style-focus="border-color:#A855F7"><option>Express Wash</option><option>Signature Detail</option><option>Ministry Full Detail</option><option>Ceramic Coating</option><option>Membership</option><option>Not sure — help me choose</option></select></div>
+            </div>
+            <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Details</label><textarea value="{{ message }}" onInput="{{ onMessage }}" placeholder="Tell us about your vehicle's condition, location, and what you need." rows="4" style="width:100%;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none;resize:vertical" style-focus="border-color:#A855F7"></textarea></div>
+            <button onClick="{{ submit }}" style="cursor:pointer;border:none;background:linear-gradient(135deg,#7028C9,#A855F7);color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:15px;padding:17px;border-radius:12px;box-shadow:0 10px 28px rgba(112,40,201,.5)">Request My Free Quote</button>
+            <p style="text-align:center;color:#A9A4AF;font-size:12px">No spam. We only use your info to send your quote.</p>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </section>
+
+  <!-- QUOTE MODAL -->
+  <sc-if value="{{ modalOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeModal }}" style="position:fixed;inset:0;z-index:1000;background:rgba(8,8,11,.85);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:20px">
+      <div onClick="{{ stop }}" style="width:100%;max-width:540px;max-height:92vh;overflow-y:auto;background:#141217;border:1px solid #34303A;border-radius:20px;padding:36px;position:relative;box-shadow:0 30px 80px rgba(0,0,0,.7)">
+        <button onClick="{{ closeModal }}" style="position:absolute;top:14px;right:14px;width:34px;height:34px;border-radius:50%;border:1px solid #34303A;background:#0E0D11;color:#D5D7DC;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center" aria-label="Close">✕</button>
+        <sc-if value="{{ submitted }}" hint-placeholder-val="{{ false }}">
+          <div style="text-align:center;padding:26px 6px">
+            <div style="font-size:48px;margin-bottom:14px">✨</div>
+            <h3 style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:26px;color:#fff;margin-bottom:10px">Thank You{{ nameSuffix }}!</h3>
+            <p style="color:#A9A4AF;font-size:15px;line-height:1.6;max-width:340px;margin:0 auto 22px">Your quote request is in. One of the brothers will reach out shortly. God bless!</p>
+            <button onClick="{{ reset }}" style="cursor:pointer;border:1px solid #34303A;background:#0E0D11;color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:13px;padding:12px 22px;border-radius:10px">Send another</button>
+          </div>
+        </sc-if>
+        <sc-if value="{{ notSubmitted }}" hint-placeholder-val="{{ true }}">
+          <div>
+            <div style="font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#A855F7;font-size:12px;margin-bottom:6px">Get Started</div>
+            <h3 style="font-family:'League Spartan',sans-serif;font-weight:900;font-size:26px;color:#fff;margin-bottom:6px">Request Your Free Quote</h3>
+            <p style="color:#A9A4AF;font-size:14px;line-height:1.5;margin-bottom:22px">Tell us about your vehicle and we'll get back with an honest price. Serving the tri-state area.</p>
+            <div style="display:flex;flex-direction:column;gap:14px">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Name</label><input value="{{ name }}" onInput="{{ onName }}" placeholder="Your name" style="width:100%;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none" style-focus="border-color:#A855F7" /></div>
+                <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Phone</label><input value="{{ phone }}" onInput="{{ onPhone }}" placeholder="(215) 555-0123" style="width:100%;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none" style-focus="border-color:#A855F7" /></div>
+              </div>
+              <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Email</label><input value="{{ email }}" onInput="{{ onEmail }}" placeholder="you@email.com" style="width:100%;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none" style-focus="border-color:#A855F7" /></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Vehicle</label><input value="{{ vehicle }}" onInput="{{ onVehicle }}" placeholder="Year, make, model" style="width:100%;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none" style-focus="border-color:#A855F7" /></div>
+                <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Service</label><select value="{{ service }}" onChange="{{ onService }}" style="width:100%;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none" style-focus="border-color:#A855F7"><option>Express Shine</option><option>Signature Detail</option><option>Ministry Full Detail</option><option>Ceramic Coating</option><option>Membership</option><option>Not sure — help me choose</option></select></div>
+              </div>
+              <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Details</label><textarea value="{{ message }}" onInput="{{ onMessage }}" placeholder="Vehicle condition, location, and what you need." rows="3" style="width:100%;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none;resize:vertical" style-focus="border-color:#A855F7"></textarea></div>
+              <button onClick="{{ submit }}" style="cursor:pointer;border:none;background:linear-gradient(135deg,#7028C9,#A855F7);color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:15px;padding:16px;border-radius:12px;box-shadow:0 10px 28px rgba(112,40,201,.5)">Request My Free Quote</button>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- FOOTER -->
+  <footer style="background:#08080B;border-top:1px solid #34303A">
+    <div style="max-width:1240px;margin:0 auto;padding:56px 32px 40px;display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:40px">
+      <div>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px"><img src="assets/bld-logo-transparent.png" alt="Brotherly Love" style="height:56px;width:auto" /><span style="font-family:'League Spartan',sans-serif;font-weight:800;color:#fff;font-size:16px;line-height:1.1">BROTHERLY LOVE<br><span style="font-weight:500;font-size:10px;letter-spacing:3px;color:#A9A4AF">MINISTRY DETAILING</span></span></div>
+        <p style="color:#A9A4AF;font-size:14px;line-height:1.6;max-width:340px">Premium mobile detailing built on faith, integrity, and unmatched attention to detail. Proudly serving the tri-state area.</p>
+        <p style="font-family:'Great Vibes',cursive;font-size:24px;color:#A855F7;margin-top:14px">Clean Cars. Clear Minds. Christ First.</p>
+      </div>
+      <div>
+        <div style="font-family:'League Spartan',sans-serif;font-weight:700;color:#fff;letter-spacing:1px;text-transform:uppercase;font-size:14px;margin-bottom:16px">Explore</div>
+        <div style="display:flex;flex-direction:column;gap:10px;font-size:14px"><a href="#services" style="color:#A9A4AF">Services</a><a href="#packages" style="color:#A9A4AF">Packages</a><a href="#gallery" style="color:#A9A4AF">Gallery</a><a href="#reviews" style="color:#A9A4AF">Reviews</a><a onClick="{{ openModal }}" style="cursor:pointer;color:#A9A4AF">Request a Quote</a></div>
+      </div>
+      <div>
+        <div style="font-family:'League Spartan',sans-serif;font-weight:700;color:#fff;letter-spacing:1px;text-transform:uppercase;font-size:14px;margin-bottom:16px">Contact</div>
+        <div style="display:flex;flex-direction:column;gap:10px;font-size:14px;color:#A9A4AF"><span>(215) 555-0123</span><span>hello@brotherlylovedetailing.com</span><span>PA · NJ · DE Tri-State</span></div>
+      </div>
+    </div>
+    <div style="border-top:1px solid #34303A"><div style="max-width:1240px;margin:0 auto;padding:22px 32px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;color:#A9A4AF;font-size:13px"><span style="font-family:'League Spartan',sans-serif;letter-spacing:2px">BROTHERLY <span style="color:#A855F7">LOVE</span> MINISTRY DETAILING</span><span>© 2026 Brotherly Love Ministry Detailing. All rights reserved.</span></div></div>
+  </footer>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  oneTime = [45, 120, 220];
+  member = [36, 96, 176];
+  META = [
+    { name:'Express Shine', tagline:'Quick maintenance wash to keep it fresh between details.', isPopular:false,
+      features:['Hand wash & dry','Wheels, tires & rims','Windows in & out','Tire shine finish','Quick interior wipe-down'],
+      badgeBg:'linear-gradient(135deg,#4c1d95,#7028C9)' },
+    { name:'Signature Detail', tagline:'Our most-loved inside-and-out transformation.', isPopular:true,
+      features:['Everything in Express','Deep interior vacuum & steam','Hand wax & paint sealant','Leather & vinyl conditioning','Dash, vents & console detail','Air freshener finish'],
+      badgeBg:'linear-gradient(135deg,#7028C9,#A855F7)' },
+    { name:'Ministry Full Detail', tagline:'The complete, showroom-level treatment.', isPopular:false,
+      features:['Everything in Signature','Clay bar & paint decontamination','Machine polish & gloss','Ceramic spray coating','Engine bay detail','Headlight restoration'],
+      badgeBg:'linear-gradient(135deg,#6d28d9,#A855F7)' },
+  ];
+  state = { name:'', phone:'', email:'', vehicle:'', service:'Express Wash', message:'', submitted:false, isMember:false, disp:[45,120,220], modalOpen:false };
+  animateTo(targets){
+    const start = this.state.disp.slice();
+    const t0 = performance.now(), dur = 650;
+    cancelAnimationFrame(this._raf);
+    const step = (now) => {
+      const k = Math.min(1,(now-t0)/dur);
+      const e = 1-Math.pow(1-k,3);
+      this.setState({ disp: targets.map((t,i)=> Math.round(start[i]+(t-start[i])*e)) });
+      if(k<1) this._raf = requestAnimationFrame(step);
+    };
+    this._raf = requestAnimationFrame(step);
+  }
+  toggleBilling(){
+    const m = !this.state.isMember;
+    this.setState({ isMember:m });
+    this.animateTo(m ? this.member : this.oneTime);
+  }
+  componentWillUnmount(){ cancelAnimationFrame(this._raf); }
+  renderVals() {
+    const s = this.state;
+    const set = k => e => this.setState({ [k]: e.target.value });
+    const plans = this.META.map((p,i)=> ({
+      name:p.name, tagline:p.tagline, features:p.features, isPopular:p.isPopular,
+      priceStr: String(s.disp[i]),
+      unitShort: s.isMember ? 'member' : 'each',
+      unitLabel: s.isMember ? 'per wash · Brotherhood member' : 'one-time detail',
+      badgeBg: p.badgeBg,
+      cardBg: p.isPopular ? 'linear-gradient(160deg,#1a1030,#141217)' : '#141217',
+      cardBorder: p.isPopular ? '1.5px solid #7028C9' : '1px solid #34303A',
+      cardShadow: p.isPopular ? '0 20px 50px rgba(112,40,201,.28)' : '0 10px 30px rgba(0,0,0,.35)',
+      cardShadowHover: p.isPopular ? '0 26px 60px rgba(112,40,201,.4)' : '0 20px 44px rgba(0,0,0,.5)',
+      ctaStyle: p.isPopular
+        ? 'background:linear-gradient(135deg,#7028C9,#A855F7);color:#fff;box-shadow:0 10px 24px rgba(112,40,201,.5)'
+        : 'border:1px solid #34303A;background:#0E0D11;color:#fff',
+    }));
+    const tiltMove = (e) => {
+      const el = e.currentTarget, r = el.getBoundingClientRect();
+      const px = (e.clientX - r.left)/r.width - .5, py = (e.clientY - r.top)/r.height - .5;
+      el.style.transform = 'perspective(900px) rotateX(' + (-py*7).toFixed(2) + 'deg) rotateY(' + (px*7).toFixed(2) + 'deg) translateY(-6px)';
+    };
+    const tiltLeave = (e) => { e.currentTarget.style.transform = 'perspective(900px) rotateX(0deg) rotateY(0deg) translateY(0)'; };
+    const videoRef = (el) => {
+      if(!el) return;
+      el.muted = true; el.defaultMuted = true; el.volume = 0;
+      el.loop = true; el.playsInline = true; el.autoplay = true;
+      const go = () => { const p = el.play(); if(p && p.catch) p.catch(()=>{}); };
+      go();
+      el.addEventListener('canplay', go, { once:true });
+      el.addEventListener('ended', () => { el.currentTime = 0; go(); });
+    };
+    const openModal = () => this.setState({ modalOpen:true });
+    const closeModal = () => this.setState({ modalOpen:false });
+    const stop = (e) => e.stopPropagation();
+    const reelScrollerRef = (el) => { this._reel = el; };
+    const scrollReels = (dir) => { if(this._reel) this._reel.scrollBy({ left: dir*288, behavior:'smooth' }); };
+    const scrollLeftReels = () => scrollReels(-1);
+    const scrollRightReels = () => scrollReels(1);
+    return {
+      name:s.name, phone:s.phone, email:s.email, vehicle:s.vehicle, service:s.service, message:s.message,
+      submitted:s.submitted, notSubmitted:!s.submitted,
+      nameSuffix: s.name ? (', ' + s.name.trim().split(' ')[0]) : '',
+      onName:set('name'), onPhone:set('phone'), onEmail:set('email'),
+      onVehicle:set('vehicle'), onService:set('service'), onMessage:set('message'),
+      submit: () => this.setState({ submitted:true }),
+      reset: () => this.setState({ name:'', phone:'', email:'', vehicle:'', service:'Express Wash', message:'', submitted:false }),
+      plans,
+      isMember: s.isMember,
+      toggle: () => this.toggleBilling(),
+      knobX: s.isMember ? '30px' : '0px',
+      oneTimeColor: s.isMember ? '#A9A4AF' : '#fff',
+      memberColor: s.isMember ? '#fff' : '#A9A4AF',
+      saveOpacity: s.isMember ? '1' : '0',
+      tiltMove, tiltLeave, videoRef,
+      modalOpen: s.modalOpen, openModal, closeModal, stop,
+      reelScrollerRef, scrollLeftReels, scrollRightReels,
+    };
+  }
+}
+</script>
+</body>
+</html>
