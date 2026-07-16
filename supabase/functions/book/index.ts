@@ -2,7 +2,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { priceOrder, type CarItem, type CatalogConfig } from '../_shared/pricing.ts';
 import { getProvider } from '../_shared/payments/provider.ts';
 import type { CardDetails } from '../_shared/payments/types.ts';
-import { sendSMS, functionsBaseUrl } from '../_shared/notify.ts';
+import { sendEmail, ownerEmail, functionsBaseUrl, button } from '../_shared/notify.ts';
 
 interface BookBody {
   items: CarItem[];
@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
     global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } },
   });
   const { data: { user } } = await userClient.auth.getUser();
-  if (!user || !user.phone) return Response.json({ error: 'unauthorized' }, { status: 401 });
+  if (!user || !user.email) return Response.json({ error: 'unauthorized' }, { status: 401 });
 
   let body: BookBody;
   try {
@@ -47,7 +47,7 @@ Deno.serve(async (req) => {
     return Response.json({ error: 'price_changed', quote }, { status: 409 });
   }
 
-  await admin.from('customers').upsert({ id: user.id, phone: user.phone, name: body.name ?? '' });
+  await admin.from('customers').upsert({ id: user.id, email: user.email, name: body.name ?? '' });
 
   const confirmToken = crypto.randomUUID().replaceAll('-', '') + crypto.randomUUID().replaceAll('-', '');
   const { data: booking, error: insErr } = await admin
@@ -89,12 +89,30 @@ Deno.serve(async (req) => {
   await admin.from('bookings').update({ status: 'requested' }).eq('id', booking.id);
 
   const summary = body.items
-    .map((i) => `${i.service}/${i.size}${i.extras.length ? '+' + i.extras.join(',') : ''}`)
-    .join(' | ');
+    .map((i, n) => `<div>Car ${n + 1}: <b>${i.service}</b> / ${i.size}${i.extras.length ? ' + ' + i.extras.join(', ') : ''}</div>`)
+    .join('');
   const link = `${functionsBaseUrl()}/confirm?token=${confirmToken}`;
-  await sendSMS(
-    Deno.env.get('OWNER_PHONE') ?? '',
-    `New request: ${summary}. ${body.preferredDay} ${body.window}. $${quote.deposit} deposit PAID. ${body.address}. Confirm: ${link}`,
+  const shortSummary = body.items.map((i) => `${i.service}/${i.size}`).join(', ');
+
+  await sendEmail(
+    ownerEmail(),
+    `New detail — ${shortSummary} — $${quote.deposit} deposit PAID`,
+    `<h2 style="color:#A855F7;margin:0 0 12px">New Detail Request</h2>
+     ${summary}
+     <p style="color:#A9A4AF">${body.preferredDay} · ${body.window} · ${body.address}</p>
+     <p style="color:#A9A4AF">Notes: ${body.notes || '—'}</p>
+     <p>Total $${quote.total} · Deposit $${quote.deposit} PAID · $${quote.remainder} due (${body.remainderMethod})</p>
+     ${button(link, 'Confirm or decline →')}`,
+  );
+
+  await sendEmail(
+    user.email,
+    `We got your detail request — $${quote.deposit} deposit received`,
+    `<h2 style="color:#A855F7;margin:0 0 12px">Thanks${body.name ? ', ' + body.name : ''}!</h2>
+     ${summary}
+     <p style="color:#A9A4AF">${body.preferredDay} · ${body.window} · ${body.address}</p>
+     <p>Deposit paid: $${quote.deposit}. Due at the detail: $${quote.remainder} (${body.remainderMethod}).</p>
+     <p style="color:#A9A4AF">We'll email you shortly to lock in your exact time.</p>`,
   );
 
   return Response.json({ bookingId: booking.id, quote });

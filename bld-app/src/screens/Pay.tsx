@@ -11,17 +11,15 @@ import { colors, fonts, radius, spacing } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Pay'>;
 
-const normalizePhone = (raw: string) => {
-  const d = raw.replace(/\D/g, '');
-  return d.length === 10 ? `+1${d}` : d.startsWith('1') && d.length === 11 ? `+${d}` : raw.startsWith('+') ? raw : `+${d}`;
-};
+const normalizeEmail = (raw: string) => raw.trim().toLowerCase();
+const looksLikeEmail = (raw: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(raw));
 
 export default function Pay({ navigation }: Props) {
   const { state, dispatch } = useOrder();
   const catalog = useCatalog();
   const [quote, setQuote] = useState<Quote>(() => priceOrder(state.items, catalog));
-  const [phase, setPhase] = useState<'phone' | 'code' | 'card'>('phone');
-  const [phone, setPhone] = useState('');
+  const [phase, setPhase] = useState<'email' | 'code' | 'card'>('email');
+  const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [cardNumber, setCardNumber] = useState('');
   const [exp, setExp] = useState('');
@@ -45,8 +43,9 @@ export default function Pay({ navigation }: Props) {
   };
 
   const sendCode = async () => {
+    if (!looksLikeEmail(email)) return setError("That email doesn't look right.");
     setError(''); setBusy(true);
-    const { error: e } = await supabase.auth.signInWithOtp({ phone: normalizePhone(phone) });
+    const { error: e } = await supabase.auth.signInWithOtp({ email: normalizeEmail(email) });
     setBusy(false);
     if (e) return setError(e.message);
     setPhase('code'); startCooldown();
@@ -54,9 +53,9 @@ export default function Pay({ navigation }: Props) {
 
   const verify = async () => {
     setError(''); setBusy(true);
-    const { error: e } = await supabase.auth.verifyOtp({ phone: normalizePhone(phone), token: code, type: 'sms' });
+    const { error: e } = await supabase.auth.verifyOtp({ email: normalizeEmail(email), token: code, type: 'email' });
     setBusy(false);
-    if (e) return setError('Wrong code — check the text and try again.');
+    if (e) return setError('Wrong code — check your inbox and try again.');
     setPhase('card');
   };
 
@@ -100,23 +99,24 @@ export default function Pay({ navigation }: Props) {
           onChange={(v) => dispatch({ type: 'SET_FIELD', field: 'remainderMethod', value: v })} />
       </View>
 
-      {phase === 'phone' && (
+      {phase === 'email' && (
         <View>
           <Text style={s.label}>Your name</Text>
           <TextInput style={s.input} placeholder="First name" placeholderTextColor={colors.textMuted}
             value={state.name} onChangeText={(v) => dispatch({ type: 'SET_FIELD', field: 'name', value: v })} />
-          <Text style={s.label}>Phone (we text your booking updates here)</Text>
-          <TextInput style={s.input} placeholder="(215) 555-0134" placeholderTextColor={colors.textMuted}
-            keyboardType="phone-pad" value={phone} onChangeText={setPhone} />
+          <Text style={s.label}>Email (we send your booking updates here)</Text>
+          <TextInput style={s.input} placeholder="you@email.com" placeholderTextColor={colors.textMuted}
+            keyboardType="email-address" autoCapitalize="none" autoCorrect={false} autoComplete="email"
+            value={email} onChangeText={setEmail} />
           <Pressable accessibilityRole="button" style={s.btn} onPress={sendCode} disabled={busy}>
-            {busy ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>TEXT ME A CODE</Text>}
+            {busy ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>EMAIL ME A CODE</Text>}
           </Pressable>
         </View>
       )}
 
       {phase === 'code' && (
         <View>
-          <Text style={s.label}>Enter the 6-digit code we texted</Text>
+          <Text style={s.label}>Enter the 6-digit code we emailed</Text>
           <TextInput style={[s.input, s.code]} keyboardType="number-pad" maxLength={6} value={code} onChangeText={setCode} />
           <Pressable accessibilityRole="button" style={s.btn} onPress={verify} disabled={busy || code.length !== 6}>
             {busy ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>VERIFY</Text>}

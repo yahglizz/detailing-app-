@@ -23,7 +23,7 @@ export default function Booked({ navigation }: Props) {
       location: state.address,
       startDate: start,
       endDate: new Date(start.getTime() + 2 * 3600e3),
-      notes: 'Exact time will be confirmed by text.',
+      notes: 'Exact time will be confirmed by email.',
     });
     Alert.alert('Added', 'Detail day is on your calendar.');
   };
@@ -37,7 +37,7 @@ export default function Booked({ navigation }: Props) {
     <View style={s.root}>
       <Text style={s.check}>✓</Text>
       <Text style={s.title}>YOU'RE BOOKED</Text>
-      <Text style={s.sub}>Deposit paid. We'll text you shortly to lock in your exact time for {state.preferredDay} ({state.window}).</Text>
+      <Text style={s.sub}>Deposit paid. We'll email you shortly to lock in your exact time for {state.preferredDay} ({state.window}).</Text>
       <Text style={s.addr}>{state.address}</Text>
       <Pressable accessibilityRole="button" style={s.ghost} onPress={addToCalendar}>
         <Text style={s.ghostText}>ADD TO CALENDAR</Text>

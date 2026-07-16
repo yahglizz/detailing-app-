@@ -65,7 +65,7 @@ export default function Schedule({ navigation }: Props) {
         <Seg options={['morning', 'afternoon', 'either'] as const}
           labels={{ morning: 'Morning', afternoon: 'Afternoon', either: 'Either' }}
           value={state.window} onChange={set('window')} />
-        <Text style={s.hint}>We'll text you to lock in the exact time.</Text>
+        <Text style={s.hint}>We'll email you to lock in the exact time.</Text>
 
         <Text style={s.label}>Notes (gate code, which car, etc.)</Text>
         <TextInput style={[s.input, { height: 88, textAlignVertical: 'top' }]} multiline

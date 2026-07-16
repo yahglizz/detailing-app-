@@ -1,6 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getProvider } from '../_shared/payments/provider.ts';
-import { sendSMS } from '../_shared/notify.ts';
+import { sendEmail } from '../_shared/notify.ts';
 
 const admin = () => createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
@@ -21,7 +21,7 @@ const page = (inner: string) => new Response(
 async function loadBooking(token: string) {
   const { data } = await admin()
     .from('bookings')
-    .select('*, customers(phone, name)')
+    .select('*, customers(email, name)')
     .eq('confirm_token', token)
     .single();
   return data;
@@ -64,17 +64,23 @@ Deno.serve(async (req) => {
     const time = String(form.get('time') ?? '').trim();
     const b = await loadBooking(token);
     if (!b || b.status !== 'requested') return page('<div class="card"><h1>Already handled</h1></div>');
-    const customerPhone = (b.customers as { phone: string }).phone;
+    const customerEmail = (b.customers as { email: string }).email;
 
     if (action === 'confirm') {
       if (!time) return page('<div class="card"><h1>Enter a time first</h1><p class="muted">Go back and type the exact time.</p></div>');
       await db.from('bookings').update({ status: 'confirmed', scheduled_note: time }).eq('id', b.id);
-      await sendSMS(customerPhone, `Brotherly Love Detailing: you're confirmed for ${time} at ${b.address}. See you then!`);
-      return page('<div class="card"><h1>Confirmed ✓</h1><p class="muted">Customer has been texted.</p></div>');
+      await sendEmail(customerEmail, `You're confirmed for ${time}`,
+        `<h2 style="color:#A855F7;margin:0 0 12px">You're confirmed ✓</h2>
+         <p>We'll see you <b>${time}</b> at ${b.address}.</p>
+         <p style="color:#A9A4AF">Reply to this email if anything changes.</p>`);
+      return page('<div class="card"><h1>Confirmed ✓</h1><p class="muted">Customer has been emailed.</p></div>');
     }
     if (action === 'propose') {
       if (!time) return page('<div class="card"><h1>Enter a time first</h1></div>');
-      await sendSMS(customerPhone, `Brotherly Love Detailing: that window is tight — does ${time} work instead? Reply YES and we'll lock it in.`);
+      await sendEmail(customerEmail, `Does ${time} work instead?`,
+        `<h2 style="color:#A855F7;margin:0 0 12px">Small change?</h2>
+         <p>That window is tight for us — does <b>${time}</b> work instead?</p>
+         <p style="color:#A9A4AF">Reply to this email and we'll lock it in.</p>`);
       return page('<div class="card"><h1>Proposal sent</h1><p class="muted">Booking stays pending until you confirm.</p></div>');
     }
     if (action === 'decline') {
@@ -91,8 +97,11 @@ Deno.serve(async (req) => {
         }
       }
       await db.from('bookings').update({ status: 'refunded' }).eq('id', b.id);
-      await sendSMS(customerPhone, `Brotherly Love Detailing: we couldn't take this one — your deposit has been refunded in full. Sorry, and hope to catch you next time.`);
-      return page('<div class="card"><h1>Declined &amp; refunded</h1><p class="muted">Customer has been texted.</p></div>');
+      await sendEmail(customerEmail, 'Your deposit has been refunded',
+        `<h2 style="color:#A855F7;margin:0 0 12px">Sorry — we couldn't take this one</h2>
+         <p>Your deposit has been refunded in full.</p>
+         <p style="color:#A9A4AF">Hope to catch you next time.</p>`);
+      return page('<div class="card"><h1>Declined &amp; refunded</h1><p class="muted">Customer has been emailed.</p></div>');
     }
     return page('<div class="card"><h1>Unknown action</h1></div>');
   }
