@@ -63,7 +63,10 @@ Deno.serve(async (req) => {
   const [{ data: creditRows }, { data: stampRows }, { data: issued }, { data: history }] = await Promise.all([
     db.from('credit_ledger').select('delta').eq('membership_id', m.id),
     db.from('reward_ledger').select('delta').eq('membership_id', m.id),
-    db.from('redemptions').select('id, reward').eq('membership_id', m.id).eq('status', 'issued'),
+    // Oldest-first so issuedRewards[0] is the one `book` will actually apply
+    // (book picks .order('created_at').limit(1)) — keeps the app's shown
+    // discount matching the server's charge.
+    db.from('redemptions').select('id, reward').eq('membership_id', m.id).eq('status', 'issued').order('created_at'),
     db.from('bookings').select('id, preferred_day, time_slot, status, quote, paid_with_credit')
       .eq('membership_id', m.id).order('created_at', { ascending: false }).limit(20),
   ]);

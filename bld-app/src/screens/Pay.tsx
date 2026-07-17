@@ -55,8 +55,12 @@ export default function Pay({ navigation }: Props) {
   let payable = creditApplied ? creditApplied.payable : quote.total;
   const issuedReward = profile?.issuedRewards[0];
   if (profile && issuedReward && payable > 0) payable = applyReward(payable, issuedReward.reward as RewardKey, quote);
-  const anchorPrice = memberCatalog.anchorPrice ?? 10;
-  if (!profile && state.anchor) payable += anchorPrice;
+  // No hardcoded fallback: the anchor add-on is only offered once the catalog
+  // (with its real anchorPrice) has loaded, so the shown price always matches
+  // what the server charges.
+  const anchorPrice = memberCatalog.anchorPrice;
+  const anchorAvailable = typeof anchorPrice === 'number';
+  if (!profile && state.anchor && anchorAvailable) payable += anchorPrice;
   const deposit = payable === 0 ? 0 : Math.round((payable * quote.depositPercent) / 100);
   const remainder = payable - deposit;
 
@@ -140,7 +144,7 @@ export default function Pay({ navigation }: Props) {
         <Seg options={['cash', 'card'] as const} labels={{ cash: 'Cash at the job', card: 'Card at the job' }}
           value={state.remainderMethod}
           onChange={(v) => dispatch({ type: 'SET_FIELD', field: 'remainderMethod', value: v })} />
-        {!profile && (
+        {!profile && anchorAvailable && (
           <Pressable accessibilityRole="button" onPress={() => dispatch({ type: 'SET_ANCHOR', anchor: !state.anchor })}
             style={[s.anchor, state.anchor && s.anchorOn]}>
             <Text style={{ color: state.anchor ? '#F5B942' : colors.textSecondary, fontSize: 15 }}>

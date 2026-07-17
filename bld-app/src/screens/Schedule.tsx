@@ -182,8 +182,11 @@ export default function Schedule({ navigation }: Props) {
                 );
               })}
             </View>
-            {showBumpHint && (
+            {showBumpHint && selectedDecision === 'bump' && (
               <Text style={s.hint}>VIP perk: booking this moves the current appointment to the next open time — they'll be notified.</Text>
+            )}
+            {showBumpHint && selectedDecision === 'escalate' && (
+              <Text style={s.hint}>Another member of your tier holds this time — request it and we'll confirm your exact slot by email shortly.</Text>
             )}
           </>
         )}
