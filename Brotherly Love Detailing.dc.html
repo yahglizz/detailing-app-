@@ -512,9 +512,9 @@ class Component extends DCLogic {
           var p = cfg.plans[t];
           if (!p) return;
           var priceEl = document.getElementById('bld-tier-' + t);
-          if (priceEl) priceEl.textContent = String(p.price);
+          if (priceEl && p.price != null) priceEl.textContent = String(p.price);
           var incEl = document.getElementById('bld-tier-' + t + '-inc');
-          if (incEl) incEl.textContent = p.credits + ' ' + p.service + ' details';
+          if (incEl && p.credits != null && p.service != null) incEl.textContent = p.credits + ' ' + p.service + ' details';
         });
       }
     })
