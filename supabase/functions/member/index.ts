@@ -33,14 +33,20 @@ Deno.serve(async (req) => {
     const { data: bal } = await db.from('reward_ledger').select('delta').eq('membership_id', m.id);
     const stamps = (bal ?? []).reduce((s, r) => s + r.delta, 0);
     if (stamps < cost) return Response.json({ error: 'not_enough_stamps' }, { status: 400 });
-    const { error: spendErr } = await db.from('reward_ledger').insert({
+    const { data: spent, error: spendErr } = await db.from('reward_ledger').insert({
       membership_id: m.id, delta: -cost, reason: `redeem:${reward}`,
-    });
-    if (spendErr) return Response.json({ error: 'not_enough_stamps' }, { status: 400 });
-    await db.from('redemptions').insert({
+    }).select('id').single();
+    if (spendErr || !spent) return Response.json({ error: 'not_enough_stamps' }, { status: 400 });
+    const { error: issueErr } = await db.from('redemptions').insert({
       membership_id: m.id, reward, stamps_spent: cost,
       retail_value: cfg.rewardValues[reward] ?? 0,
     });
+    if (issueErr) {
+      // Stamps were debited but the voucher didn't record — give the stamps back
+      // so the member is never left with "stamps gone, no reward".
+      await db.from('reward_ledger').insert({ membership_id: m.id, delta: cost, reason: `redeem_rollback:${reward}` });
+      return Response.json({ error: 'redeem_failed' }, { status: 500 });
+    }
     return Response.json({ ok: true, stamps: stamps - cost });
   }
 
@@ -64,14 +70,20 @@ Deno.serve(async (req) => {
   const credits = (creditRows ?? []).reduce((s, r) => s + r.delta, 0);
   const stamps = (stampRows ?? []).reduce((s, r) => s + r.delta, 0);
 
-  const creditWashRetail = (history ?? [])
-    .filter((b) => b.paid_with_credit && !['declined', 'refunded'].includes(b.status))
-    .reduce((s, b) => s + ((b.quote as { total: number }).total - ((b.quote as { payable?: number }).payable ?? 0)), 0);
+  // Dollar value saved on every live member booking: retail total minus what was
+  // actually payable. Captures credit-covered washes AND reward discounts
+  // (percent25 / freeWash), which reduce payable without setting paid_with_credit.
+  const bookingSavings = (history ?? [])
+    .filter((b) => !['declined', 'refunded', 'pending_payment'].includes(b.status))
+    .reduce((s, b) => {
+      const q = b.quote as { total: number; payable?: number };
+      return s + (q.total - (q.payable ?? q.total));
+    }, 0);
   const { data: applied } = await db.from('redemptions').select('retail_value').eq('membership_id', m.id);
   const rewardsRetail = (applied ?? []).reduce((s, r) => s + r.retail_value, 0);
   const today = new Date().toISOString().slice(0, 10);
   const months = monthsActive(String(m.period_start), today);
-  const savings = computeSavings({ creditWashRetail, rewardsRetail, months, monthlyPrice: plan.price });
+  const savings = computeSavings({ creditWashRetail: bookingSavings, rewardsRetail, months, monthlyPrice: plan.price });
 
   const cust = m.customers as unknown as { name: string; email: string };
   return Response.json({
