@@ -140,7 +140,17 @@ Deno.serve(async (req) => {
     customerId = membership.customer_id;
     if (body.name) await admin.from('customers').update({ name: body.name }).eq('id', customerId);
   } else {
-    await admin.from('customers').upsert({ id: user.id, email: user.email, name: body.name ?? '' });
+    // Resolve by email (unique) first. A member booking as a guest — no code —
+    // already owns a customers row under their placeholder id; upserting by
+    // auth uid would collide on the unique email and fail the booking. Reuse
+    // the existing row when the email is taken; otherwise create by auth uid.
+    const { data: existing } = await admin.from('customers').select('id').eq('email', user.email).limit(1);
+    if (existing && existing.length > 0) {
+      customerId = existing[0].id;
+      if (body.name) await admin.from('customers').update({ name: body.name }).eq('id', customerId);
+    } else {
+      await admin.from('customers').upsert({ id: user.id, email: user.email, name: body.name ?? '' });
+    }
   }
 
   const confirmToken = crypto.randomUUID().replaceAll('-', '') + crypto.randomUUID().replaceAll('-', '');

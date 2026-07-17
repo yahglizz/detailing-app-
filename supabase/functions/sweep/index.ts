@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getProvider } from '../_shared/payments/provider.ts';
 import { sendEmail, ownerEmail, functionsBaseUrl, button } from '../_shared/notify.ts';
+import { restoreMemberBalances } from '../_shared/member_refund.ts';
 
 Deno.serve(async () => {
   const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
@@ -9,7 +10,7 @@ Deno.serve(async () => {
   let reminded = 0, refunded = 0;
 
   const { data: stale } = await db.from('bookings')
-    .select('id, confirm_token, created_at, quote, reminder_sent_at, customers(email)')
+    .select('id, confirm_token, created_at, quote, reminder_sent_at, membership_id, customers(email)')
     .eq('status', 'requested').lt('created_at', dayAgo);
 
   for (const b of stale ?? []) {
@@ -26,6 +27,7 @@ Deno.serve(async () => {
           });
         }
       }
+      await restoreMemberBalances(db, b);
       await db.from('bookings').update({ status: 'refunded' }).eq('id', b.id);
       await sendEmail((b.customers as unknown as { email: string }).email,
         'Your deposit has been refunded',

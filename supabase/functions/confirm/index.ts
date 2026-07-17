@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getProvider } from '../_shared/payments/provider.ts';
 import { sendEmail } from '../_shared/notify.ts';
+import { restoreMemberBalances } from '../_shared/member_refund.ts';
 
 const admin = () => createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
@@ -96,6 +97,7 @@ Deno.serve(async (req) => {
           });
         }
       }
+      await restoreMemberBalances(db, b);
       await db.from('bookings').update({ status: 'refunded' }).eq('id', b.id);
       await sendEmail(customerEmail, 'Your deposit has been refunded',
         `<h2 style="color:#A855F7;margin:0 0 12px">Sorry — we couldn't take this one</h2>
