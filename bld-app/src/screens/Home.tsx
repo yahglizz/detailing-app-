@@ -4,6 +4,7 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../App';
+import { useMember } from '../state/member';
 import { colors, fonts, radius, spacing } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
@@ -16,6 +17,11 @@ export default function Home({ navigation }: Props) {
     p.muted = true;
     p.play();
   });
+
+  const { profile, loading } = useMember();
+  React.useEffect(() => {
+    if (!loading && profile) navigation.reset({ index: 0, routes: [{ name: 'MemberDashboard' }] });
+  }, [loading, profile]);
 
   return (
     <View style={s.root}>
@@ -45,7 +51,9 @@ export default function Home({ navigation }: Props) {
         >
           <Text style={s.ctaText}>GET MY DETAIL</Text>
         </Pressable>
-        <Text style={s.member}>Brotherhood member? Coming soon.</Text>
+        <Pressable accessibilityRole="button" onPress={() => navigation.navigate('MemberCode')}>
+          <Text style={s.member}>Brotherhood member? Enter your code →</Text>
+        </Pressable>
       </View>
     </View>
   );
