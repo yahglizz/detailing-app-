@@ -109,12 +109,16 @@ Deno.serve(async (req) => {
     payable = applied.payable;
     creditsUsed = applied.creditsUsed;
 
-    const { data: issued } = await admin.from('redemptions')
-      .select('id, reward').eq('membership_id', membership.id).eq('status', 'issued')
-      .order('created_at').limit(1);
-    if (issued?.[0]) {
-      appliedRedemption = issued[0] as { id: string; reward: RewardKey };
-      payable = applyReward(payable, appliedRedemption.reward, quote);
+    // Only pull a reward if there's still something to discount — never burn a
+    // member's reward on a wash that credits already dropped to $0.
+    if (payable > 0) {
+      const { data: issued } = await admin.from('redemptions')
+        .select('id, reward').eq('membership_id', membership.id).eq('status', 'issued')
+        .order('created_at').limit(1);
+      if (issued?.[0]) {
+        appliedRedemption = issued[0] as { id: string; reward: RewardKey };
+        payable = applyReward(payable, appliedRedemption.reward, quote);
+      }
     }
   }
   const anchored = !membership && body.anchor === true;
@@ -165,13 +169,56 @@ Deno.serve(async (req) => {
   }
 
   // ——— commit side effects AFTER money: credits, redemption, bump ———
+  // These consume scarce balances (credits, a one-time reward). If a concurrent
+  // booking already spent them, we must NOT hand out the discount we already
+  // applied to `payable` — so on conflict we refund the deposit and void the
+  // booking rather than give a wash away for free.
+  const refundDeposit = async () => {
+    if (deposit <= 0) return;
+    const { data: pay } = await admin.from('payments').select('provider_ref')
+      .eq('booking_id', booking.id).eq('kind', 'deposit').eq('status', 'succeeded').single();
+    if (pay?.provider_ref) {
+      const r = await getProvider().refund({ bookingId: booking.id, providerRef: pay.provider_ref });
+      if (r.ok) {
+        await admin.from('payments').insert({
+          booking_id: booking.id, kind: 'refund', amount_cents: deposit * 100,
+          status: 'succeeded', provider: 'fake', provider_ref: r.ref,
+        });
+      }
+    }
+  };
+
   if (membership && creditsUsed > 0) {
-    await admin.from('credit_ledger').insert({
+    // The credit_ledger non-negative trigger surfaces over-spend as an error
+    // (it does not throw). A raced credit means the discount was never validly
+    // covered — undo everything.
+    const { error: debitErr } = await admin.from('credit_ledger').insert({
       membership_id: membership.id, delta: -creditsUsed, reason: 'wash', booking_id: booking.id,
     });
+    if (debitErr) {
+      await refundDeposit();
+      await admin.from('bookings').update({ status: 'declined' }).eq('id', booking.id);
+      return Response.json({ error: 'credit_conflict' }, { status: 409 });
+    }
   }
   if (appliedRedemption) {
-    await admin.from('redemptions').update({ status: 'applied', booking_id: booking.id }).eq('id', appliedRedemption.id);
+    // Conditional flip: only claim the reward if it is still 'issued'. Zero rows
+    // back means another booking already took it — undo this one so a single
+    // reward can never discount two washes.
+    const { data: flipped } = await admin.from('redemptions')
+      .update({ status: 'applied', booking_id: booking.id })
+      .eq('id', appliedRedemption.id).eq('status', 'issued')
+      .select('id');
+    if (!flipped || flipped.length === 0) {
+      if (membership && creditsUsed > 0) {
+        await admin.from('credit_ledger').insert({
+          membership_id: membership.id, delta: creditsUsed, reason: 'wash_rollback', booking_id: booking.id,
+        });
+      }
+      await refundDeposit();
+      await admin.from('bookings').update({ status: 'declined' }).eq('id', booking.id);
+      return Response.json({ error: 'reward_conflict' }, { status: 409 });
+    }
   }
 
   if (bumped && holderBooking) {
