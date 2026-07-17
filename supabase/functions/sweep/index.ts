@@ -54,12 +54,19 @@ Deno.serve(async () => {
   const todayY = today.getUTCFullYear(), todayM = today.getUTCMonth(), todayD = today.getUTCDate();
   let granted = 0;
   const { data: members } = await db.from('memberships')
-    .select('id, credits_per_period, period_start').eq('active', true);
+    .select('id, credits_per_period, period_start, created_at').eq('active', true);
   for (const m of members ?? []) {
     const start = new Date(String(m.period_start) + 'T00:00:00Z');
-    const anchorDay = start.getUTCDate();
+    // Anchor day comes from the immutable signup date, not the mutable
+    // period_start — otherwise clamping a 31st anchor to Feb-28 would ratchet
+    // every later month down to the 28th and never recover.
+    const anchorDay = new Date(String(m.created_at)).getUTCDate();
     let elapsed = (todayY - start.getUTCFullYear()) * 12 + (todayM - start.getUTCMonth());
-    if (todayD < anchorDay) elapsed--; // current month not yet complete
+    // The current month isn't complete until its clamped anchor day. Clamp the
+    // threshold to this month's length so a 31st anchor still comes due on the
+    // last day of a short month (e.g. Feb 28), not slip to next month.
+    const daysThisMonth = new Date(Date.UTC(todayY, todayM + 1, 0)).getUTCDate();
+    if (todayD < Math.min(anchorDay, daysThisMonth)) elapsed--;
     if (elapsed <= 0) continue;
 
     const mi = start.getUTCMonth() + elapsed;
