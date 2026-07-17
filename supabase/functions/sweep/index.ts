@@ -41,5 +41,29 @@ Deno.serve(async () => {
       reminded++;
     }
   }
-  return Response.json({ reminded, refunded });
+
+  // ——— monthly membership credit grants ———
+  let granted = 0;
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const { data: members } = await db.from('memberships')
+    .select('id, credits_per_period, period_start').eq('active', true);
+  for (const m of members ?? []) {
+    let start = new Date(String(m.period_start) + 'T00:00:00Z');
+    let advanced = false;
+    while (true) {
+      const next = new Date(start);
+      next.setUTCMonth(next.getUTCMonth() + 1);
+      if (next.toISOString().slice(0, 10) > todayISO) break;
+      await db.from('credit_ledger').insert({
+        membership_id: m.id, delta: m.credits_per_period, reason: `monthly grant ${next.toISOString().slice(0, 10)}`,
+      });
+      start = next;
+      advanced = true;
+      granted++;
+    }
+    if (advanced) {
+      await db.from('memberships').update({ period_start: start.toISOString().slice(0, 10) }).eq('id', m.id);
+    }
+  }
+  return Response.json({ reminded, refunded, granted });
 });
