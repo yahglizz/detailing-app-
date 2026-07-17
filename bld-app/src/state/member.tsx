@@ -36,8 +36,14 @@ const Ctx = createContext<MemberCtx | null>(null);
 async function callMember(body: Record<string, unknown>): Promise<{ data: MemberProfile | { ok: boolean } | null; error: string | null }> {
   const { data, error } = await supabase.functions.invoke('member', { body });
   if (error) {
-    const ctx = (error as { context?: Response }).context;
-    const parsed = ctx ? await ctx.json().catch(() => ({})) : {};
+    // On an HTTP error, `context` is the Response and carries our {error} body.
+    // On a real network failure it's the raw fetch error (no .json) — treat as
+    // 'network' rather than letting ctx.json() throw and hang the caller.
+    const ctx = (error as { context?: unknown }).context;
+    let parsed: { error?: string } = {};
+    if (ctx && typeof (ctx as Response).json === 'function') {
+      parsed = await (ctx as Response).json().catch(() => ({}));
+    }
     return { data: null, error: parsed.error ?? 'network' };
   }
   return { data, error: null };
