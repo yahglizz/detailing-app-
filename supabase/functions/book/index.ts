@@ -128,14 +128,27 @@ Deno.serve(async (req) => {
   const deposit = payable === 0 ? 0 : Math.round((payable * depositPercent) / 100);
   if (deposit > 0 && !body.card) return Response.json({ error: 'card_required' }, { status: 400 });
 
-  await admin.from('customers').upsert({ id: user.id, email: user.email, name: body.name ?? '' });
+  // Resolve the customer row this booking hangs off. An owner-issued member
+  // already HAS a customers row — created at membership time, keyed by their
+  // (unique) email with a placeholder id that predates their auth account. Book
+  // under that existing row; a fresh upsert by auth-uid would hit the unique
+  // email constraint and fail every owner-issued member's first booking. Only
+  // the name is refreshed (email is the identity key, already set by the owner).
+  // Non-members upsert by their auth uid as before.
+  let customerId = user.id;
+  if (membership) {
+    customerId = membership.customer_id;
+    if (body.name) await admin.from('customers').update({ name: body.name }).eq('id', customerId);
+  } else {
+    await admin.from('customers').upsert({ id: user.id, email: user.email, name: body.name ?? '' });
+  }
 
   const confirmToken = crypto.randomUUID().replaceAll('-', '') + crypto.randomUUID().replaceAll('-', '');
   const fullQuote = { ...quote, payable, deposit, remainder: payable - deposit, creditsUsed, anchored };
   const { data: booking, error: insErr } = await admin
     .from('bookings')
     .insert({
-      customer_id: user.id,
+      customer_id: customerId,
       items: body.items,
       quote: fullQuote,
       address: body.address.trim(),
