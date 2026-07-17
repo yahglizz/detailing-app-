@@ -10,7 +10,14 @@
 
 const SUPABASE_URL = 'https://fiaadogbkvjcddehnymj.supabase.co';
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpYWFkb2dia3ZqY2RkZWhueW1qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQyMjQ1OTUsImV4cCI6MjA5OTgwMDU5NX0.XR44tZS4Ntuvg7NZBdB5A_4_y6WjeTEgwweFeqwp8rE';
-const OWNER_ADMIN_TOKEN = '568beccdedbd7ebf841ced501ac914236a5b8ed48bb70db1';
+// Owner admin token is a secret — never hardcode it. Provide it at run time:
+//   BLD_OWNER_TOKEN=<token> node scripts/e2e-member.mjs
+// (read it from the DB: select value from app_config where key='owner_admin_token';)
+const OWNER_ADMIN_TOKEN = process.env.BLD_OWNER_TOKEN || '';
+if (!OWNER_ADMIN_TOKEN) {
+  console.error('Set BLD_OWNER_TOKEN env var (owner admin token) before running.');
+  process.exit(1);
+}
 const PASSWORD = 'Test123456!';
 const FAKE_CARD = { number: '4242424242424242', expMonth: 12, expYear: 2030, cvc: '123' };
 
