@@ -4,6 +4,12 @@ import { sendEmail } from '../_shared/notify.ts';
 
 const admin = () => createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
+// Customer name/email are typed by the customer at booking time and rendered
+// into this token-bearing owner page — escape them so a booking can never
+// inject script that steals the owner's admin token.
+const esc = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
 const page = (inner: string) => new Response(
   `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>BLD Members</title><style>
@@ -39,7 +45,7 @@ async function renderHome(token: string) {
   const memberRows = (members ?? []).map((m) => {
     const c = m.customers as unknown as { name: string; email: string };
     return `<div class="card">
-      <h2>${c?.name || c?.email || '—'} <span class="tier-${m.tier}">${(m.tier ?? '').toUpperCase()}</span>${m.active ? '' : ' · <span class="muted">INACTIVE</span>'}</h2>
+      <h2>${esc(c?.name || c?.email || '—')} <span class="tier-${m.tier}">${(m.tier ?? '').toUpperCase()}</span>${m.active ? '' : ' · <span class="muted">INACTIVE</span>'}</h2>
       <div class="code">${m.code ?? ''}</div>
       <form method="POST" class="row">
         <input type="hidden" name="token" value="${token}"><input type="hidden" name="id" value="${m.id}">
@@ -53,7 +59,7 @@ async function renderHome(token: string) {
   const jobRows = (jobs ?? []).map((b) => {
     const c = b.customers as unknown as { name: string; email: string };
     const cars = (b.items as unknown[]).length;
-    return `<div class="card"><h2>${b.preferred_day} ${b.time_slot ?? ''} — ${c?.name || c?.email}</h2>
+    return `<div class="card"><h2>${b.preferred_day} ${b.time_slot ?? ''} — ${esc(c?.name || c?.email || '')}</h2>
       <p class="muted">${cars} car(s) · ${b.status}${b.membership_id ? ' · MEMBER' : ''}</p>
       <form method="POST"><input type="hidden" name="token" value="${token}"><input type="hidden" name="id" value="${b.id}">
       <button class="primary" name="action" value="done">Mark done${b.membership_id ? ' (+stamps)' : ''}</button></form></div>`;
@@ -92,6 +98,7 @@ Deno.serve(async (req) => {
       const { data: cat } = await db.from('catalog').select('config').eq('id', 1).single();
       const cfg = cat!.config as MemberCatalog;
       const plan = cfg.plans[tier];
+      if (!plan) return page('<div class="card"><h1>Unknown tier</h1></div>');
 
       // Customer row keyed by email; create an auth-less placeholder id if new.
       const { data: existing } = await db.from('customers').select('id').eq('email', email).single();
@@ -111,13 +118,13 @@ Deno.serve(async (req) => {
       const { data: m } = await db.from('memberships').select('id').eq('code', code).single();
       await db.from('credit_ledger').insert({ membership_id: m!.id, delta: plan.credits, reason: 'initial grant' });
       await sendEmail(email, 'Welcome to the Brotherhood — your member code inside',
-        `<h2 style="color:#A855F7;margin:0 0 12px">Welcome, ${name}!</h2>
+        `<h2 style="color:#A855F7;margin:0 0 12px">Welcome, ${esc(name)}!</h2>
          <p>Your <b>${tier.toUpperCase()}</b> membership is live: ${plan.credits} ${plan.service} details every month, priority booking, and rewards on every wash.</p>
          <p>Your member code:</p>
          <p style="font-family:monospace;font-size:28px;color:#F5B942;letter-spacing:3px">${code}</p>
          <p style="color:#A9A4AF">Open the BLD app → "I'm a member" → enter this code once.</p>`);
       return page(`<div class="card"><h1>Member created ✓</h1>
-        <p>${name} · ${tier.toUpperCase()} · ${plan.credits} credits granted · welcome email sent.</p>
+        <p>${esc(name)} · ${tier.toUpperCase()} · ${plan.credits} credits granted · welcome email sent.</p>
         <p class="muted">Their code (also emailed):</p><div class="code">${code}</div>
         <form method="GET"><input type="hidden" name="token" value="${token}"><button class="ghost">← Back</button></form></div>`);
     }
@@ -126,6 +133,7 @@ Deno.serve(async (req) => {
       const tier = String(form.get('tier') ?? '') as Tier;
       const { data: cat } = await db.from('catalog').select('config').eq('id', 1).single();
       const plan = (cat!.config as MemberCatalog).plans[tier];
+      if (!plan) return page('<div class="card"><h1>Unknown tier</h1></div>');
       await db.from('memberships').update({ tier, plan: tier, credits_per_period: plan.credits }).eq('id', id);
       return renderHome(token);
     }

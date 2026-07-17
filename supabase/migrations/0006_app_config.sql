@@ -12,7 +12,10 @@ alter table app_config enable row level security;
 -- No policies: anon/authenticated get zero rows; service role bypasses RLS.
 
 -- Owner members-admin token. The owner opens
--- /functions/v1/owner-members?token=<value> to add/manage members. Rotate by
--- updating this row.
-insert into app_config (key, value) values ('owner_admin_token', '9cf1a2bfc23b29d9ece0e92237abd6e5349b5c6d90f06320')
-on conflict (key) do update set value = excluded.value, updated_at = now();
+-- /functions/v1/owner-members?token=<value> to add/manage members.
+-- Generated server-side so no secret is ever committed to git. Rotate with:
+--   update app_config set value = encode(gen_random_bytes(24),'hex'),
+--     updated_at = now() where key = 'owner_admin_token';
+insert into app_config (key, value)
+values ('owner_admin_token', encode(gen_random_bytes(24), 'hex'))
+on conflict (key) do nothing;
