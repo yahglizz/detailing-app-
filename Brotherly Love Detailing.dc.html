@@ -44,7 +44,7 @@
 </style>
 </head>
 <body>
-<div style="background:linear-gradient(90deg,#7028C9,#A855F7);color:#fff;text-align:center;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:13px;padding:9px 16px">
+<div id="bld-promo-banner" style="background:linear-gradient(90deg,#7028C9,#A855F7);color:#fff;text-align:center;font-family:'League Spartan',sans-serif;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;font-size:18px;padding:16px 20px;box-shadow:0 4px 18px rgba(112,40,201,.5);position:relative;z-index:300">
   ✨ New customers get <span style="color:#F5B942">10% OFF</span> your first wash — <a href="#quote" style="color:#fff;text-decoration:underline">get your instant quote &rarr;</a>
 </div>
 <x-dc>
@@ -71,6 +71,13 @@
 <div style="max-width:100%;overflow-x:hidden;background:#08080B">
 
   <!-- NAV -->
+  <div id="bld-promo-pop" style="display:none;position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:9999;width:calc(100% - 32px);max-width:420px;background:#141217;border:1px solid #A855F7;border-radius:18px;box-shadow:0 24px 60px rgba(0,0,0,.6),0 0 0 1px rgba(168,85,247,.4);padding:24px 24px 22px;font-family:'Inter',sans-serif">
+    <button id="bld-promo-close" type="button" aria-label="Close" style="position:absolute;top:10px;right:14px;background:none;border:none;color:#A9A4AF;font-size:24px;line-height:1;cursor:pointer">&times;</button>
+    <div style="display:inline-flex;align-items:center;gap:7px;background:rgba(245,185,66,.14);border:1px solid #F5B942;border-radius:999px;padding:5px 12px;margin-bottom:12px"><span style="color:#F5B942;font-family:'League Spartan',sans-serif;font-weight:800;font-size:11px;letter-spacing:1px">LIMITED · NEW CUSTOMERS</span></div>
+    <div style="font-family:'League Spartan',sans-serif;font-weight:900;font-size:24px;color:#fff;letter-spacing:.5px;line-height:1.1">Save <span style="color:#F5B942">10%</span> on your first wash</div>
+    <p style="color:#A9A4AF;font-size:14px;line-height:1.5;margin:9px 0 16px">Get an instant price in seconds &mdash; accept and we&rsquo;ll lock in your discount.</p>
+    <button id="bld-promo-cta" type="button" style="width:100%;cursor:pointer;border:none;background:linear-gradient(135deg,#7028C9,#A855F7);color:#fff;font-family:'League Spartan',sans-serif;font-weight:800;letter-spacing:1px;text-transform:uppercase;font-size:15px;padding:15px;border-radius:12px;box-shadow:0 10px 26px rgba(112,40,201,.5)">Get my quote &rarr;</button>
+  </div>
   <header style="position:sticky;top:0;z-index:100;background:rgba(8,8,11,0.82);backdrop-filter:blur(14px);border-bottom:1px solid #34303A">
     <nav style="max-width:1240px;margin:0 auto;padding:16px 32px;display:flex;align-items:center;justify-content:space-between;gap:24px">
       <a href="#top" style="display:flex;align-items:center;gap:12px;color:#fff">
@@ -627,6 +634,49 @@ class Component extends DCLogic {
       return;
     }
   });
+
+  // 10% promo popup — appears after 15s on the site, once per visit.
+  setTimeout(function(){
+    try { if (sessionStorage.getItem('bld_promo_seen')) return; } catch(e){}
+    var pop = document.getElementById('bld-promo-pop');
+    if (pop) pop.style.display = 'block';
+  }, 15000);
+  document.addEventListener('click', function(ev){
+    var t = ev.target; if (!t) return;
+    var hit = (t.id === 'bld-promo-cta' || t.id === 'bld-promo-close') ? t
+            : (t.closest ? t.closest('#bld-promo-cta,#bld-promo-close') : null);
+    if (!hit) return;
+    var pop = document.getElementById('bld-promo-pop');
+    if (pop) pop.style.display = 'none';
+    try { sessionStorage.setItem('bld_promo_seen', '1'); } catch(e){}
+    if (hit.id === 'bld-promo-cta'){
+      var qs = document.getElementById('quote');
+      if (qs) qs.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      try { location.hash = '#quote'; } catch(e){}
+    }
+  });
+
+  // 10% ribbon on top of every pricing block — inserted post-render at stable anchors
+  // (the template runtime re-parents source-injected nodes, so we add them from JS).
+  function bldRibbon(){
+    return '<span style="display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#7028C9,#A855F7);color:#fff;font-family:\'League Spartan\',sans-serif;font-weight:800;letter-spacing:1px;text-transform:uppercase;font-size:14px;padding:11px 22px;border-radius:999px;box-shadow:0 8px 22px rgba(112,40,201,.45)">✨ New customers save 10% on your first wash</span>';
+  }
+  function bldAddRibbon(anchor, id){
+    if (!anchor || !anchor.parentNode || document.getElementById(id)) return;
+    var r = document.createElement('div');
+    r.id = id; r.style.cssText = 'text-align:center;margin:0 0 30px'; r.innerHTML = bldRibbon();
+    anchor.parentNode.insertBefore(r, anchor);
+  }
+  function bldPlaceRibbons(){
+    var pOut = document.getElementById('bld-price-outside');
+    var grid = pOut && pOut.closest ? pOut.closest('div[style*="grid-template-columns"]') : null;
+    bldAddRibbon(grid, 'bld-ribbon-services');
+    var pkg = document.getElementById('packages');
+    var inner = pkg ? pkg.querySelector('div') : null;
+    if (inner && inner.firstElementChild) bldAddRibbon(inner.firstElementChild, 'bld-ribbon-packages');
+  }
+  window.addEventListener('load', function(){ setTimeout(bldPlaceRibbons, 300); setTimeout(bldPlaceRibbons, 1200); });
+  setTimeout(bldPlaceRibbons, 1500);
 })();
 </script>
 </body>
