@@ -1,8 +1,9 @@
 // TEST-ONLY helper for the member-mode E2E. Runs with the service role, so it
 // is gated behind the owner admin token (same secret as the owner page) to keep
-// it from being an open backdoor. Two actions:
-//   create-user  { email, password }  -> mints a confirmed email user + session-able account
-//   cleanup      { emailLike }        -> deletes all test data for emails matching a prefix
+// it from being an open backdoor. Actions:
+//   create-user    { email, password } -> mints a confirmed email user + session-able account
+//   booking-token  { bookingId }       -> returns a booking's confirm_token + status (for decline)
+//   cleanup        { emailLike }        -> deletes all test data for emails matching a prefix
 // The legacy phone create-user path is kept for older callers.
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
@@ -42,6 +43,18 @@ Deno.serve(async (req) => {
       userId = list?.users.find((u) => u.email === email)?.id;
     }
     return Response.json({ ok: true, userId });
+  }
+
+  if (action === 'booking-token') {
+    // Return a booking's confirm_token (+status) so the E2E script can drive the
+    // owner confirm/decline page without the service-role key. Member bookings
+    // are keyed to membership.customer_id (not the auth uid), so RLS blocks the
+    // booker's own session from reading confirm_token — this guarded read is the
+    // only self-contained way for the standalone script to reach it.
+    const id = String(body.bookingId ?? '');
+    if (!id) return Response.json({ error: 'bookingId required' }, { status: 400 });
+    const { data } = await db.from('bookings').select('confirm_token, status').eq('id', id).single();
+    return Response.json({ ok: true, confirmToken: data?.confirm_token ?? null, status: data?.status ?? null });
   }
 
   if (action === 'cleanup') {

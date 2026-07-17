@@ -19,6 +19,7 @@ const emails = {
   gold1: `${prefix}-gold@bldtest.co`,
   nm: `${prefix}-nm@bldtest.co`,
   gold2: `${prefix}-gold2@bldtest.co`,
+  refund: `${prefix}-refund@bldtest.co`,
 };
 
 let passCount = 0;
@@ -128,6 +129,27 @@ function extractMembershipId(html, code) {
     }
   }
   return null;
+}
+
+async function bookingToken(bookingId) {
+  const { status, body } = await jsonFetch(`${SUPABASE_URL}/functions/v1/e2e-setup`, {
+    method: 'POST',
+    headers: { apikey: ANON, Authorization: `Bearer ${ANON}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: OWNER_ADMIN_TOKEN, action: 'booking-token', bookingId }),
+  });
+  if (status !== 200 || !body.ok) throw new Error(`bookingToken(${bookingId}) failed: ${status} ${JSON.stringify(body)}`);
+  if (!body.confirmToken) throw new Error(`bookingToken(${bookingId}) returned no confirm_token: ${JSON.stringify(body)}`);
+  return body.confirmToken;
+}
+
+async function confirmDecline(confirmToken) {
+  const form = new URLSearchParams({ token: confirmToken, action: 'decline' });
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/confirm`, {
+    method: 'POST',
+    headers: { apikey: ANON, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: form.toString(),
+  });
+  return { status: res.status, text: await res.text() };
 }
 
 async function slotStates(day) {
@@ -322,6 +344,103 @@ async function main() {
     assert(s2 === 400, `expected 400, got ${s2}: ${JSON.stringify(b2)}`);
     assert(b2.error === 'too_far_out', `expected error=='too_far_out', got ${JSON.stringify(b2)}`);
     pass('13b. non-member 2026-07-28 (>7 days) -> 400 too_far_out');
+  }
+
+  // Step 15: FIX 1 — declining/auto-refunding a member booking restores the
+  // spent credit AND un-applies any attached reward (restoreMemberBalances,
+  // wired into confirm decline + sweep). Use a fresh isolated gold member.
+  {
+    await createUser(emails.refund);
+    const tokR = await mintSession(emails.refund);
+    const codeR = await ownerAddMember('E2E Refund Gold', emails.refund, 'gold');
+
+    // 15a: fresh member starts with 2 credits.
+    {
+      const { status, body } = await memberCall({ code: codeR });
+      assert(status === 200 && body.credits === 2, `expected fresh member credits==2, got ${status} ${JSON.stringify(body)}`);
+      pass('15a. fresh gold member(codeR) credits==2');
+    }
+
+    // 15b: member books a credit wash -> credits drop to 1.
+    let declineBookingId;
+    {
+      const { status, body } = await book(tokR, { preferredDay: '2026-07-20', timeSlot: '09:00', memberCode: codeR });
+      assert(status === 200 && body.creditsUsed === 1 && body.payable === 0, `credit wash book failed: ${status} ${JSON.stringify(body)}`);
+      declineBookingId = body.bookingId;
+      const { body: prof } = await memberCall({ code: codeR });
+      assert(prof.credits === 1, `expected credits==1 after credit wash, got ${prof.credits}`);
+      pass('15b. member booked credit wash, credits==1');
+    }
+
+    // 15c + 15d: read confirm_token, POST the owner decline.
+    {
+      const token = await bookingToken(declineBookingId);
+      const { status } = await confirmDecline(token);
+      assert(status === 200, `confirm decline http ${status}`);
+      pass('15c/d. read confirm_token + posted owner decline');
+    }
+
+    // 15e: credit restored — back to 2.
+    {
+      const { body } = await memberCall({ code: codeR });
+      assert(body.credits === 2, `expected credits restored to 2 after decline, got ${body.credits}`);
+      pass('15e. credit restored on decline: credits==2');
+    }
+
+    // ——— reward-restore path ———
+    // A reward only attaches when payable stays > 0 AFTER credits (book's
+    // payable>0 guard). So first exhaust both credits, then book a paid wash so
+    // the issued reward actually attaches, then decline and confirm it resets.
+    {
+      // Exhaust 2 credits with two credit washes on open slots.
+      const w1 = await book(tokR, { preferredDay: '2026-07-20', timeSlot: '10:00', memberCode: codeR });
+      assert(w1.status === 200 && w1.body.creditsUsed === 1, `exhaust wash 1 failed: ${w1.status} ${JSON.stringify(w1.body)}`);
+      const w2 = await book(tokR, { preferredDay: '2026-07-20', timeSlot: '11:00', memberCode: codeR });
+      assert(w2.status === 200 && w2.body.creditsUsed === 1, `exhaust wash 2 failed: ${w2.status} ${JSON.stringify(w2.body)}`);
+      const { body: prof0 } = await memberCall({ code: codeR });
+      assert(prof0.credits === 0, `expected credits==0 after exhausting, got ${prof0.credits}`);
+      pass('15f. exhausted both credits, credits==0');
+
+      // Get to 3 stamps and redeem tireShine.
+      const { text: html } = await ownerMembersGet();
+      const membershipIdR = extractMembershipId(html, codeR);
+      assert(membershipIdR, `could not scrape membershipId for ${codeR}`);
+      await ownerMembersPost({ action: 'stamp', id: membershipIdR });
+      await ownerMembersPost({ action: 'stamp', id: membershipIdR });
+      await ownerMembersPost({ action: 'stamp', id: membershipIdR });
+      const redeem = await memberCall({ code: codeR, action: 'redeem', reward: 'tireShine' });
+      assert(redeem.status === 200 && redeem.body.ok, `redeem tireShine failed: ${redeem.status} ${JSON.stringify(redeem.body)}`);
+      const { body: profIssued } = await memberCall({ code: codeR });
+      assert(profIssued.issuedRewards.length === 1, `expected issuedRewards==1 after redeem, got ${profIssued.issuedRewards.length}`);
+      pass('15g. redeemed tireShine, issuedRewards==1');
+
+      // Book a PAID wash (credits==0 -> payable 120 > 0) so the reward attaches.
+      const rewardBook = await book(tokR, { preferredDay: '2026-07-20', timeSlot: '12:00', memberCode: codeR });
+      assert(rewardBook.status === 200, `reward-attach book failed: ${rewardBook.status} ${JSON.stringify(rewardBook.body)}`);
+      assert(rewardBook.body.creditsUsed === 0, `expected creditsUsed==0 (credits exhausted), got ${rewardBook.body.creditsUsed}`);
+      const rewardBookingId = rewardBook.body.bookingId;
+      const { body: profAttached } = await memberCall({ code: codeR });
+      assert(profAttached.issuedRewards.length === 0, `expected issuedRewards==0 after reward attached to booking, got ${profAttached.issuedRewards.length}`);
+      pass('15h. paid wash attached the reward, issuedRewards==0');
+
+      // Decline that booking -> reward reset to issued.
+      const rToken = await bookingToken(rewardBookingId);
+      const { status: ds } = await confirmDecline(rToken);
+      assert(ds === 200, `reward-booking decline http ${ds}`);
+      const { body: profRestored } = await memberCall({ code: codeR });
+      assert(profRestored.issuedRewards.length === 1, `expected issuedRewards restored to 1 after decline, got ${profRestored.issuedRewards.length}`);
+      pass('15i. reward restored on decline: issuedRewards==1');
+    }
+  }
+
+  // Step 16: FIX 2 — a member booking as a GUEST (no memberCode) with their OWN
+  // email (which already has an owner-created customers row) used to 500 on the
+  // upsert email collision. Now fixed (book v6). Reuse gold1's session, book
+  // without a code on an open slot.
+  {
+    const { status, body } = await book(tokGold1, { preferredDay: '2026-07-22', timeSlot: '12:00' });
+    assert(status === 200, `member-email guest booking should be 200, got ${status}: ${JSON.stringify(body)}`);
+    pass('16. gold member email booked as guest (no code) -> 200, no email-collision 500');
   }
 
   console.log(`\nALL PASSED (${passCount} steps)`);
