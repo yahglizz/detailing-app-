@@ -44,6 +44,9 @@
 </style>
 </head>
 <body>
+<div style="background:linear-gradient(90deg,#7028C9,#A855F7);color:#fff;text-align:center;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:13px;padding:9px 16px">
+  ✨ New customers get <span style="color:#F5B942">10% OFF</span> your first wash — <a href="#quote" style="color:#fff;text-decoration:underline">get your instant quote &rarr;</a>
+</div>
 <x-dc>
 <helmet>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -307,30 +310,46 @@
       </div>
 
       <div style="background:#141217;border:1px solid #34303A;border-radius:20px;padding:38px">
-        <sc-if value="{{ submitted }}" hint-placeholder-val="{{ false }}">
-          <div style="text-align:center;padding:40px 10px">
-            <div style="font-size:52px;margin-bottom:16px">✨</div>
-            <h3 style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:28px;color:#fff;margin-bottom:12px">Thank You{{ nameSuffix }}!</h3>
-            <p style="color:#A9A4AF;font-size:15px;line-height:1.6;max-width:340px;margin:0 auto 24px">Your quote request is in. One of the brothers will reach out shortly with your honest price. God bless!</p>
-            <button onClick="{{ reset }}" style="cursor:pointer;border:1px solid #34303A;background:#0E0D11;color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:13px;padding:13px 24px;border-radius:10px">Send another</button>
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(245,185,66,.14);border:1px solid #F5B942;border-radius:999px;padding:6px 13px;align-self:flex-start">
+            <span style="color:#F5B942;font-family:'League Spartan',sans-serif;font-weight:800;font-size:12px;letter-spacing:1px">⚡ INSTANT QUOTE · 10% OFF FIRST WASH</span>
           </div>
-        </sc-if>
-        <sc-if value="{{ notSubmitted }}" hint-placeholder-val="{{ true }}">
-          <div style="display:flex;flex-direction:column;gap:16px">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-              <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Name</label><input value="{{ name }}" onInput="{{ onName }}" placeholder="Your name" style="width:100%;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none" style-focus="border-color:#A855F7" /></div>
-              <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Phone</label><input value="{{ phone }}" onInput="{{ onPhone }}" placeholder="(215) 555-0123" style="width:100%;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none" style-focus="border-color:#A855F7" /></div>
-            </div>
-            <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Email</label><input value="{{ email }}" onInput="{{ onEmail }}" placeholder="you@email.com" style="width:100%;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none" style-focus="border-color:#A855F7" /></div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-              <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Vehicle</label><input value="{{ vehicle }}" onInput="{{ onVehicle }}" placeholder="Year, make, model" style="width:100%;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none" style-focus="border-color:#A855F7" /></div>
-              <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Service</label><select value="{{ service }}" onChange="{{ onService }}" style="width:100%;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none" style-focus="border-color:#A855F7"><option>Express Wash</option><option>Signature Detail</option><option>Ministry Full Detail</option><option>Ceramic Coating</option><option>Membership</option><option>Not sure — help me choose</option></select></div>
-            </div>
-            <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Details</label><textarea value="{{ message }}" onInput="{{ onMessage }}" placeholder="Tell us about your vehicle's condition, location, and what you need." rows="4" style="width:100%;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none;resize:vertical" style-focus="border-color:#A855F7"></textarea></div>
-            <button onClick="{{ submit }}" style="cursor:pointer;border:none;background:linear-gradient(135deg,#7028C9,#A855F7);color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:15px;padding:17px;border-radius:12px;box-shadow:0 10px 28px rgba(112,40,201,.5)">Request My Free Quote</button>
-            <p style="text-align:center;color:#A9A4AF;font-size:12px">No spam. We only use your info to send your quote.</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+            <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Name</label><input id="iq-name" placeholder="Your name" style="width:100%;box-sizing:border-box;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none" /></div>
+            <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Phone</label><input id="iq-phone" placeholder="(215) 555-0123" style="width:100%;box-sizing:border-box;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none" /></div>
           </div>
-        </sc-if>
+          <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Email</label><input id="iq-email" placeholder="you@email.com" style="width:100%;box-sizing:border-box;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none" /></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+            <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Service</label>
+              <select id="iq-service" style="width:100%;box-sizing:border-box;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none">
+                <option value="">Choose a service&hellip;</option>
+                <option value="outside">Exterior Wash &amp; Wax</option>
+                <option value="inside">Interior Detail</option>
+                <option value="full">Full Detail</option>
+                <option value="ceramic">Ceramic Coating</option>
+                <option value="membership">Membership</option>
+              </select>
+            </div>
+            <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Vehicle size</label>
+              <select id="iq-size" style="width:100%;box-sizing:border-box;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none">
+                <option value="sedan">Sedan / Coupe</option>
+                <option value="suv">SUV / Crossover</option>
+                <option value="truck">Truck / Van</option>
+              </select>
+            </div>
+          </div>
+          <button id="iq-go" type="button" style="cursor:pointer;border:none;background:linear-gradient(135deg,#7028C9,#A855F7);color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:15px;padding:16px;border-radius:12px;box-shadow:0 10px 28px rgba(112,40,201,.5)">⚡ Get my instant price</button>
+          <div id="iq-error" style="display:none;color:#F97066;font-size:13px;text-align:center"></div>
+          <div id="iq-result" style="display:none;background:#0E0D11;border:1px solid #34303A;border-radius:14px;padding:20px">
+            <div id="iq-price"></div>
+            <div id="iq-actions" style="display:flex;gap:10px;margin-top:16px">
+              <button id="iq-accept" type="button" style="flex:1;cursor:pointer;border:none;background:linear-gradient(135deg,#32D583,#12B76A);color:#04120B;font-family:'League Spartan',sans-serif;font-weight:800;letter-spacing:1px;text-transform:uppercase;font-size:14px;padding:14px;border-radius:11px">Accept offer</button>
+              <button id="iq-decline" type="button" style="flex:1;cursor:pointer;background:#141217;border:1px solid #34303A;color:#D5D7DC;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:14px;padding:14px;border-radius:11px">Decline</button>
+            </div>
+          </div>
+          <div id="iq-done" style="display:none;text-align:center;padding:6px 4px"></div>
+          <p style="text-align:center;color:#A9A4AF;font-size:12px">No spam. We only use your info to send your quote.</p>
+        </div>
       </div>
     </div>
   </section>
@@ -500,6 +519,7 @@ class Component extends DCLogic {
     .then(function (rows) {
       var cfg = rows && rows[0] && rows[0].config;
       if (!cfg) return;
+      window.__BLD_CFG = cfg;
       var set = function (id, v) { var el = document.getElementById(id); if (el && v != null) el.textContent = '$' + v; };
       if (cfg.services) {
         set('bld-price-outside', cfg.services.outside);
@@ -521,6 +541,92 @@ class Component extends DCLogic {
       }
     })
     .catch(function () { /* static fallbacks already rendered */ });
+
+  // --- Instant quote (live catalog prices, 10% off first wash, lead capture) ---
+  var IQ_FB = { services:{outside:45,inside:60,full:120}, extras:{ceramic:199}, sizeMultipliers:{sedan:1,suv:1.25,truck:1.5}, plans:{bronze:{price:79}} };
+  function iqCfg(){ return window.__BLD_CFG || IQ_FB; }
+  var IQ_SVC = { outside:'Exterior Wash & Wax', inside:'Interior Detail', full:'Full Detail', ceramic:'Ceramic Coating', membership:'Membership' };
+  var IQ_SIZE = { sedan:'Sedan', suv:'SUV', truck:'Truck' };
+  function iqPrice(svc, size){
+    var c = iqCfg();
+    if (svc === 'ceramic') return Math.round((c.extras && c.extras.ceramic) || IQ_FB.extras.ceramic);
+    if (svc === 'outside' || svc === 'inside' || svc === 'full'){
+      var base = (c.services && c.services[svc]) || IQ_FB.services[svc];
+      var mult = (c.sizeMultipliers && c.sizeMultipliers[size]) || IQ_FB.sizeMultipliers[size] || 1;
+      return Math.round(base * mult);
+    }
+    return null;
+  }
+  function iqInsert(accepted, p, d){
+    var svc = document.getElementById('iq-service').value;
+    var body = {
+      name: document.getElementById('iq-name').value.trim() || null,
+      phone: document.getElementById('iq-phone').value.trim() || null,
+      email: document.getElementById('iq-email').value.trim() || null,
+      service: svc || null, size: document.getElementById('iq-size').value || null,
+      quoted_price: p, discounted_price: d, accepted: accepted
+    };
+    return fetch(SUPABASE_URL + '/rest/v1/quote_leads', {
+      method: 'POST',
+      headers: { apikey: ANON, Authorization: 'Bearer ' + ANON, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify(body)
+    }).catch(function(){ /* lead capture is best-effort */ });
+  }
+  // Event delegation on document — robust to the sc- runtime rendering the quote card
+  // after this script runs (direct addEventListener at load would miss late nodes).
+  var IQ_CUR = { p: null, d: null };
+  document.addEventListener('click', function(ev){
+    var t = ev.target;
+    var el = (t && t.id) ? t : (t && t.closest ? t.closest('#iq-go,#iq-accept,#iq-decline') : null);
+    if (!el || !el.id) return;
+    if (el.id !== 'iq-go' && el.id !== 'iq-accept' && el.id !== 'iq-decline') return;
+    var g = function(id){ return document.getElementById(id); };
+    var errEl = g('iq-error'), resEl = g('iq-result'), priceEl = g('iq-price'), actEl = g('iq-actions'), doneEl = g('iq-done');
+    if (!resEl) return;
+    function showErr(m){ errEl.textContent = m; errEl.style.display = m ? 'block' : 'none'; }
+
+    if (el.id === 'iq-go'){
+      showErr(''); doneEl.style.display = 'none';
+      var svc = g('iq-service').value, size = g('iq-size').value;
+      if (!svc){ showErr('Pick a service to see your price.'); return; }
+      if (svc === 'membership'){
+        var mp = (iqCfg().plans && iqCfg().plans.bronze && iqCfg().plans.bronze.price) || 79;
+        priceEl.innerHTML = '<div style="font-family:\'League Spartan\',sans-serif;font-weight:800;font-size:20px;color:#fff">Memberships from $' + mp + '/mo</div>' +
+          '<p style="color:#A9A4AF;font-size:13px;margin-top:6px">2 details every month, priority booking, and rewards. See the plans below.</p>' +
+          '<a href="#packages" style="display:inline-block;margin-top:12px;color:#A855F7;font-weight:700;text-decoration:underline">View membership plans &rarr;</a>';
+        actEl.style.display = 'none'; resEl.style.display = 'block'; return;
+      }
+      var p = iqPrice(svc, size); var d = Math.round(p * 0.9); IQ_CUR = { p: p, d: d };
+      priceEl.innerHTML =
+        '<div style="color:#A9A4AF;font-size:13px;text-transform:uppercase;letter-spacing:1px">' + IQ_SVC[svc] + ' · ' + IQ_SIZE[size] + '</div>' +
+        '<div style="margin-top:6px;display:flex;align-items:baseline;gap:10px">' +
+          '<span style="font-family:\'League Spartan\',sans-serif;font-weight:900;font-size:40px;color:#fff">$' + d + '</span>' +
+          '<span style="color:#A9A4AF;font-size:16px;text-decoration:line-through">$' + p + '</span>' +
+        '</div>' +
+        '<div style="color:#F5B942;font-weight:700;font-size:13px;margin-top:4px">10% off your first wash applied</div>';
+      actEl.style.display = 'flex'; resEl.style.display = 'block';
+      return;
+    }
+
+    if (el.id === 'iq-accept'){
+      var name = g('iq-name').value.trim(), phone = g('iq-phone').value.trim();
+      if (!name || !phone){ showErr('Add your name and phone so we can lock in your time.'); return; }
+      showErr(''); iqInsert(true, IQ_CUR.p, IQ_CUR.d);
+      resEl.style.display = 'none'; doneEl.style.display = 'block';
+      doneEl.innerHTML = '<div style="font-size:40px">🎉</div>' +
+        '<h3 style="font-family:\'League Spartan\',sans-serif;font-weight:800;font-size:22px;color:#fff;margin:6px 0 8px">You’re locked in!</h3>' +
+        '<p style="color:#A9A4AF;font-size:14px;line-height:1.6;max-width:340px;margin:0 auto">We’ll text you shortly to set your time. Want it done sooner? Finish booking in the <b style="color:#fff">BLD app</b> — your 10% first-wash price is saved.</p>';
+      return;
+    }
+
+    if (el.id === 'iq-decline'){
+      iqInsert(false, IQ_CUR.p, IQ_CUR.d);
+      resEl.style.display = 'none'; doneEl.style.display = 'block';
+      doneEl.innerHTML = '<h3 style="font-family:\'League Spartan\',sans-serif;font-weight:800;font-size:20px;color:#fff;margin:0 0 8px">No worries.</h3>' +
+        '<p style="color:#A9A4AF;font-size:14px;line-height:1.6;max-width:340px;margin:0 auto">Your <b style="color:#F5B942">10% off</b> the first wash still stands whenever you’re ready. Text us at (215) 555-0123.</p>';
+      return;
+    }
+  });
 })();
 </script>
 </body>
