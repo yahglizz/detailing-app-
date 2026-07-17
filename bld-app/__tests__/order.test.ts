@@ -26,3 +26,10 @@ test('SET_FIELD sets schedule fields; RESET restores initial', () => {
   expect(s.address).toBe('2841 S 12th St');
   expect(orderReducer(s, { type: 'RESET' })).toEqual(initialOrder);
 });
+
+test('anchor toggles and resets', () => {
+  let st = orderReducer(initialOrder, { type: 'SET_ANCHOR', anchor: true });
+  expect(st.anchor).toBe(true);
+  st = orderReducer(st, { type: 'RESET' });
+  expect(st.anchor).toBe(false);
+});

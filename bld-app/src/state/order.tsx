@@ -10,6 +10,7 @@ export interface OrderState {
   notes: string;
   remainderMethod: 'cash' | 'card';
   name: string;
+  anchor: boolean;
 }
 
 export type OrderAction =
@@ -18,6 +19,7 @@ export type OrderAction =
   | { type: 'SET_SERVICE'; index: number; service: Service }
   | { type: 'TOGGLE_EXTRA'; index: number; extra: Extra }
   | { type: 'SET_FIELD'; field: 'address' | 'preferredDay' | 'timeSlot' | 'window' | 'notes' | 'remainderMethod' | 'name'; value: string }
+  | { type: 'SET_ANCHOR'; anchor: boolean }
   | { type: 'RESET' };
 
 const newCar = (): CarItem => ({ size: 'sedan', service: 'full', extras: [] });
@@ -31,6 +33,7 @@ export const initialOrder: OrderState = {
   notes: '',
   remainderMethod: 'cash',
   name: '',
+  anchor: false,
 };
 
 export function orderReducer(state: OrderState, action: OrderAction): OrderState {
@@ -57,6 +60,8 @@ export function orderReducer(state: OrderState, action: OrderAction): OrderState
       };
     case 'SET_FIELD':
       return { ...state, [action.field]: action.value };
+    case 'SET_ANCHOR':
+      return { ...state, anchor: action.anchor };
     case 'RESET':
       return initialOrder;
   }

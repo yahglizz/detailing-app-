@@ -20,7 +20,7 @@ export type RootStackParamList = {
   Build: undefined;
   Schedule: undefined;
   Pay: undefined;
-  Booked: { bookingId: string };
+  Booked: { bookingId: string; escalated?: boolean; memberStampPreview?: boolean };
   MemberCode: undefined;
   MemberDashboard: undefined;
 };

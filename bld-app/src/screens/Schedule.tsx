@@ -6,6 +6,9 @@ import type { RootStackParamList } from '../../App';
 import PriceBar from '../components/PriceBar';
 import { supabase } from '../api';
 import { useOrder } from '../state/order';
+import { useMember } from '../state/member';
+import { useCatalog } from '../state/catalog';
+import { decideBump } from '../../../supabase/functions/_shared/bump';
 import { colors, fonts, radius, spacing } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Schedule'>;
@@ -16,6 +19,12 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 
 const toISO = (y: number, m: number, d: number) =>
   `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+
+const addDays = (iso: string, days: number) => {
+  const d = new Date(`${iso}T00:00:00`);
+  d.setDate(d.getDate() + days);
+  return toISO(d.getFullYear(), d.getMonth(), d.getDate());
+};
 
 function monthCells(year: number, month: number): (number | null)[] {
   const first = new Date(year, month, 1).getDay();
@@ -41,25 +50,34 @@ export default function Schedule({ navigation }: Props) {
 
   const today = useMemo(() => new Date(), []);
   const [view, setView] = useState({ year: today.getFullYear(), month: today.getMonth() });
-  const [taken, setTaken] = useState<Set<string>>(new Set());
+  const [slotStates, setSlotStates] = useState<Map<string, { rank: number; anchored: boolean }>>(new Map());
   const [loadingSlots, setLoadingSlots] = useState(false);
+  const { profile } = useMember();
+  const catalog = useCatalog() as unknown as { plans?: Record<string, { rank: number }> };
+  const myRank = profile ? catalog.plans?.[profile.member.tier]?.rank ?? 0 : 0;
 
   const cells = useMemo(() => monthCells(view.year, view.month), [view]);
   const todayISO = toISO(today.getFullYear(), today.getMonth(), today.getDate());
   const atCurrentMonth = view.year === today.getFullYear() && view.month === today.getMonth();
+  // Members can book 30 days out, everyone else 7 — matches the `book` edge function's window.
+  const maxISO = addDays(todayISO, profile ? 30 : 7);
 
-  // Availability: taken slots for the selected day. Backend down → everything stays open.
+  // Availability + priority: rank/anchored state per slot for the selected day. Backend down → everything stays open.
   useEffect(() => {
     if (!state.preferredDay) return;
     let alive = true;
     setLoadingSlots(true);
-    supabase.rpc('booked_slots', { day: state.preferredDay }).then(
+    supabase.rpc('slot_states', { day: state.preferredDay }).then(
       ({ data }) => {
         if (!alive) return;
-        setTaken(new Set(Array.isArray(data) ? (data as string[]) : []));
+        const map = new Map<string, { rank: number; anchored: boolean }>();
+        for (const r of (data ?? []) as { slot: string; rank: number; anchored: boolean }[]) {
+          map.set(r.slot, { rank: r.rank, anchored: r.anchored });
+        }
+        setSlotStates(map);
         setLoadingSlots(false);
       },
-      () => { if (alive) { setTaken(new Set()); setLoadingSlots(false); } },
+      () => { if (alive) { setSlotStates(new Map()); setLoadingSlots(false); } },
     );
     return () => { alive = false; };
   }, [state.preferredDay]);
@@ -74,6 +92,10 @@ export default function Schedule({ navigation }: Props) {
     // Backend still tracks morning/afternoon; derive it from the exact time.
     set('window')(Number(key.slice(0, 2)) < 12 ? 'morning' : 'afternoon');
   };
+
+  const selectedHolder = state.timeSlot ? slotStates.get(state.timeSlot) ?? null : null;
+  const selectedDecision = decideBump(myRank, selectedHolder);
+  const showBumpHint = !!selectedHolder && (selectedDecision === 'bump' || selectedDecision === 'escalate');
 
   const prevMonth = () => setView((v) => (v.month === 0 ? { year: v.year - 1, month: 11 } : { ...v, month: v.month - 1 }));
   const nextMonth = () => setView((v) => (v.month === 11 ? { year: v.year + 1, month: 0 } : { ...v, month: v.month + 1 }));
@@ -123,12 +145,14 @@ export default function Schedule({ navigation }: Props) {
               if (d === null) return <View key={i} style={s.cell} />;
               const iso = toISO(view.year, view.month, d);
               const past = iso <= todayISO; // bookings start tomorrow
+              const tooFar = iso > maxISO;
+              const disabled = past || tooFar;
               const on = state.preferredDay === iso;
               return (
-                <Pressable key={i} accessibilityRole="button" disabled={past}
+                <Pressable key={i} accessibilityRole="button" disabled={disabled}
                   onPress={() => pickDay(iso)}
-                  style={[s.cell, s.dayCell, on && s.dayOn, past && s.dayPast]}>
-                  <Text style={[s.dayNum, on && s.dayNumOn, past && s.dayNumPast]}>{d}</Text>
+                  style={[s.cell, s.dayCell, on && s.dayOn, disabled && s.dayPast]}>
+                  <Text style={[s.dayNum, on && s.dayNumOn, disabled && s.dayNumPast]}>{d}</Text>
                 </Pressable>
               );
             })}
@@ -139,20 +163,29 @@ export default function Schedule({ navigation }: Props) {
         {!state.preferredDay ? (
           <Text style={s.hint}>Choose a day first — open times show here.</Text>
         ) : (
-          <View style={s.slotGrid}>
-            {SLOTS.map((slot) => {
-              const isTaken = taken.has(slot.key);
-              const on = state.timeSlot === slot.key;
-              return (
-                <Pressable key={slot.key} accessibilityRole="button" disabled={isTaken}
-                  onPress={() => pickSlot(slot.key)}
-                  style={[s.slot, on && s.slotOn, isTaken && s.slotTaken]}>
-                  <Text style={[s.slotText, on && s.slotTextOn, isTaken && s.slotTextTaken]}>{slot.label}</Text>
-                  {isTaken && <Text style={s.takenTag}>TAKEN</Text>}
-                </Pressable>
-              );
-            })}
-          </View>
+          <>
+            <View style={s.slotGrid}>
+              {SLOTS.map((slot) => {
+                const holder = slotStates.get(slot.key) ?? null;
+                const decision = decideBump(myRank, holder);
+                const selectable = decision === 'open' || decision === 'bump' || decision === 'escalate';
+                const on = state.timeSlot === slot.key;
+                const bumpable = !!holder && selectable;
+                return (
+                  <Pressable key={slot.key} accessibilityRole="button" disabled={!selectable}
+                    onPress={() => pickSlot(slot.key)}
+                    style={[s.slot, on && s.slotOn, !selectable && s.slotTaken, bumpable && !on && s.slotBumpable]}>
+                    <Text style={[s.slotText, on && s.slotTextOn, !selectable && s.slotTextTaken]}>{slot.label}</Text>
+                    {!selectable && <Text style={s.takenTag}>{holder?.anchored ? 'LOCKED' : 'TAKEN'}</Text>}
+                    {bumpable && <Text style={s.vipTag}>VIP — TAKE IT</Text>}
+                  </Pressable>
+                );
+              })}
+            </View>
+            {showBumpHint && (
+              <Text style={s.hint}>VIP perk: booking this moves the current appointment to the next open time — they'll be notified.</Text>
+            )}
+          </>
         )}
 
         <Text style={s.label}>Notes (gate code, which car, etc.)</Text>
@@ -196,8 +229,10 @@ const s = StyleSheet.create({
   },
   slotOn: { borderColor: colors.primaryBright, backgroundColor: '#1a1030' },
   slotTaken: { opacity: 0.45, backgroundColor: '#17161a', borderColor: '#232127' },
+  slotBumpable: { borderColor: '#F5B942' },
   slotText: { color: colors.textSecondary, fontSize: 14 },
   slotTextOn: { color: colors.text, fontFamily: fonts.heading },
   slotTextTaken: { color: colors.textMuted, textDecorationLine: 'line-through' },
   takenTag: { color: colors.textMuted, fontSize: 9, letterSpacing: 1, marginTop: 2 },
+  vipTag: { color: '#F5B942', fontSize: 9, letterSpacing: 1, marginTop: 2 },
 });

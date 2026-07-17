@@ -4,12 +4,15 @@ import * as Calendar from 'expo-calendar';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../App';
 import { useOrder } from '../state/order';
+import { useMember } from '../state/member';
 import { colors, fonts, radius, spacing } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Booked'>;
 
-export default function Booked({ navigation }: Props) {
+export default function Booked({ navigation, route }: Props) {
   const { state, dispatch } = useOrder();
+  const { profile } = useMember();
+  const { escalated } = route.params;
 
   const addToCalendar = async () => {
     const { status } = await Calendar.requestCalendarPermissionsAsync();
@@ -39,6 +42,12 @@ export default function Booked({ navigation }: Props) {
       <Text style={s.title}>YOU'RE BOOKED</Text>
       <Text style={s.sub}>Deposit paid. We'll email you shortly to lock in your exact time for {state.preferredDay} ({state.window}).</Text>
       <Text style={s.addr}>{state.address}</Text>
+      {!!escalated && (
+        <Text style={s.note}>Two VIPs wanted this slot — we'll email your exact time today.</Text>
+      )}
+      {!!profile && (
+        <Text style={s.stamp}>✓ You'll earn a stamp when this wash is done.</Text>
+      )}
       <Pressable accessibilityRole="button" style={s.ghost} onPress={addToCalendar}>
         <Text style={s.ghostText}>ADD TO CALENDAR</Text>
       </Pressable>
@@ -55,6 +64,8 @@ const s = StyleSheet.create({
   title: { fontFamily: fonts.headingBlack, fontSize: 32, color: colors.text, marginTop: spacing(4) },
   sub: { color: colors.textSecondary, fontSize: 16, textAlign: 'center', marginTop: spacing(3), lineHeight: 23 },
   addr: { color: colors.textMuted, fontSize: 14, marginTop: spacing(2) },
+  note: { color: '#F5B942', fontSize: 14, textAlign: 'center', marginTop: spacing(3) },
+  stamp: { color: colors.success, fontSize: 14, textAlign: 'center', marginTop: spacing(2) },
   ghost: { marginTop: spacing(8), borderWidth: 1, borderColor: colors.border, borderRadius: radius.button, paddingVertical: spacing(3.5), paddingHorizontal: spacing(8), minHeight: 48, justifyContent: 'center' },
   ghostText: { color: colors.textSecondary, fontFamily: fonts.heading, fontSize: 14, letterSpacing: 1 },
   btn: { marginTop: spacing(3), backgroundColor: colors.primary, borderRadius: radius.button, paddingVertical: spacing(3.5), paddingHorizontal: spacing(12), minHeight: 48, justifyContent: 'center' },
