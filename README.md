@@ -40,8 +40,11 @@ with redeemable rewards, plan + upgrade, book-with-credit, and history.
   tiers **escalate** to the owner to resolve. Anchored slots are never bumped.
 - **$10 Slot Anchor:** a non-member checkout add-on that makes their time
   bump-proof (price in `catalog.config.anchorPrice`).
-- **Becoming a member:** the owner issues codes from a signed link — no self-serve
-  purchase yet (that's Round 3, when Stripe lands). Open
+- **Becoming a member (self-serve, Round 3):** customers buy a tier themselves via a
+  Stripe Payment Link (one per tier); a signed Stripe webhook auto-issues the code, first
+  credits, and welcome email. See [`docs/STRIPE-SELFSERVE.md`](docs/STRIPE-SELFSERVE.md) —
+  **one manual step (set the webhook signing secret) is required before it fulfills.**
+- **Owner-issued codes (still available):** the owner also issues codes from a signed link. Open
   `…/functions/v1/owner-members?token=<OWNER_ADMIN_TOKEN>` to add a member (name +
   email + tier → a code is generated and emailed), change tier, deactivate, grant
   stamps, and mark jobs done (which grants stamps). The token lives in the
@@ -55,9 +58,11 @@ Verified end-to-end against the live project by `scripts/e2e-member.mjs`.
 
 ## Status
 
-**Round 1 and Round 2 (memberships) are both built and verified end-to-end.**
-Round 3 — self-serve membership purchase and auto-renew billing — waits on the
-payment-processor decision.
+**Rounds 1, 2, and 3 are built and verified end-to-end.** Round 3 (self-serve Stripe
+membership purchase + webhook fulfillment) is live on the `client forge` Stripe account
+and needs one manual step to go — set the webhook signing secret
+([`docs/STRIPE-SELFSERVE.md`](docs/STRIPE-SELFSERVE.md)). Booking-deposit card capture
+still runs on the fake provider (separate migration).
 
 ## Before real customers
 

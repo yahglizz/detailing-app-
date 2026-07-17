@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { generateCode, type MemberCatalog, type Tier } from '../_shared/membership.ts';
+import { type MemberCatalog, type Tier } from '../_shared/membership.ts';
 import { sendEmail } from '../_shared/notify.ts';
+import { provisionMember } from '../_shared/member_provision.ts';
 
 const admin = () => createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
@@ -95,37 +96,13 @@ Deno.serve(async (req) => {
       const email = String(form.get('email') ?? '').trim().toLowerCase();
       const tier = String(form.get('tier') ?? 'bronze') as Tier;
       if (!name || !email) return page('<div class="card"><h1>Name and email required</h1></div>');
-      const { data: cat } = await db.from('catalog').select('config').eq('id', 1).single();
-      const cfg = cat!.config as MemberCatalog;
-      const plan = cfg.plans[tier];
-      if (!plan) return page('<div class="card"><h1>Unknown tier</h1></div>');
 
-      // Customer row keyed by email; create an auth-less placeholder id if new.
-      const { data: existing } = await db.from('customers').select('id').eq('email', email).single();
-      const customerId = existing?.id ?? crypto.randomUUID();
-      if (!existing) await db.from('customers').insert({ id: customerId, email, name });
-
-      let code = generateCode();
-      for (let i = 0; i < 5; i++) {
-        const { error } = await db.from('memberships').insert({
-          customer_id: customerId, plan: tier, tier, code,
-          credits_per_period: plan.credits, period_start: new Date().toISOString().slice(0, 10),
-        });
-        if (!error) break;
-        code = generateCode(); // unique collision retry
-        if (i === 4) return page('<div class="card"><h1>Could not create — try again</h1></div>');
-      }
-      const { data: m } = await db.from('memberships').select('id').eq('code', code).single();
-      await db.from('credit_ledger').insert({ membership_id: m!.id, delta: plan.credits, reason: 'initial grant' });
-      await sendEmail(email, 'Welcome to the Brotherhood — your member code inside',
-        `<h2 style="color:#A855F7;margin:0 0 12px">Welcome, ${esc(name)}!</h2>
-         <p>Your <b>${tier.toUpperCase()}</b> membership is live: ${plan.credits} ${plan.service} details every month, priority booking, and rewards on every wash.</p>
-         <p>Your member code:</p>
-         <p style="font-family:monospace;font-size:28px;color:#F5B942;letter-spacing:3px">${code}</p>
-         <p style="color:#A9A4AF">Open the BLD app → "I'm a member" → enter this code once.</p>`);
+      // Same provisioning path the Stripe webhook uses (owner-issued = no stripe ids).
+      const res = await provisionMember(db, { email, name, tier });
+      if (!res.ok) return page(`<div class="card"><h1>Could not create — ${esc(res.error)}</h1></div>`);
       return page(`<div class="card"><h1>Member created ✓</h1>
-        <p>${esc(name)} · ${tier.toUpperCase()} · ${plan.credits} credits granted · welcome email sent.</p>
-        <p class="muted">Their code (also emailed):</p><div class="code">${code}</div>
+        <p>${esc(name)} · ${tier.toUpperCase()} · ${res.credits} credits granted · welcome email sent.</p>
+        <p class="muted">Their code (also emailed):</p><div class="code">${res.code}</div>
         <form method="GET"><input type="hidden" name="token" value="${token}"><button class="ghost">← Back</button></form></div>`);
     }
 
