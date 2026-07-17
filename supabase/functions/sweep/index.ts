@@ -43,27 +43,46 @@ Deno.serve(async () => {
   }
 
   // ——— monthly membership credit grants ———
+  // Grant credits_per_period for every WHOLE month elapsed since period_start,
+  // keeping the original day-of-month as the billing anchor (clamped when the
+  // target month is shorter — e.g. a Jan-31 anchor grants on Feb-28, not Mar-3).
+  // Idempotent: the ledger row is keyed by the new period date, so a failed
+  // period_start update just makes the next hourly run skip (no double-grant),
+  // and a failed insert leaves period_start put (retried next run, no skip).
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const today = new Date();
+  const todayY = today.getUTCFullYear(), todayM = today.getUTCMonth(), todayD = today.getUTCDate();
   let granted = 0;
-  const todayISO = new Date().toISOString().slice(0, 10);
   const { data: members } = await db.from('memberships')
     .select('id, credits_per_period, period_start').eq('active', true);
   for (const m of members ?? []) {
-    let start = new Date(String(m.period_start) + 'T00:00:00Z');
-    let advanced = false;
-    while (true) {
-      const next = new Date(start);
-      next.setUTCMonth(next.getUTCMonth() + 1);
-      if (next.toISOString().slice(0, 10) > todayISO) break;
-      await db.from('credit_ledger').insert({
-        membership_id: m.id, delta: m.credits_per_period, reason: `monthly grant ${next.toISOString().slice(0, 10)}`,
-      });
-      start = next;
-      advanced = true;
-      granted++;
+    const start = new Date(String(m.period_start) + 'T00:00:00Z');
+    const anchorDay = start.getUTCDate();
+    let elapsed = (todayY - start.getUTCFullYear()) * 12 + (todayM - start.getUTCMonth());
+    if (todayD < anchorDay) elapsed--; // current month not yet complete
+    if (elapsed <= 0) continue;
+
+    const mi = start.getUTCMonth() + elapsed;
+    const ny = start.getUTCFullYear() + Math.floor(mi / 12);
+    const nm = ((mi % 12) + 12) % 12;
+    const daysInMonth = new Date(Date.UTC(ny, nm + 1, 0)).getUTCDate();
+    const newStart = `${ny}-${pad(nm + 1)}-${pad(Math.min(anchorDay, daysInMonth))}`;
+    const reason = `monthly grant→${newStart}`;
+
+    // Skip if this period was already granted (a prior run inserted but its
+    // period_start update failed) — makes the whole grant idempotent.
+    const { data: dup } = await db.from('credit_ledger')
+      .select('id').eq('membership_id', m.id).eq('reason', reason).limit(1);
+    if (dup && dup.length > 0) {
+      await db.from('memberships').update({ period_start: newStart }).eq('id', m.id);
+      continue;
     }
-    if (advanced) {
-      await db.from('memberships').update({ period_start: start.toISOString().slice(0, 10) }).eq('id', m.id);
-    }
+    const { error: insErr } = await db.from('credit_ledger').insert({
+      membership_id: m.id, delta: m.credits_per_period * elapsed, reason,
+    });
+    if (insErr) continue; // leave period_start; retry next run
+    await db.from('memberships').update({ period_start: newStart }).eq('id', m.id);
+    granted += elapsed;
   }
   return Response.json({ reminded, refunded, granted });
 });
