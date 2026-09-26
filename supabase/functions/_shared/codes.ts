@@ -29,13 +29,22 @@ export interface Account {
   isTest: boolean; // an owner test account (tier switcher)
 }
 
-export async function resolveCode(db: Db, raw: unknown, ip: string): Promise<Account | 'invalid_code' | 'rate_limited'> {
+// Shared with the staff dashboard's code check: one budget of wrong guesses per IP.
+export async function rateLimited(db: Db, ip: string): Promise<boolean> {
   const since = new Date(Date.now() - WINDOW_MS).toISOString();
   const [mine, all] = await Promise.all([
     db.from('code_attempts').select('id', { count: 'exact', head: true }).eq('ip', ip).gte('created_at', since),
     db.from('code_attempts').select('id', { count: 'exact', head: true }).gte('created_at', since),
   ]);
-  if ((mine.count ?? 0) >= PER_IP || (all.count ?? 0) >= ALL_IPS) return 'rate_limited';
+  return (mine.count ?? 0) >= PER_IP || (all.count ?? 0) >= ALL_IPS;
+}
+
+export async function recordMiss(db: Db, ip: string): Promise<void> {
+  await db.from('code_attempts').insert({ ip });
+}
+
+export async function resolveCode(db: Db, raw: unknown, ip: string): Promise<Account | 'invalid_code' | 'rate_limited'> {
+  if (await rateLimited(db, ip)) return 'rate_limited';
 
   const code = String(raw ?? '').trim().toUpperCase();
   let customerId: string | null = null;
@@ -52,7 +61,7 @@ export async function resolveCode(db: Db, raw: unknown, ip: string): Promise<Acc
     }
   }
   if (!customerId) {
-    await db.from('code_attempts').insert({ ip });
+    await recordMiss(db, ip);
     return 'invalid_code';
   }
 

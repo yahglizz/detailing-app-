@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // End-to-end acceptance proof for BLD member mode + prepaid balance, run against the
-// LIVE Supabase project. Exercises: member creation via the owner page, credit-covered
+// LIVE Supabase project. Exercises: member creation via the owner dashboard API, credit-covered
 // bookings, member prices, balance-paid bookings, rank-based bumping, slot anchors,
 // booking-window enforcement, stamps per car, reward redemption, equal-rank
 // escalation, and the credit / reward / balance give-back on decline.
@@ -103,56 +103,27 @@ async function memberCall(payload) {
   });
 }
 
-async function ownerMembersPost(params) {
-  const url = `${SUPABASE_URL}/functions/v1/owner-members?token=${OWNER_ADMIN_TOKEN}`;
-  const form = new URLSearchParams(params);
-  const res = await fetch(url, {
+// The owner dashboard's API, signed in with the owner master key.
+async function admin(action, payload = {}) {
+  return jsonFetch(`${SUPABASE_URL}/functions/v1/admin`, {
     method: 'POST',
-    headers: { apikey: ANON, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: form.toString(),
+    headers: { apikey: ANON, 'x-staff-code': OWNER_ADMIN_TOKEN, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, ...payload }),
   });
-  return { status: res.status, text: await res.text() };
-}
-
-async function ownerMembersGet() {
-  const url = `${SUPABASE_URL}/functions/v1/owner-members?token=${OWNER_ADMIN_TOKEN}`;
-  const res = await fetch(url, { headers: { apikey: ANON } });
-  return { status: res.status, text: await res.text() };
 }
 
 async function ownerAddMember(name, email, tier) {
-  const { status, text } = await ownerMembersPost({ action: 'add', name, email, tier });
-  if (status !== 200) throw new Error(`ownerAddMember(${email}) http ${status}: ${text.slice(0, 300)}`);
-  const m = text.match(/BLD-[A-Z2-9]{6}/);
-  if (!m) throw new Error(`ownerAddMember(${email}) no code found in response: ${text.slice(0, 500)}`);
-  return m[0];
-}
-
-function extractMembershipId(html, code) {
-  const cards = html.split('<div class="card">');
-  for (const card of cards) {
-    if (card.includes(code)) {
-      const m = card.match(/name="id" value="([^"]+)"/);
-      if (m) return m[1];
-    }
+  const { status, body } = await admin('member_add', { name, email, tier });
+  if (status !== 200 || !/^BLD-[A-Z2-9]{6}$/.test(body.code ?? '')) {
+    throw new Error(`ownerAddMember(${email}) http ${status}: ${JSON.stringify(body).slice(0, 300)}`);
   }
-  return null;
+  return body.code;
 }
 
-async function bookingToken(bookingId) {
-  const body = await setup('booking-token', { bookingId });
-  if (!body.confirmToken) throw new Error(`bookingToken(${bookingId}) returned no confirm_token: ${JSON.stringify(body)}`);
-  return body.confirmToken;
-}
-
-async function confirmDecline(confirmToken) {
-  const form = new URLSearchParams({ token: confirmToken, action: 'decline' });
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/confirm`, {
-    method: 'POST',
-    headers: { apikey: ANON, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: form.toString(),
-  });
-  return { status: res.status, text: await res.text() };
+async function membershipIdFor(code) {
+  const { status, body } = await admin('members');
+  if (status !== 200) throw new Error(`members http ${status}: ${JSON.stringify(body).slice(0, 300)}`);
+  return body.find((m) => m.code === code)?.id ?? null;
 }
 
 async function slotStates(day) {
@@ -272,12 +243,12 @@ async function main() {
 
   // Step 9: owner marks the gold booking done -> Gold earns 3 stamps per car.
   {
-    const { status, text } = await ownerMembersPost({ action: 'done', id: goldBookingId });
-    assert(status === 200, `owner done http ${status}: ${text.slice(0, 300)}`);
+    const { status, body } = await admin('done', { id: goldBookingId });
+    assert(status === 200, `owner done http ${status}: ${JSON.stringify(body).slice(0, 300)}`);
     const p = await profile(code1);
     assert(p.stamps === 3, `expected 3 stamps (Gold, 1 car), got ${p.stamps}`);
-    const again = await ownerMembersPost({ action: 'done', id: goldBookingId });
-    assert(again.status === 200 && (await profile(code1)).stamps === 3, 'a second done must not grant stamps again');
+    const again = await admin('done', { id: goldBookingId });
+    assert(again.status === 409 && (await profile(code1)).stamps === 3, 'a second done must not grant stamps again');
     pass('9. done granted 3 stamps (Gold x1 car); a repeat done granted none');
   }
 
@@ -330,8 +301,8 @@ async function main() {
     const { status, body } = await book({ preferredDay: DR, timeSlot: '09:00', code: codeR });
     assert(status === 200 && body.creditsUsed === 1 && body.payable === 0, `credit wash: ${status} ${JSON.stringify(body)}`);
     assert((await profile(codeR)).credits === 1, 'expected credits 1 after the credit wash');
-    const { status: ds } = await confirmDecline(await bookingToken(body.bookingId));
-    assert(ds === 200, `decline http ${ds}`);
+    const { status: ds, body: db1 } = await admin('decline', { id: body.bookingId });
+    assert(ds === 200, `decline http ${ds}: ${JSON.stringify(db1)}`);
     assert((await profile(codeR)).credits === 2, 'expected the credit back after decline');
     pass('15a. credit wash declined -> credits back to 2');
 
@@ -340,11 +311,10 @@ async function main() {
       const w = await book({ preferredDay: DR, timeSlot: slot, code: codeR });
       assert(w.status === 200 && w.body.creditsUsed === 1, `exhaust wash ${slot}: ${w.status} ${JSON.stringify(w.body)}`);
     }
-    const { text: html } = await ownerMembersGet();
-    const membershipIdR = extractMembershipId(html, codeR);
-    assert(membershipIdR, `could not scrape membershipId for ${codeR}`);
+    const membershipIdR = await membershipIdFor(codeR);
+    assert(membershipIdR, `could not find membershipId for ${codeR}`);
     const cost = (await profile(codeR)).rewardMenu.find((r) => r.key === 'tireShine').cost;
-    for (let i = 0; i < cost; i++) await ownerMembersPost({ action: 'stamp', id: membershipIdR });
+    for (let i = 0; i < cost; i++) await admin('member_stamp', { id: membershipIdR });
     const redeem = await memberCall({ code: codeR, action: 'redeem', reward: 'tireShine' });
     assert(redeem.status === 200 && redeem.body.ok, `redeem failed: ${redeem.status} ${JSON.stringify(redeem.body)}`);
     await walletCredit(emails.refund, 200);
@@ -362,8 +332,8 @@ async function main() {
     pass('15c. Gold price $96 (saved $24) paid from balance; reward attached');
 
     // 15d: decline -> reward re-issued and the $96 back on the balance.
-    const { status: ds2 } = await confirmDecline(await bookingToken(paid.body.bookingId));
-    assert(ds2 === 200, `decline http ${ds2}`);
+    const { status: ds2, body: db2 } = await admin('decline', { id: paid.body.bookingId });
+    assert(ds2 === 200, `decline http ${ds2}: ${JSON.stringify(db2)}`);
     const after = await profile(codeR);
     assert(after.issuedRewards.length === 1, `expected the reward back, got ${after.issuedRewards.length}`);
     assert(after.wallet === 200, `expected the balance back to 200, got ${after.wallet}`);

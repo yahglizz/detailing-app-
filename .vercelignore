@@ -1,0 +1,11 @@
+# Only the static website (/) and the owner dashboard (/admin) deploy.
+bld-app
+supabase
+docs
+scripts
+uploads
+.claude
+.claude-flow
+**/.claude-flow
+node_modules
+README.md

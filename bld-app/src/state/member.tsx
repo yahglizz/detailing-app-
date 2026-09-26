@@ -17,6 +17,7 @@ export interface MemberProfile {
   };
   wallet: number; // prepaid balance, whole dollars
   isTest: boolean; // owner test account: shows the tier switcher
+  hasBilling?: boolean; // pays through Stripe: plan changes happen in Stripe's Billing Portal
   credits: number;
   stamps: number;
   savings: number;
@@ -36,6 +37,7 @@ interface MemberCtx {
   leave(): void;
   redeem(reward: string): Promise<string | null>;
   requestUpgrade(): Promise<void>;
+  billingUrl(returnUrl: string): Promise<{ url?: string; error?: string }>; // Stripe Billing Portal
   saveSettings(patch: MemberSettings): Promise<string | null>; // returns error or null
   testTier(tier: Tier | 'none'): Promise<string | null>; // test accounts only
   testBalance(): Promise<string | null>; // test accounts only: +$50
@@ -99,6 +101,12 @@ export function MemberProvider({ children }: { children: React.ReactNode }) {
       return error;
     },
     requestUpgrade: async () => { if (code) await callMember({ code, action: 'upgrade' }); },
+    billingUrl: async (returnUrl) => {
+      if (!code) return { error: 'no_code' };
+      const { data, error } = await callMember({ code, action: 'billing', returnUrl });
+      const url = (data as { url?: string } | null)?.url;
+      return url ? { url } : { error: error ?? 'network' };
+    },
     saveSettings: async (patch) => {
       if (!code) return 'no_code';
       const { data, error } = await callMember({ code, action: 'save_settings', settings: patch });

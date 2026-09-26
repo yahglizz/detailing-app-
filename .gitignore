@@ -3,3 +3,4 @@ bld-app/.expo/
 bld-app/.env
 supabase/.temp/
 .superpowers/
+.vercel

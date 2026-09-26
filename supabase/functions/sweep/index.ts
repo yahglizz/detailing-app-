@@ -1,6 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getProvider } from '../_shared/payments/provider.ts';
-import { sendEmail, ownerEmail, functionsBaseUrl, button } from '../_shared/notify.ts';
+import { sendEmail, ownerEmail, adminLink, button } from '../_shared/notify.ts';
 import { restoreMemberBalances } from '../_shared/member_refund.ts';
 import { refundBooking, settleBooking } from '../_shared/booking_payment.ts';
 import { settleTopup } from '../_shared/wallet.ts';
@@ -42,7 +42,7 @@ Deno.serve(async () => {
   await db.from('code_attempts').delete().lt('created_at', dayAgo);
 
   const { data: stale } = await db.from('bookings')
-    .select('id, confirm_token, created_at, quote, reminder_sent_at, membership_id, customers(email)')
+    .select('id, created_at, quote, reminder_sent_at, membership_id, customers(email)')
     .eq('status', 'requested').lt('created_at', dayAgo);
 
   for (const b of stale ?? []) {
@@ -68,7 +68,7 @@ Deno.serve(async () => {
       await sendEmail(ownerEmail(), 'Unanswered detail request — auto-refund in 24h',
         `<h2 style="color:#A855F7;margin:0 0 12px">Still waiting on you</h2>
          <p>A detail request from yesterday hasn't been answered. It auto-refunds at 48 hours.</p>
-         ${button(`${functionsBaseUrl()}/confirm?token=${b.confirm_token}`, 'Handle it now →')}`);
+         ${button(adminLink(b.id), 'Handle it now →')}`);
       await db.from('bookings').update({ reminder_sent_at: new Date().toISOString() }).eq('id', b.id);
       reminded++;
     }

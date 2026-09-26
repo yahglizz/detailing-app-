@@ -36,6 +36,15 @@ export function functionsBaseUrl(): string {
   return Deno.env.get('PUBLIC_FUNCTIONS_URL') ?? `${Deno.env.get('SUPABASE_URL')}/functions/v1`;
 }
 
+// The owner dashboard (static site on Vercel). Emails deep-link a booking into it.
+export function adminUrl(): string {
+  return Deno.env.get('ADMIN_URL') ?? 'https://brotherly-love-detailing.vercel.app/admin';
+}
+
+export function adminLink(bookingId: string): string {
+  return `${adminUrl()}#/bookings/${bookingId}`;
+}
+
 export function button(href: string, label: string): string {
   return `<a href="${href}" style="display:inline-block;background:linear-gradient(135deg,#7028C9,#A855F7);color:#fff;text-decoration:none;font-weight:700;padding:14px 24px;border-radius:12px;margin-top:16px">${label}</a>`;
 }

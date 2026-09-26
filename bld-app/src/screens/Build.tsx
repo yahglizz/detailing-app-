@@ -97,6 +97,24 @@ export default function Build({ navigation }: Props) {
   const selectedHolder = state.timeSlot ? slotStates.get(state.timeSlot) ?? null : null;
   const selectedDecision = decideBump(myRank, selectedHolder);
 
+  // Days the owner closed or that are fully booked (the dashboard's calendar). If this
+  // can't load, nothing greys out and `book` still refuses those days.
+  const [unavailable, setUnavailable] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    let alive = true;
+    const from = toISO(new Date(view.year, view.month, 1));
+    const to = toISO(new Date(view.year, view.month + 1, 0));
+    supabase.rpc('day_states', { from_day: from, to_day: to }).then(
+      ({ data }) => {
+        if (!alive) return;
+        const rows = (data ?? []) as { day: string; capacity: number; booked: number; closed: boolean }[];
+        setUnavailable(new Set(rows.filter((d) => d.closed || d.booked >= d.capacity).map((d) => d.day)));
+      },
+      () => {},
+    );
+    return () => { alive = false; };
+  }, [view]);
+
   useEffect(() => { setServerQuote(null); }, [state.items, catalog]);
   useEffect(() => {
     if (!state.preferredDay) return;
@@ -158,6 +176,10 @@ export default function Build({ navigation }: Props) {
     const body = ctx && typeof ctx.json === 'function' ? await ctx.json().catch(() => ({})) : {};
     if (body.error === 'price_changed' && body.quote) { setServerQuote(body.quote); return `Prices were updated — new total is $${body.quote.total}. Tap again to accept.`; }
     if (body.error === 'slot_taken') { set('timeSlot')(''); return 'That time just got booked. Pick another slot below.'; }
+    if (body.error === 'day_closed' || body.error === 'day_full') {
+      set('preferredDay')(''); set('timeSlot')('');
+      return body.error === 'day_closed' ? 'We’re closed that day. Pick another day above.' : 'That day just filled up. Pick another day above.';
+    }
     if (body.error === 'too_far_out') return 'Pick a closer day — members can book 30 days out, everyone else 7.';
     if (body.error === 'invalid_code') return 'Your code stopped working — log in again.';
     if (body.error === 'rate_limited') return 'Too many tries. Wait 15 minutes and try again.';
@@ -276,7 +298,7 @@ export default function Build({ navigation }: Props) {
           <View style={s.calendarGrid}>{cells.map((day, index) => {
             if (day === null) return <View key={index} style={s.dayWrap} />;
             const iso = `${view.year}-${String(view.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-            const disabled = iso <= todayISO || iso > maxISO;
+            const disabled = iso <= todayISO || iso > maxISO || unavailable.has(iso);
             const selected = state.preferredDay === iso;
             return <View key={index} style={s.dayWrap}><Pressable accessibilityRole="button" accessibilityLabel={`${MONTHS[view.month]} ${day}`} accessibilityState={{ selected, disabled }} disabled={disabled} onPress={() => pickDay(iso)} style={[s.dayTile, selected && s.daySelected, disabled && s.dayDisabled]}><Text style={[s.dayText, selected && u.chipTextOn]}>{day}</Text></Pressable></View>;
           })}</View>

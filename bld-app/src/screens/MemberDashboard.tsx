@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Alert, ImageBackground, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -64,6 +66,17 @@ export default function MemberDashboard({ navigation }: Props) {
         if (err) Alert.alert('Not yet', err === 'not_enough_stamps' ? 'Not enough stamps yet — keep washing!' : 'Network problem, try again.');
       } },
     ]);
+  };
+  // Stripe members change plan (or card) themselves; the webhook updates their tier.
+  const manageBilling = async () => {
+    const returnUrl = Linking.createURL('member');
+    const { url, error } = await m.billingUrl(returnUrl);
+    if (!url) {
+      Alert.alert('Not available right now', error === 'payments_not_configured' ? 'Online billing isn’t set up yet.' : 'Network problem, try again.');
+      return;
+    }
+    await WebBrowser.openAuthSessionAsync(url, returnUrl);
+    await m.refresh();
   };
   const upgrade = () => {
     Alert.alert('Request an upgrade?', 'We’ll reach out to set it up.', [
@@ -181,8 +194,9 @@ export default function MemberDashboard({ navigation }: Props) {
               nextPlan.topupBonusPercent ? `+${nextPlan.topupBonusPercent}% top-ups` : '',
               nextPlan.stampsPerCar ? `${nextPlan.stampsPerCar} stamps per car` : '',
             ].filter(Boolean).join(' · ') || `${nextPlan.credits} ${nextPlan.service} details a month`}</Text>}
-            <Pressable accessibilityRole="button" onPress={upgrade} style={s.upgrade}><Text style={s.upgradeText}>REQUEST {next.toUpperCase()} UPGRADE</Text></Pressable>
+            <Pressable accessibilityRole="button" onPress={p.hasBilling ? manageBilling : upgrade} style={s.upgrade}><Text style={s.upgradeText}>{p.hasBilling ? 'UPGRADE' : 'REQUEST'} {next.toUpperCase()} {p.hasBilling ? 'NOW' : 'UPGRADE'}</Text></Pressable>
           </> : <Text style={s.topTier}>YOU'RE AT THE TOP OF THE BROTHERHOOD</Text>}
+          {p.hasBilling && <Pressable accessibilityRole="button" onPress={manageBilling} style={s.manage}><Text style={s.manageText}>Manage plan & card</Text></Pressable>}
         </> : joinLinks(catalog) && (
           <JoinTiers mode={mode} num={num()} title="JOIN THE BROTHERHOOD" heading="YOUR OWN PRICE ON EVERY DETAIL."
             hint="Details every month, a member price on everything else, and bonus money on every top-up. The higher the tier, the better it gets." />
@@ -247,6 +261,8 @@ const make = (t: Theme) => StyleSheet.create({
   nextPerks: { color: t.muted, fontSize: 12, textAlign: 'center', marginTop: 14 },
   upgrade: { minHeight: 52, borderRadius: 16, borderWidth: 1.5, borderColor: t.primary, alignItems: 'center', justifyContent: 'center', marginTop: 10 },
   upgradeText: { color: t.accent, fontFamily: fonts.heading, fontSize: 14, letterSpacing: 0.4 },
+  manage: { minHeight: 44, alignItems: 'center', justifyContent: 'center', marginTop: 6 },
+  manageText: { color: t.muted, fontSize: 14, textDecorationLine: 'underline' },
   topTier: { color: t.muted, fontFamily: fonts.heading, fontSize: 12, letterSpacing: 1, textAlign: 'center', marginTop: 14 },
   history: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12 },
   historyRule: { borderTopWidth: 1, borderTopColor: t.line },

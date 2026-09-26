@@ -89,6 +89,16 @@ Deno.serve(async (req) => {
     return Response.json({ error: 'too_far_out', maxDays: membership ? MEMBER_WINDOW_DAYS : PUBLIC_WINDOW_DAYS }, { status: 400 });
   }
 
+  // ——— day: open and not full on the owner's calendar (day_states is what the app
+  // greys out with). pending_payment bookings count, so a day being paid for is held.
+  // ponytail: two people racing for a day's last opening can both get in; the owner sees
+  // both in the dashboard and moves one. Lock the day row if that ever happens. ———
+  const { data: dayRows, error: dayErr } = await admin.rpc('day_states', { from_day: body.preferredDay, to_day: body.preferredDay });
+  if (dayErr) return Response.json({ error: 'server_error' }, { status: 500 });
+  const dayState = dayRows?.[0] as { capacity: number; booked: number; closed: boolean } | undefined;
+  if (dayState?.closed) return Response.json({ error: 'day_closed' }, { status: 409 });
+  if (dayState && dayState.booked >= dayState.capacity) return Response.json({ error: 'day_full' }, { status: 409 });
+
   // ——— slot: refuse a taken slot now, before any money. Bumps and equal-tier
   // conflicts are acted on once paid (fulfillBooking decides again then). ———
   if (body.timeSlot) {

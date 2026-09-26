@@ -410,6 +410,7 @@
                 <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Service</label><select value="{{ service }}" onChange="{{ onService }}" style="width:100%;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none" style-focus="border-color:#A855F7"><option>Express Shine</option><option>Signature Detail</option><option>Ministry Full Detail</option><option>Ceramic Coating</option><option>Membership</option><option>Not sure — help me choose</option></select></div>
               </div>
               <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Details</label><textarea value="{{ message }}" onInput="{{ onMessage }}" placeholder="Vehicle condition, location, and what you need." rows="3" style="width:100%;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none;resize:vertical" style-focus="border-color:#A855F7"></textarea></div>
+              <div style="color:#F97066;font-size:13px;font-weight:600;min-height:0">{{ quoteErr }}</div>
               <button onClick="{{ submit }}" style="cursor:pointer;border:none;background:linear-gradient(135deg,#7028C9,#A855F7);color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:15px;padding:16px;border-radius:12px;box-shadow:0 10px 28px rgba(112,40,201,.5)">Request My Free Quote</button>
             </div>
           </div>
@@ -455,7 +456,36 @@ class Component extends DCLogic {
       features:['Everything in Signature','Clay bar & paint decontamination','Machine polish & gloss','Ceramic spray coating','Engine bay detail','Headlight restoration'],
       badgeBg:'linear-gradient(135deg,#6d28d9,#A855F7)' },
   ];
-  state = { name:'', phone:'', email:'', vehicle:'', service:'Express Wash', message:'', submitted:false, isMember:false, disp:[45,120,220], modalOpen:false };
+  state = { name:'', phone:'', email:'', vehicle:'', service:'Express Wash', message:'', submitted:false, quoteErr:'', isMember:false, disp:[45,120,220], modalOpen:false };
+  // Live prices from the catalog (the owner's dashboard): Express = Outside, Signature =
+  // Full, Ministry = its package price; member price = the best tier's discount.
+  componentDidMount(){
+    this._onCfg = () => this.applyCfg(window.__BLD_CFG);
+    window.addEventListener('bld:cfg', this._onCfg);
+    if (window.__BLD_CFG) this._onCfg();
+  }
+  applyCfg(c){
+    if (!c || !c.services) return;
+    const one = [c.services.outside, c.services.full, c.packages && c.packages.ministry];
+    if (one.some(v => typeof v !== 'number')) return;
+    const off = (c.plans && c.plans.gold && c.plans.gold.discountPercent) || 0;
+    this.oneTime = one;
+    this.member = one.map(v => Math.round(v * (1 - off / 100)));
+    this.animateTo(this.state.isMember ? this.member : this.oneTime);
+  }
+  // The quote request lands in the dashboard's Leads (same table as the instant quote).
+  sendQuote(){
+    const s = this.state;
+    if (!s.name.trim() || (!s.phone.trim() && !s.email.trim())) {
+      this.setState({ quoteErr:'Add your name and a phone or email so we can reach you.' });
+      return;
+    }
+    if (window.__BLD_LEAD) window.__BLD_LEAD({
+      name:s.name.trim(), phone:s.phone.trim() || null, email:s.email.trim() || null,
+      vehicle:s.vehicle.trim() || null, service:s.service || null, message:s.message.trim() || null, accepted:false,
+    });
+    this.setState({ submitted:true, quoteErr:'' });
+  }
   animateTo(targets){
     const start = this.state.disp.slice();
     const t0 = performance.now(), dur = 650;
@@ -473,7 +503,7 @@ class Component extends DCLogic {
     this.setState({ isMember:m });
     this.animateTo(m ? this.member : this.oneTime);
   }
-  componentWillUnmount(){ cancelAnimationFrame(this._raf); }
+  componentWillUnmount(){ cancelAnimationFrame(this._raf); window.removeEventListener('bld:cfg', this._onCfg); }
   renderVals() {
     const s = this.state;
     const set = k => e => this.setState({ [k]: e.target.value });
@@ -519,8 +549,9 @@ class Component extends DCLogic {
       nameSuffix: s.name ? (', ' + s.name.trim().split(' ')[0]) : '',
       onName:set('name'), onPhone:set('phone'), onEmail:set('email'),
       onVehicle:set('vehicle'), onService:set('service'), onMessage:set('message'),
-      submit: () => this.setState({ submitted:true }),
-      reset: () => this.setState({ name:'', phone:'', email:'', vehicle:'', service:'Express Wash', message:'', submitted:false }),
+      quoteErr: s.quoteErr,
+      submit: () => this.sendQuote(),
+      reset: () => this.setState({ name:'', phone:'', email:'', vehicle:'', service:'Express Wash', message:'', submitted:false, quoteErr:'' }),
       plans,
       isMember: s.isMember,
       toggle: () => this.toggleBilling(),
@@ -547,6 +578,8 @@ class Component extends DCLogic {
       var cfg = rows && rows[0] && rows[0].config;
       if (!cfg) return;
       window.__BLD_CFG = cfg;
+      window.dispatchEvent(new Event('bld:cfg'));
+      bldSyncPromo();
       var set = function (id, v) { var el = document.getElementById(id); if (el && v != null) el.textContent = '$' + v; };
       if (cfg.services) {
         set('bld-price-outside', cfg.services.outside);
@@ -569,7 +602,28 @@ class Component extends DCLogic {
     })
     .catch(function () { /* static fallbacks already rendered */ });
 
-  // --- Instant quote (live catalog prices, 10% off first wash, lead capture) ---
+  // Any lead from the page (quote modal or instant quote) → quote_leads → dashboard Leads.
+  window.__BLD_LEAD = function (body) {
+    return fetch(SUPABASE_URL + '/rest/v1/quote_leads', {
+      method: 'POST',
+      headers: { apikey: ANON, Authorization: 'Bearer ' + ANON, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify(body)
+    }).catch(function(){ /* lead capture is best-effort */ });
+  };
+
+  // First-wash discount, set by the owner in the dashboard (default 10).
+  function bldOff(){ var c = window.__BLD_CFG; var v = c && c.firstWashDiscountPercent; return typeof v === 'number' ? v : 10; }
+  // ponytail: the promo copy in the page says "10%"; once the catalog loads, every "10%"
+  // text node becomes the live number. Fine while "10%" only ever means this promo.
+  function bldSyncPromo(){
+    var off = bldOff(); if (off === 10) return;
+    var w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (var n = w.nextNode(); n; n = w.nextNode()) {
+      if (n.nodeValue.indexOf('10%') !== -1) n.nodeValue = n.nodeValue.split('10%').join(off + '%');
+    }
+  }
+
+  // --- Instant quote (live catalog prices, first-wash discount, lead capture) ---
   var IQ_FB = { services:{outside:45,inside:60,full:120}, extras:{ceramic:199}, sizeMultipliers:{sedan:1,suv:1.25,truck:1.5}, plans:{bronze:{price:79}} };
   function iqCfg(){ return window.__BLD_CFG || IQ_FB; }
   var IQ_SVC = { outside:'Exterior Wash & Wax', inside:'Interior Detail', full:'Full Detail', ceramic:'Ceramic Coating', membership:'Membership' };
@@ -593,11 +647,7 @@ class Component extends DCLogic {
       service: svc || null, size: document.getElementById('iq-size').value || null,
       quoted_price: p, discounted_price: d, accepted: accepted
     };
-    return fetch(SUPABASE_URL + '/rest/v1/quote_leads', {
-      method: 'POST',
-      headers: { apikey: ANON, Authorization: 'Bearer ' + ANON, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-      body: JSON.stringify(body)
-    }).catch(function(){ /* lead capture is best-effort */ });
+    return window.__BLD_LEAD(body);
   }
   // Event delegation on document — robust to the sc- runtime rendering the quote card
   // after this script runs (direct addEventListener at load would miss late nodes).
@@ -623,14 +673,14 @@ class Component extends DCLogic {
           '<a href="#packages" style="display:inline-block;margin-top:12px;color:#A855F7;font-weight:700;text-decoration:underline">View membership plans &rarr;</a>';
         actEl.style.display = 'none'; resEl.style.display = 'block'; return;
       }
-      var p = iqPrice(svc, size); var d = Math.round(p * 0.9); IQ_CUR = { p: p, d: d };
+      var off = bldOff(); var p = iqPrice(svc, size); var d = Math.round(p * (1 - off / 100)); IQ_CUR = { p: p, d: d };
       priceEl.innerHTML =
         '<div style="color:#A9A4AF;font-size:13px;text-transform:uppercase;letter-spacing:1px">' + IQ_SVC[svc] + ' · ' + IQ_SIZE[size] + '</div>' +
         '<div style="margin-top:6px;display:flex;align-items:baseline;gap:10px">' +
           '<span style="font-family:\'League Spartan\',sans-serif;font-weight:900;font-size:40px;color:#fff">$' + d + '</span>' +
           '<span style="color:#A9A4AF;font-size:16px;text-decoration:line-through">$' + p + '</span>' +
         '</div>' +
-        '<div style="color:#F5B942;font-weight:700;font-size:13px;margin-top:4px">10% off your first wash applied</div>';
+        '<div style="color:#F5B942;font-weight:700;font-size:13px;margin-top:4px">' + off + '% off your first wash applied</div>';
       actEl.style.display = 'flex'; resEl.style.display = 'block';
       return;
     }
@@ -642,7 +692,7 @@ class Component extends DCLogic {
       resEl.style.display = 'none'; doneEl.style.display = 'block';
       doneEl.innerHTML = '<div style="font-size:40px">🎉</div>' +
         '<h3 style="font-family:\'League Spartan\',sans-serif;font-weight:800;font-size:22px;color:#fff;margin:6px 0 8px">You’re locked in!</h3>' +
-        '<p style="color:#A9A4AF;font-size:14px;line-height:1.6;max-width:340px;margin:0 auto">We’ll text you shortly to set your time. Want it done sooner? Finish booking in the <b style="color:#fff">BLD app</b> — your 10% first-wash price is saved.</p>';
+        '<p style="color:#A9A4AF;font-size:14px;line-height:1.6;max-width:340px;margin:0 auto">We’ll text you shortly to set your time. Want it done sooner? Finish booking in the <b style="color:#fff">BLD app</b> — your ' + bldOff() + '% first-wash price is saved.</p>';
       return;
     }
 
@@ -650,7 +700,7 @@ class Component extends DCLogic {
       iqInsert(false, IQ_CUR.p, IQ_CUR.d);
       resEl.style.display = 'none'; doneEl.style.display = 'block';
       doneEl.innerHTML = '<h3 style="font-family:\'League Spartan\',sans-serif;font-weight:800;font-size:20px;color:#fff;margin:0 0 8px">No worries.</h3>' +
-        '<p style="color:#A9A4AF;font-size:14px;line-height:1.6;max-width:340px;margin:0 auto">Your <b style="color:#F5B942">10% off</b> the first wash still stands whenever you’re ready. Text us at (215) 555-0123.</p>';
+        '<p style="color:#A9A4AF;font-size:14px;line-height:1.6;max-width:340px;margin:0 auto">Your <b style="color:#F5B942">' + bldOff() + '% off</b> the first wash still stands whenever you’re ready. Text us at (215) 555-0123.</p>';
       return;
     }
   });
@@ -679,7 +729,7 @@ class Component extends DCLogic {
   // 10% ribbon on top of every pricing block — inserted post-render at stable anchors
   // (the template runtime re-parents source-injected nodes, so we add them from JS).
   function bldRibbon(){
-    return '<span style="display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#7028C9,#A855F7);color:#fff;font-family:\'League Spartan\',sans-serif;font-weight:800;letter-spacing:1px;text-transform:uppercase;font-size:14px;padding:11px 22px;border-radius:999px;box-shadow:0 8px 22px rgba(112,40,201,.45)">✨ New customers save 10% on your first wash</span>';
+    return '<span style="display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#7028C9,#A855F7);color:#fff;font-family:\'League Spartan\',sans-serif;font-weight:800;letter-spacing:1px;text-transform:uppercase;font-size:14px;padding:11px 22px;border-radius:999px;box-shadow:0 8px 22px rgba(112,40,201,.45)">✨ New customers save ' + bldOff() + '% on your first wash</span>';
   }
   function bldAddRibbon(anchor, id){
     if (!anchor || !anchor.parentNode || document.getElementById(id)) return;
@@ -688,6 +738,7 @@ class Component extends DCLogic {
     anchor.parentNode.insertBefore(r, anchor);
   }
   function bldPlaceRibbons(){
+    bldSyncPromo(); // the template may render after the catalog arrives
     var pOut = document.getElementById('bld-price-outside');
     var grid = pOut && pOut.closest ? pOut.closest('div[style*="grid-template-columns"]') : null;
     bldAddRibbon(grid, 'bld-ribbon-services');

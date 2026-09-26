@@ -1,6 +1,6 @@
 // The app's account screen. A code opens it: a member code, or the account code of
 // someone who loaded a balance without joining (and a lapsed member's old code still
-// opens their balance). Actions: redeem / upgrade (members), save_settings (everyone),
+// opens their balance). Actions: redeem / upgrade / billing (members), save_settings (everyone),
 // and test_tier / test_balance for owner test accounts only.
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import {
@@ -10,6 +10,8 @@ import {
 import { esc, sendEmail, ownerEmail } from '../_shared/notify.ts';
 import { clientIp, resolveCode } from '../_shared/codes.ts';
 import { walletBalance } from '../_shared/wallet.ts';
+import { portalUrl } from '../_shared/stripe_admin.ts';
+import { APP_LINK } from '../_shared/payments/checkout.ts';
 
 const TIERS: Tier[] = ['bronze', 'silver', 'gold'];
 
@@ -17,7 +19,7 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return new Response('method not allowed', { status: 405 });
   const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
-  let body: { code?: string; action?: string; reward?: RewardKey; settings?: unknown; tier?: string };
+  let body: { code?: string; action?: string; reward?: RewardKey; settings?: unknown; tier?: string; returnUrl?: string };
   try { body = await req.json(); } catch { return Response.json({ error: 'bad_json' }, { status: 400 }); }
 
   const acct = await resolveCode(db, body.code, clientIp(req));
@@ -63,6 +65,23 @@ Deno.serve(async (req) => {
     return Response.json({ ok: true });
   }
 
+  // Members who pay through Stripe manage their plan (upgrade, downgrade, card, cancel)
+  // in Stripe's Billing Portal; stripe-webhook applies whatever they change.
+  if (body.action === 'billing') {
+    if (!m) return Response.json({ error: 'not_member' }, { status: 403 });
+    const returnUrl = String(body.returnUrl ?? '');
+    if (returnUrl.length > 300 || !APP_LINK.test(returnUrl)) return Response.json({ error: 'bad_return_url' }, { status: 400 });
+    const { data: row } = await db.from('memberships').select('stripe_customer_id').eq('id', m.id).single();
+    if (!row?.stripe_customer_id) return Response.json({ error: 'no_billing' }, { status: 409 });
+    try {
+      const url = await portalUrl(db, row.stripe_customer_id, returnUrl);
+      return url ? Response.json({ url }) : Response.json({ error: 'payments_not_configured' }, { status: 503 });
+    } catch (e) {
+      console.error('billing portal failed', (e as Error).message);
+      return Response.json({ error: 'billing_failed' }, { status: 502 });
+    }
+  }
+
   if (body.action === 'save_settings') {
     const r = cleanSettings(body.settings);
     if (!r.ok) return Response.json({ error: r.error }, { status: 400 });
@@ -95,10 +114,10 @@ Deno.serve(async (req) => {
       .eq('customer_id', acct.customerId).order('created_at', { ascending: false }).limit(20),
   ]);
 
-  let credits = 0, stamps = 0, savings = 0;
+  let credits = 0, stamps = 0, savings = 0, hasBilling = false;
   let issued: { id: string; reward: string }[] = [];
   if (m) {
-    const [{ data: creditRows }, { data: stampRows }, { data: iss }, { data: applied }] = await Promise.all([
+    const [{ data: creditRows }, { data: stampRows }, { data: iss }, { data: applied }, { data: own }] = await Promise.all([
       db.from('credit_ledger').select('delta').eq('membership_id', m.id),
       db.from('reward_ledger').select('delta').eq('membership_id', m.id),
       // Oldest-first so issuedRewards[0] is the one `book` will actually apply
@@ -106,7 +125,9 @@ Deno.serve(async (req) => {
       // discount matching the server's charge.
       db.from('redemptions').select('id, reward').eq('membership_id', m.id).eq('status', 'issued').order('created_at'),
       db.from('redemptions').select('retail_value').eq('membership_id', m.id),
+      db.from('memberships').select('stripe_customer_id').eq('id', m.id).single(),
     ]);
+    hasBilling = !!own?.stripe_customer_id;
     credits = (creditRows ?? []).reduce((s, r) => s + r.delta, 0);
     stamps = (stampRows ?? []).reduce((s, r) => s + r.delta, 0);
     issued = iss ?? [];
@@ -129,7 +150,7 @@ Deno.serve(async (req) => {
       name: c.name, email: c.email, tier: m?.tier ?? null, active: !!m, periodStart: m?.period_start ?? null,
       address: c.address ?? '', cars: c.cars ?? [],
     },
-    wallet, isTest: acct.isTest,
+    wallet, isTest: acct.isTest, hasBilling,
     credits, stamps, savings,
     rewardMenu: m ? (Object.keys(cfg.rewards) as RewardKey[]).map((key) => ({ key, label: REWARD_LABELS[key], cost: cfg.rewards[key] })) : [],
     issuedRewards: issued.map((r) => ({ id: r.id, reward: r.reward, label: REWARD_LABELS[r.reward as RewardKey] })),

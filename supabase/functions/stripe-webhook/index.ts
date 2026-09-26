@@ -12,6 +12,7 @@
 // Memberships: a customer pays via a Stripe Payment Link (one per tier, tier stamped
 // in the link's metadata → copied onto the checkout session). Stripe calls:
 //   checkout.session.completed   → provision the member (customer + code + credits + email)
+//   customer.subscription.updated → plan switched (Billing Portal) or payment lapsed/recovered
 //   customer.subscription.deleted → deactivate the membership (canceled / unpaid)
 //
 // Security: every request is signature-verified against a webhook signing secret —
@@ -27,7 +28,8 @@
 import Stripe from 'npm:stripe@17';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { provisionMember } from '../_shared/member_provision.ts';
-import type { Tier } from '../_shared/membership.ts';
+import type { MemberCatalog, Tier } from '../_shared/membership.ts';
+import { tierForProduct } from '../_shared/stripe_admin.ts';
 import { declinePending, fulfillBooking } from '../_shared/booking_payment.ts';
 import { cancelTopup, fulfillTopup, takeBackRefund } from '../_shared/wallet.ts';
 
@@ -113,6 +115,20 @@ Deno.serve(async (req) => {
           : Response.json({ received: true, skipped: 'permanent: ' + res.error });
       }
       return Response.json({ received: true, code_issued: res.created });
+    }
+
+    // Plan switched in the Billing Portal, or a renewal failed / recovered. The tier comes
+    // from the price's product (stable across price edits); a lapsed payment pauses the
+    // membership (no credit grants) until Stripe collects again.
+    if (event.type === 'customer.subscription.updated') {
+      const sub = event.data.object as Stripe.Subscription;
+      const product = sub.items.data[0]?.price?.product;
+      const { data: cat } = await db.from('catalog').select('config').eq('id', 1).single();
+      const tier = tierForProduct(cat!.config, typeof product === 'string' ? product : product?.id);
+      const patch: Record<string, unknown> = { active: sub.status === 'active' || sub.status === 'trialing' };
+      if (tier) Object.assign(patch, { tier, plan: tier, credits_per_period: (cat!.config as MemberCatalog).plans[tier].credits });
+      await db.from('memberships').update(patch).eq('stripe_subscription_id', sub.id);
+      return Response.json({ received: true, updated: sub.id, tier });
     }
 
     if (event.type === 'customer.subscription.deleted') {

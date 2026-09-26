@@ -6,7 +6,7 @@
 //   abandoned → declinePending: status declined, reserved credit/reward handed back
 // Both the Stripe webhook and the app's return drive this; whichever lands first does
 // the work and the other is a no-op (conditional status updates, deduped payment rows).
-import { sendEmail, ownerEmail, functionsBaseUrl, button, esc } from './notify.ts';
+import { sendEmail, ownerEmail, adminLink, button, esc } from './notify.ts';
 import { decideBump, nextOpenSlot } from './bump.ts';
 import { REWARD_LABELS, type RewardKey } from './membership.ts';
 import { restoreMemberBalances } from './member_refund.ts';
@@ -59,7 +59,7 @@ export async function fulfillBooking(db: Db, bookingId: string, paid: Paid | nul
   const q = b.quote as FrozenQuote;
   const items = b.items as CarItem[];
   const customer = b.customers as { email: string; name: string };
-  const link = `${functionsBaseUrl()}/confirm?token=${b.confirm_token}`;
+  const link = adminLink(b.id);
 
   // ——— slot: decide again now the money is in — up to 35 minutes have passed ———
   let escalated = false;
@@ -102,7 +102,7 @@ export async function fulfillBooking(db: Db, bookingId: string, paid: Paid | nul
       await db.from('bookings').update({ time_slot: null }).eq('id', b.id);
       await sendEmail(ownerEmail(), `Slot conflict needs you — ${b.preferred_day} ${b.time_slot}`,
         `<h2 style="color:#A855F7;margin:0 0 12px">Pick a time for this one</h2>
-         <p>A booking wants <b>${formatWhen(b.preferred_day, b.time_slot, b.time_window)}</b>, but ${why}. It has no time yet — set its exact time on the confirm page.</p>
+         <p>A booking wants <b>${formatWhen(b.preferred_day, b.time_slot, b.time_window)}</b>, but ${why}. It has no time yet — set its exact time in the dashboard.</p>
          ${button(link, 'Resolve →')}`);
     }
   }

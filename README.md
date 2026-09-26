@@ -11,6 +11,7 @@ Mobile car detailing in Philadelphia — marketing site + booking app.
 | `docs/superpowers/specs/` | Design spec and the owner acceptance checklist |
 | `docs/superpowers/plans/` | Implementation plan |
 | `Brotherly Love Detailing.dc.html` | The marketing website |
+| `admin/` | The owner & management dashboard (static page; talks to the `admin` function) |
 | `assets/`, `uploads/` | Logos, hero video, image exports |
 
 ## The booking flow
@@ -18,10 +19,38 @@ Mobile car detailing in Philadelphia — marketing site + booking app.
 Customer taps **GET MY DETAIL** → picks cars, sizes (sedan/SUV/truck), and
 service (outside/inside/full) with extras → live price updates at the bottom →
 picks a day + morning/afternoon window and address → pays a percentage deposit
-by card → the owner gets an email with a confirm link and sets the exact time.
+by card → the owner gets an email that opens the booking in the dashboard, where
+they set the exact time.
 The rest is paid cash or card at the job.
 
 Requests the owner ignores get a reminder at 24 hours and auto-refund at 48.
+
+## Owner dashboard
+
+**https://brotherly-love-detailing.vercel.app/admin** (the website is at `/` on the same
+Vercel project, `brotherly-love-detailing`; deploy with `vercel deploy --prod` from the repo root).
+
+- **Bookings:** today's cars, what's awaiting a time, money still due at jobs; confirm or
+  move a time (customer is emailed), mark done and record the cash/card collected
+  (members get their stamps), cancel & refund (owner only).
+- **Calendar:** cars per day, closed weekdays, and per-date changes (close a day, change
+  its cap, add a staff note). The app greys out closed/full days and `book` refuses them.
+- **Customers:** profile, balance, cars, history, and **private reports** (note, damage,
+  complaint, no-show, payment) with photos. Only staff ever see these.
+- **Leads:** every instant quote and quote request from the website.
+- **Owner only:** Members, Pricing (edits flow to the app, the website and Stripe at once),
+  and Settings (team codes, Stripe).
+- **Signing in:** each person has a personal staff code (Settings → Team; shown once).
+  The owner's first sign-in uses the owner key:
+  `select value from app_config where key='owner_admin_token';` — then add yourself a
+  personal code and use that. Managers can't touch prices, refunds, members, team or Stripe.
+- **Stripe:** Settings → Stripe payments → *Finish setup* (or paste a secret key) registers
+  the webhook, makes each tier's product/price/join link, and turns on the Billing Portal
+  so members upgrade, downgrade, update cards and cancel themselves in the app.
+- Old `confirm` / `owner-members` links now redirect to the dashboard (Supabase serves
+  HTML from functions as plain text, so those pages never rendered in a browser).
+
+Verified live by `scripts/e2e-admin.mjs`.
 
 ## Membership mode (Round 2)
 
@@ -44,11 +73,10 @@ with redeemable rewards, plan + upgrade, book-with-credit, and history.
   Stripe Payment Link (one per tier); a signed Stripe webhook auto-issues the code, first
   credits, and welcome email. See [`docs/STRIPE-SELFSERVE.md`](docs/STRIPE-SELFSERVE.md) —
   **one manual step (set the webhook signing secret) is required before it fulfills.**
-- **Owner-issued codes (still available):** the owner also issues codes from a signed link. Open
-  `…/functions/v1/owner-members?token=<OWNER_ADMIN_TOKEN>` to add a member (name +
-  email + tier → a code is generated and emailed), change tier, deactivate, grant
-  stamps, and mark jobs done (which grants stamps). The token lives in the
-  `app_config` table (`key = 'owner_admin_token'`); rotate it with
+- **Owner-issued codes (still available):** Dashboard → Members → *Add a member by hand*
+  (name + email + tier → a code is generated and emailed); change tier, deactivate, and
+  grant stamps there too. The owner key lives in `app_config` (`key = 'owner_admin_token'`);
+  rotate it with
   `update app_config set value = encode(gen_random_bytes(24),'hex') where key='owner_admin_token';`
 - **Credits & stamps** live in append-only ledgers with no-negative-balance
   triggers; a declined or auto-refunded member booking gives the credit/reward
