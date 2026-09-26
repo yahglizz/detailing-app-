@@ -39,3 +39,8 @@ export function functionsBaseUrl(): string {
 export function button(href: string, label: string): string {
   return `<a href="${href}" style="display:inline-block;background:linear-gradient(135deg,#7028C9,#A855F7);color:#fff;text-decoration:none;font-weight:700;padding:14px 24px;border-radius:12px;margin-top:16px">${label}</a>`;
 }
+
+// Customer-typed text (names, addresses, notes, car names) going into email or page HTML.
+export function esc(s: unknown): string {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+}

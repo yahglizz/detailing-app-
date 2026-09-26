@@ -51,8 +51,12 @@ export default function Home({ navigation }: Props) {
         >
           <Text style={s.ctaText}>GET MY DETAIL</Text>
         </Pressable>
-        <Pressable accessibilityRole="button" onPress={() => navigation.navigate('MemberCode')}>
-          <Text style={s.member}>Brotherhood member? Enter your code →</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel="Log in with your code" style={s.memberEntry} onPress={() => navigation.navigate('MemberCode')}>
+          <View style={{ flex: 1 }}><Text style={s.memberEyebrow}>MEMBERS & BALANCE</Text><Text style={s.member}>LOG IN WITH YOUR CODE</Text></View>
+          <Text style={s.memberArrow}>↗</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" style={s.topup} onPress={() => navigation.navigate('TopUp')}>
+          <Text style={s.topupText}>ADD MONEY TO A BALANCE</Text>
         </Pressable>
       </View>
     </View>
@@ -71,5 +75,10 @@ const s = StyleSheet.create({
     shadowColor: colors.primary, shadowOpacity: 0.5, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 8,
   },
   ctaText: { fontFamily: fonts.heading, color: colors.text, fontSize: 22, letterSpacing: 1 },
-  member: { color: colors.textMuted, fontSize: 13, marginTop: spacing(8) },
+  memberEntry: { width: '100%', maxWidth: 320, minHeight: 66, marginTop: spacing(7), paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)', backgroundColor: 'rgba(20,16,26,0.72)' },
+  memberEyebrow: { color: colors.primaryBright, fontFamily: fonts.heading, fontSize: 10, letterSpacing: 1.2 },
+  member: { color: colors.text, fontFamily: fonts.heading, fontSize: 17, letterSpacing: 0.6, marginTop: 3 },
+  memberArrow: { color: colors.text, fontSize: 22 },
+  topup: { minHeight: 44, justifyContent: 'center', marginTop: spacing(3), paddingHorizontal: 12 },
+  topupText: { color: colors.textSecondary, fontFamily: fonts.heading, fontSize: 13, letterSpacing: 0.8, textDecorationLine: 'underline' },
 });

@@ -2,12 +2,44 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getProvider } from '../_shared/payments/provider.ts';
 import { sendEmail, ownerEmail, functionsBaseUrl, button } from '../_shared/notify.ts';
 import { restoreMemberBalances } from '../_shared/member_refund.ts';
+import { refundBooking, settleBooking } from '../_shared/booking_payment.ts';
+import { settleTopup } from '../_shared/wallet.ts';
 
 Deno.serve(async () => {
   const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
   const dayAgo = new Date(Date.now() - 24 * 3600e3).toISOString();
   const twoDaysAgo = new Date(Date.now() - 48 * 3600e3).toISOString();
-  let reminded = 0, refunded = 0;
+  let reminded = 0, refunded = 0, settled = 0;
+
+  // ——— checkouts nobody came back from ———
+  // A pending booking holds its slot. The Stripe session expires after 35 minutes and
+  // the webhook normally settles it; this catches any the webhook missed (paid →
+  // fulfilled, never paid → slot freed). Balance top-ups the same way.
+  const stale45 = new Date(Date.now() - 45 * 60e3).toISOString();
+  const [{ data: pending }, { data: pendingTopups }] = await Promise.all([
+    db.from('bookings').select('id, status, stripe_session_id, pay_mode').eq('status', 'pending_payment').lt('created_at', stale45),
+    db.from('topups').select('id, status, stripe_session_id').eq('status', 'pending').lt('created_at', stale45),
+  ]);
+  if (pending?.length || pendingTopups?.length) {
+    const pay = await getProvider(db);
+    for (const b of pending ?? []) {
+      try {
+        if ((await settleBooking(db, pay, b)) !== 'processing') settled++;
+      } catch (e) {
+        console.error('sweep settle failed', b.id, (e as Error).message);
+      }
+    }
+    for (const t of pendingTopups ?? []) {
+      try {
+        if ((await settleTopup(db, pay, t)) !== 'processing') settled++;
+      } catch (e) {
+        console.error('sweep top-up settle failed', t.id, (e as Error).message);
+      }
+    }
+  }
+
+  // Wrong-code records only matter for 15 minutes (codes.ts).
+  await db.from('code_attempts').delete().lt('created_at', dayAgo);
 
   const { data: stale } = await db.from('bookings')
     .select('id, confirm_token, created_at, quote, reminder_sent_at, membership_id, customers(email)')
@@ -15,24 +47,22 @@ Deno.serve(async () => {
 
   for (const b of stale ?? []) {
     if (b.created_at < twoDaysAgo) {
-      const { data: pay } = await db.from('payments').select('provider_ref')
-        .eq('booking_id', b.id).eq('kind', 'deposit').eq('status', 'succeeded').single();
-      if (pay?.provider_ref) {
-        const r = await getProvider().refund({ bookingId: b.id, providerRef: pay.provider_ref });
-        if (r.ok) {
-          await db.from('payments').insert({
-            booking_id: b.id, kind: 'refund',
-            amount_cents: (b.quote as { deposit: number }).deposit * 100,
-            status: 'succeeded', provider: 'fake', provider_ref: r.ref,
-          });
-        }
+      // Claim first so the owner declining at the same moment can't double-refund.
+      const { data: won } = await db.from('bookings').update({ status: 'refunded' })
+        .eq('id', b.id).eq('status', 'requested').select('id');
+      if (!won?.length) continue;
+      const r = await refundBooking(db, b.id);
+      if (!r.ok) {
+        // Leave it for the next hourly run rather than tell them it was refunded.
+        await db.from('bookings').update({ status: 'requested' }).eq('id', b.id);
+        continue;
       }
-      await restoreMemberBalances(db, b);
-      await db.from('bookings').update({ status: 'refunded' }).eq('id', b.id);
+      const walletBack = await restoreMemberBalances(db, b);
       await sendEmail((b.customers as unknown as { email: string }).email,
-        'Your deposit has been refunded',
+        r.amountCents ? 'Your payment has been refunded' : 'About your detail request',
         `<h2 style="color:#A855F7;margin:0 0 12px">Sorry about that</h2>
-         <p>We couldn't get to your request in time, so your deposit has been refunded in full.</p>`);
+         <p>We couldn't get to your request in time${r.amountCents ? `, so your $${r.amountCents / 100} payment has been refunded in full` : ''}.</p>
+         ${walletBack ? `<p>The $${walletBack} from your balance is back on your balance.</p>` : ''}`);
       refunded++;
     } else if (!b.reminder_sent_at) {
       await sendEmail(ownerEmail(), 'Unanswered detail request — auto-refund in 24h',
@@ -93,5 +123,5 @@ Deno.serve(async () => {
     await db.from('memberships').update({ period_start: newStart }).eq('id', m.id);
     granted += elapsed;
   }
-  return Response.json({ reminded, refunded, granted });
+  return Response.json({ reminded, refunded, settled, granted });
 });

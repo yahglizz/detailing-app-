@@ -15,7 +15,8 @@
 //  - Failures are tagged retryable vs permanent so the webhook can 500 (Stripe retries)
 //    only for transient faults, and 200-ack permanent bad data (unknown tier, constraint
 //    violations) so Stripe stops retrying and never risks auto-disabling the endpoint.
-import { generateCode, type MemberCatalog, type Tier } from './membership.ts';
+import { type MemberCatalog, type Tier } from './membership.ts';
+import { freshCode } from './codes.ts';
 import { sendEmail } from './notify.ts';
 
 // deno-lint-ignore no-explicit-any
@@ -76,7 +77,7 @@ export async function provisionMember(admin: Admin, input: ProvisionInput): Prom
       }
     }
 
-    code = generateCode();
+    code = await freshCode(admin);
     for (let i = 0; i < 6; i++) {
       const { data: inserted, error } = await admin.from('memberships').insert({
         customer_id: customerId, plan: tier, tier, code,
@@ -95,7 +96,7 @@ export async function provisionMember(admin: Admin, input: ProvisionInput): Prom
         if (raced) { membershipId = raced.id; code = raced.code; break; }
       }
       // The only other unique on the insert is the member code → regenerate and retry.
-      if (isUnique) { code = generateCode(); continue; }
+      if (isUnique) { code = await freshCode(admin); continue; }
       // Any non-unique error: transient (no pg code, e.g. network) → retry; permanent
       // (a pg error code like a check/FK violation) → don't loop Stripe forever.
       return { ok: false, error: 'membership insert failed: ' + msg, retryable: !error?.code };
@@ -121,7 +122,7 @@ export async function provisionMember(admin: Admin, input: ProvisionInput): Prom
        <p>Your <b>${tier.toUpperCase()}</b> membership is live: ${plan.credits} ${plan.service} details every month, priority booking, and rewards on every wash.</p>
        <p>Your member code:</p>
        <p style="font-family:monospace;font-size:28px;color:#F5B942;letter-spacing:3px">${code}</p>
-       <p style="color:#A9A4AF">Open the BLD app → "I'm a member" → enter this code once.</p>`);
+       <p style="color:#A9A4AF">Open the BLD app → "Log in with your code" → enter it once.</p>`);
   }
 
   return { ok: true, code, membershipId, credits: plan.credits, service: plan.service, created };

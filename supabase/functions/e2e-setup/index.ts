@@ -70,6 +70,8 @@ Deno.serve(async (req) => {
       const memberIds = (mem ?? []).map((m) => m.id);
       // Children first (FKs).
       if (bookingIds.length) await db.from('payments').delete().in('booking_id', bookingIds);
+      await db.from('wallet_ledger').delete().in('customer_id', ids);
+      await db.from('topups').delete().in('customer_id', ids);
       if (memberIds.length) {
         await db.from('reward_ledger').delete().in('membership_id', memberIds);
         await db.from('redemptions').delete().in('membership_id', memberIds);

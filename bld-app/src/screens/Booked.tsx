@@ -4,15 +4,14 @@ import * as Calendar from 'expo-calendar';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../App';
 import { useOrder } from '../state/order';
-import { useMember } from '../state/member';
 import { colors, fonts, radius, spacing } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Booked'>;
+const PAID = { full: 'Paid in full.', credit: 'Booked with your membership.', balance: 'Paid from your balance.', deposit: 'Deposit paid.' };
 
 export default function Booked({ navigation, route }: Props) {
   const { state, dispatch } = useOrder();
-  const { profile } = useMember();
-  const { escalated } = route.params;
+  const { escalated, paid, stamps = 0, saved = 0 } = route.params;
 
   const addToCalendar = async () => {
     const { status } = await Calendar.requestCalendarPermissionsAsync();
@@ -40,13 +39,14 @@ export default function Booked({ navigation, route }: Props) {
     <View style={s.root}>
       <Text style={s.check}>✓</Text>
       <Text style={s.title}>YOU'RE BOOKED</Text>
-      <Text style={s.sub}>Deposit paid. We'll email you shortly to lock in your exact time for {state.preferredDay} ({state.window}).</Text>
+      <Text style={s.sub}>{PAID[paid ?? 'deposit']} We'll email you shortly to lock in your exact time for {state.preferredDay} ({state.window}).</Text>
       <Text style={s.addr}>{state.address}</Text>
       {!!escalated && (
         <Text style={s.note}>Two VIPs wanted this slot — we'll email your exact time today.</Text>
       )}
-      {!!profile && (
-        <Text style={s.stamp}>✓ You'll earn a stamp when this wash is done.</Text>
+      {saved > 0 && <Text style={s.saved}>You saved ${saved} with your membership.</Text>}
+      {stamps > 0 && (
+        <Text style={s.stamp}>✓ You'll earn {stamps === 1 ? 'a stamp' : `${stamps} stamps`} when this wash is done.</Text>
       )}
       <Pressable accessibilityRole="button" style={s.ghost} onPress={addToCalendar}>
         <Text style={s.ghostText}>ADD TO CALENDAR</Text>
@@ -66,6 +66,7 @@ const s = StyleSheet.create({
   addr: { color: colors.textMuted, fontSize: 14, marginTop: spacing(2) },
   note: { color: '#F5B942', fontSize: 14, textAlign: 'center', marginTop: spacing(3) },
   stamp: { color: colors.success, fontSize: 14, textAlign: 'center', marginTop: spacing(2) },
+  saved: { color: '#F5B942', fontFamily: fonts.heading, fontSize: 15, textAlign: 'center', marginTop: spacing(4) },
   ghost: { marginTop: spacing(8), borderWidth: 1, borderColor: colors.border, borderRadius: radius.button, paddingVertical: spacing(3.5), paddingHorizontal: spacing(8), minHeight: 48, justifyContent: 'center' },
   ghostText: { color: colors.textSecondary, fontFamily: fonts.heading, fontSize: 14, letterSpacing: 1 },
   btn: { marginTop: spacing(3), backgroundColor: colors.primary, borderRadius: radius.button, paddingVertical: spacing(3.5), paddingHorizontal: spacing(12), minHeight: 48, justifyContent: 'center' },

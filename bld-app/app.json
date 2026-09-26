@@ -2,6 +2,7 @@
   "expo": {
     "name": "bld-app",
     "slug": "bld-app",
+    "scheme": "bld",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -23,7 +24,8 @@
     },
     "plugins": [
       "expo-font",
-      "expo-video"
+      "expo-video",
+      "expo-web-browser"
     ]
   }
 }

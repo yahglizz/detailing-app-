@@ -1,7 +1,7 @@
 import { DEFAULT_CATALOG, priceOrder, CarItem } from '../../supabase/functions/_shared/pricing';
 import {
-  generateCode, rankOf, applyCredits, applyReward, monthsActive, computeSavings,
-  MemberCatalog, REWARD_LABELS,
+  generateCode, rankOf, applyCredits, applyReward, monthsActive, computeSavings, cleanSettings,
+  memberPrice, bestPlanFor, topupBonus, MemberCatalog, REWARD_LABELS,
 } from '../../supabase/functions/_shared/membership';
 
 const cfg: MemberCatalog = {
@@ -14,6 +14,14 @@ const cfg: MemberCatalog = {
   rewards: { tireShine: 3, miniSpray: 5, percent25: 8, freeWash: 10 },
   rewardValues: { tireShine: 15, miniSpray: 15, percent25: 0, freeWash: 0 },
   anchorPrice: 10,
+};
+const perks: MemberCatalog = {
+  ...cfg,
+  plans: {
+    bronze: { ...cfg.plans.bronze, discountPercent: 10, topupBonusPercent: 5, stampsPerCar: 1 },
+    silver: { ...cfg.plans.silver, discountPercent: 15, topupBonusPercent: 10, stampsPerCar: 2 },
+    gold: { ...cfg.plans.gold, discountPercent: 20, topupBonusPercent: 15, stampsPerCar: 3 },
+  },
 };
 const car = (over: Partial<CarItem> = {}): CarItem => ({ size: 'sedan', service: 'full', extras: [], ...over });
 
@@ -80,4 +88,49 @@ test('computeSavings = retail used + rewards - fees', () => {
 
 test('reward labels exist for every key', () => {
   expect(Object.keys(REWARD_LABELS).sort()).toEqual(['freeWash', 'miniSpray', 'percent25', 'tireShine']);
+});
+
+test('cleanSettings: only the fields sent are saved, trimmed', () => {
+  expect(cleanSettings({ name: '  Marcus  ' })).toEqual({ ok: true, patch: { name: 'Marcus' } });
+  expect(cleanSettings({ address: ' 12 Main St ', cars: [{ name: ' Tahoe ', size: 'suv' }] }))
+    .toEqual({ ok: true, patch: { address: '12 Main St', cars: [{ name: 'Tahoe', size: 'suv' }] } });
+  expect(cleanSettings({ address: '' })).toEqual({ ok: true, patch: { address: '' } });
+  expect(cleanSettings({ cars: [] })).toEqual({ ok: true, patch: { cars: [] } });
+});
+
+test('cleanSettings rejects bad input', () => {
+  expect(cleanSettings({})).toEqual({ ok: false, error: 'nothing_to_save' });
+  expect(cleanSettings({ name: '   ' })).toEqual({ ok: false, error: 'bad_name' });
+  expect(cleanSettings({ name: { first: 'x' } })).toEqual({ ok: false, error: 'bad_name' });
+  expect(cleanSettings({ address: 'x'.repeat(201) })).toEqual({ ok: false, error: 'bad_address' });
+  expect(cleanSettings({ cars: [{ name: 'Tahoe', size: 'bus' }] })).toEqual({ ok: false, error: 'bad_cars' });
+  expect(cleanSettings({ cars: [{ name: '', size: 'suv' }] })).toEqual({ ok: false, error: 'bad_cars' });
+  expect(cleanSettings({ cars: Array(7).fill({ name: 'Car', size: 'sedan' }) })).toEqual({ ok: false, error: 'bad_cars' });
+  expect(cleanSettings({ cars: 'Tahoe' })).toEqual({ ok: false, error: 'bad_cars' });
+});
+
+test('memberPrice: credits, then reward, then tier % off the rest', () => {
+  const q = priceOrder([car({ extras: ['headlight'] })], perks); // full 120 + 40
+  expect(memberPrice(q, perks.plans.gold, 1, null))
+    .toEqual({ payable: 32, creditsUsed: 1, rewardUsed: false, memberDiscount: 8, savings: 128 });
+  expect(memberPrice(q, perks.plans.gold, 0, 'percent25')) // 160 → 120 → 20% off
+    .toEqual({ payable: 96, creditsUsed: 0, rewardUsed: true, memberDiscount: 24, savings: 64 });
+  // Credits already made it free: the reward waits for a wash that costs something.
+  expect(memberPrice(priceOrder([car()], perks), perks.plans.gold, 2, 'percent25'))
+    .toMatchObject({ payable: 0, rewardUsed: false, savings: 120 });
+  expect(memberPrice(q, cfg.plans.silver, 0, null).payable).toBe(160); // catalog without perks
+});
+
+test('bestPlanFor: the tier that makes this order cheapest', () => {
+  // outside sedan 45: bronze credit → 0, silver → 38, gold → 36
+  expect(bestPlanFor(priceOrder([car({ service: 'outside' })], perks), perks.plans)).toEqual({ tier: 'bronze', payable: 0, price: 79 });
+  // full sedan 120: bronze → 108, silver → 102, gold credit → 0
+  expect(bestPlanFor(priceOrder([car()], perks), perks.plans)).toEqual({ tier: 'gold', payable: 0, price: 199 });
+});
+
+test('topupBonus: tier % of the top-up, none for non-members', () => {
+  expect(topupBonus(100, perks.plans.gold)).toBe(15);
+  expect(topupBonus(25, perks.plans.bronze)).toBe(1); // 1.25
+  expect(topupBonus(100, null)).toBe(0);
+  expect(topupBonus(100, cfg.plans.gold)).toBe(0);
 });

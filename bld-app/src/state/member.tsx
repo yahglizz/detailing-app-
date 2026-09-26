@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../api';
+import type { MemberSettings, SavedCar, Tier } from '../../../supabase/functions/_shared/membership';
 
 export const TIER_COLORS: Record<string, string> = {
   bronze: '#CD7F32',
@@ -8,8 +9,14 @@ export const TIER_COLORS: Record<string, string> = {
   gold: '#F5B942',
 };
 
+// Anyone with a code: a member (tier set, active) or a balance account (tier null).
 export interface MemberProfile {
-  member: { name: string; email: string; tier: 'bronze' | 'silver' | 'gold'; active: boolean; periodStart: string };
+  member: {
+    name: string; email: string; tier: Tier | null; active: boolean; periodStart: string | null;
+    address: string; cars: SavedCar[]; // Settings → MY INFO / MY CARS, autofilled at checkout
+  };
+  wallet: number; // prepaid balance, whole dollars
+  isTest: boolean; // owner test account: shows the tier switcher
   credits: number;
   stamps: number;
   savings: number;
@@ -29,6 +36,9 @@ interface MemberCtx {
   leave(): void;
   redeem(reward: string): Promise<string | null>;
   requestUpgrade(): Promise<void>;
+  saveSettings(patch: MemberSettings): Promise<string | null>; // returns error or null
+  testTier(tier: Tier | 'none'): Promise<string | null>; // test accounts only
+  testBalance(): Promise<string | null>; // test accounts only: +$50
 }
 
 const Ctx = createContext<MemberCtx | null>(null);
@@ -56,10 +66,12 @@ export function MemberProvider({ children }: { children: React.ReactNode }) {
 
   const load = async (c: string): Promise<string | null> => {
     const { data, error } = await callMember({ code: c });
-    if (error || !data || !('member' in data)) {
-      return error === 'invalid_code' || error === 'inactive' ? error : (error ?? 'network');
-    }
-    setProfile(data as MemberProfile);
+    if (error || !data || !('member' in data)) return error ?? 'network';
+    const p = data as MemberProfile;
+    setProfile({
+      ...p, wallet: p.wallet ?? 0, isTest: !!p.isTest,
+      member: { ...p.member, tier: p.member.tier ?? null, address: p.member.address ?? '', cars: p.member.cars ?? [] },
+    });
     setCode(c);
     await AsyncStorage.setItem(KEY, c);
     return null;
@@ -87,6 +99,28 @@ export function MemberProvider({ children }: { children: React.ReactNode }) {
       return error;
     },
     requestUpgrade: async () => { if (code) await callMember({ code, action: 'upgrade' }); },
+    saveSettings: async (patch) => {
+      if (!code) return 'no_code';
+      const { data, error } = await callMember({ code, action: 'save_settings', settings: patch });
+      if (error) return error;
+      // Only the server's {ok} means saved: a member function from before this action
+      // answers with the plain profile and drops the change.
+      if (!data || !('ok' in data)) return 'save_failed';
+      setProfile((p) => p && { ...p, member: { ...p.member, ...patch } });
+      return null;
+    },
+    testTier: async (tier) => {
+      if (!code) return 'no_code';
+      const { error } = await callMember({ code, action: 'test_tier', tier });
+      if (!error) await load(code);
+      return error;
+    },
+    testBalance: async () => {
+      if (!code) return 'no_code';
+      const { error } = await callMember({ code, action: 'test_balance' });
+      if (!error) await load(code);
+      return error;
+    },
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

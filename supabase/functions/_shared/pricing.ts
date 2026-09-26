@@ -6,6 +6,7 @@ export interface CarItem {
   size: Size;
   service: Service;
   extras: Extra[];
+  label?: string; // a member's saved car name ("Mom's Tahoe"); pricing ignores it
 }
 
 export interface CatalogConfig {

@@ -1,13 +1,22 @@
+// Books a detail. No sign-in: a customer with a code (member, or a balance account) is
+// identified by it, a guest by the name + email they type. Members get their member
+// price; anyone with a balance spends it first. The rest goes through Stripe Checkout —
+// this returns the URL of a hosted checkout page for exactly this booking, and the app
+// opens it. When the customer comes back (paid, backed out, or closed the sheet) the app
+// calls this again with action 'settle' and gets the final answer.
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { priceOrder, type CarItem, type CatalogConfig } from '../_shared/pricing.ts';
+import { priceOrder } from '../_shared/pricing.ts';
 import { getProvider } from '../_shared/payments/provider.ts';
-import type { CardDetails } from '../_shared/payments/types.ts';
-import { sendEmail, ownerEmail, functionsBaseUrl, button } from '../_shared/notify.ts';
-import { applyCredits, applyReward, rankOf, type MemberCatalog, type RewardKey, REWARD_LABELS } from '../_shared/membership.ts';
-import { decideBump, nextOpenSlot } from '../_shared/bump.ts';
+import { APP_LINK, checkoutLine, cleanItems, formatWhen, splitPayment, type PayMode } from '../_shared/payments/checkout.ts';
+import { functionsBaseUrl } from '../_shared/notify.ts';
+import { memberPrice, rankOf, type MemberCatalog, type RewardKey, REWARD_LABELS } from '../_shared/membership.ts';
+import { clientIp, resolveCode, type Account } from '../_shared/codes.ts';
+import { walletBalance } from '../_shared/wallet.ts';
+import { decideBump } from '../_shared/bump.ts';
+import { declinePending, fulfillBooking, settleBooking } from '../_shared/booking_payment.ts';
 
 interface BookBody {
-  items: CarItem[];
+  items: unknown; // validated by cleanItems
   address: string;
   preferredDay: string; // YYYY-MM-DD
   timeSlot?: string; // 24h "HH:MM"
@@ -15,31 +24,35 @@ interface BookBody {
   notes: string;
   remainderMethod: 'cash' | 'card';
   name: string;
+  email?: string; // guests; with a code, the email on their account is used
   expectedTotal: number;
-  card?: CardDetails;
-  memberCode?: string;
+  memberCode?: string; // a member code or a balance-account code
   anchor?: boolean;
+  payMode?: PayMode;
+  returnUrl?: string; // the app's deep link; Stripe sends the customer back through checkout-return
 }
 
 const MEMBER_WINDOW_DAYS = 30;
 const PUBLIC_WINDOW_DAYS = 7;
 
 Deno.serve(async (req) => {
-  const url = Deno.env.get('SUPABASE_URL')!;
-  const admin = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
-  const userClient = createClient(url, Deno.env.get('SUPABASE_ANON_KEY')!, {
-    global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } },
-  });
-  const { data: { user } } = await userClient.auth.getUser();
-  if (!user || !user.email) return Response.json({ error: 'unauthorized' }, { status: 401 });
+  const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
-  let body: BookBody;
+  let raw: Record<string, unknown>;
   try {
-    body = await req.json();
+    raw = await req.json();
   } catch {
     return Response.json({ error: 'bad_json' }, { status: 400 });
   }
-  if (!body.address?.trim() || !body.preferredDay) return Response.json({ error: 'missing_fields' }, { status: 400 });
+  if (!raw || typeof raw !== 'object') return Response.json({ error: 'bad_json' }, { status: 400 });
+  if (raw.action === 'settle') return settle(admin, raw);
+  const body = raw as unknown as BookBody;
+
+  const address = String(body.address ?? '').trim();
+  const name = String(body.name ?? '').trim().slice(0, 60);
+  if (!address || address.length > 200 || !/^\d{4}-\d{2}-\d{2}$/.test(String(body.preferredDay))) {
+    return Response.json({ error: 'missing_fields' }, { status: 400 });
+  }
   if (body.timeSlot && !/^[0-2][0-9]:[0-5][0-9]$/.test(body.timeSlot)) {
     return Response.json({ error: 'bad_time_slot' }, { status: 400 });
   }
@@ -47,18 +60,26 @@ Deno.serve(async (req) => {
   const { data: cat, error: catErr } = await admin.from('catalog').select('config').eq('id', 1).single();
   if (catErr) return Response.json({ error: 'catalog_unavailable' }, { status: 500 });
   const cfg = cat.config as MemberCatalog;
+  const items = cleanItems(body.items, cfg);
+  if (!items) return Response.json({ error: 'bad_items' }, { status: 400 });
 
-  // ——— membership lookup (code = identity) ———
-  let membership: { id: string; tier: string; customer_id: string } | null = null;
+  // ——— who: a code (member or balance account = identity) or a guest's email ———
+  let acct: Account | null = null;
   if (body.memberCode) {
-    const { data: m } = await admin.from('memberships')
-      .select('id, tier, active, customer_id')
-      .eq('code', body.memberCode.trim().toUpperCase())
-      .single();
-    if (!m || !m.active) return Response.json({ error: 'invalid_code' }, { status: 403 });
-    membership = m;
+    const r = await resolveCode(admin, body.memberCode, clientIp(req));
+    if (r === 'rate_limited') return Response.json({ error: 'rate_limited' }, { status: 429 });
+    if (r === 'invalid_code') return Response.json({ error: 'invalid_code' }, { status: 403 });
+    acct = r;
   }
-  const bookerRank = rankOf(membership?.tier as 'bronze' | 'silver' | 'gold' | undefined, cfg);
+  const membership = acct?.membership ?? null; // active members only
+  const guestEmail = String(body.email ?? '').trim().toLowerCase();
+  if (!acct) {
+    if (!name) return Response.json({ error: 'missing_fields' }, { status: 400 });
+    if (guestEmail.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail)) {
+      return Response.json({ error: 'bad_email' }, { status: 400 });
+    }
+  }
+  const bookerRank = rankOf(membership?.tier, cfg);
 
   // ——— booking window: members 30 days out, everyone else 7 ———
   const today = new Date();
@@ -68,104 +89,101 @@ Deno.serve(async (req) => {
     return Response.json({ error: 'too_far_out', maxDays: membership ? MEMBER_WINDOW_DAYS : PUBLIC_WINDOW_DAYS }, { status: 400 });
   }
 
-  // ——— slot decision: open / bump / blocked / escalate ———
-  let bumped = false;
-  let escalated = false;
-  let holderBooking: { id: string; rank: number; anchored: boolean; customer_id: string } | null = null;
+  // ——— slot: refuse a taken slot now, before any money. Bumps and equal-tier
+  // conflicts are acted on once paid (fulfillBooking decides again then). ———
   if (body.timeSlot) {
     const { data: clash } = await admin
       .from('bookings')
-      .select('id, rank, anchored, customer_id')
+      .select('id, rank, anchored')
       .eq('preferred_day', body.preferredDay)
       .eq('time_slot', body.timeSlot)
       .not('status', 'in', '("declined","refunded")')
+      .order('anchored', { ascending: false }).order('rank', { ascending: false })
       .limit(1);
-    holderBooking = clash?.[0] ?? null;
-    const decision = decideBump(bookerRank, holderBooking ? { rank: holderBooking.rank, anchored: holderBooking.anchored } : null);
-    if (decision === 'blocked') return Response.json({ error: 'slot_taken' }, { status: 409 });
-    if (decision === 'escalate') escalated = true;
-    if (decision === 'bump') bumped = true;
+    const holder = clash?.[0] ?? null;
+    if (decideBump(bookerRank, holder ? { rank: holder.rank, anchored: holder.anchored } : null) === 'blocked') {
+      return Response.json({ error: 'slot_taken' }, { status: 409 });
+    }
   }
 
-  // ——— price: retail quote, then credits, then issued reward, then anchor ———
-  let quote;
-  try {
-    quote = priceOrder(body.items, cfg as CatalogConfig);
-  } catch (e) {
-    return Response.json({ error: String((e as Error).message) }, { status: 400 });
-  }
+  // ——— price: retail quote, then the member price (credits, issued reward, tier %
+  // off), then the anchor; then the prepaid balance, then the card ———
+  const quote = priceOrder(items, cfg);
   if (body.expectedTotal !== quote.total) {
     return Response.json({ error: 'price_changed', quote }, { status: 409 });
   }
 
   let payable = quote.total;
   let creditsUsed = 0;
+  let memberDiscount = 0;
   let appliedRedemption: { id: string; reward: RewardKey } | null = null;
   if (membership) {
-    const plan = cfg.plans[membership.tier as keyof typeof cfg.plans];
-    const { data: creditRows } = await admin.from('credit_ledger').select('delta').eq('membership_id', membership.id);
-    const balance = (creditRows ?? []).reduce((s, r) => s + r.delta, 0);
-    const applied = applyCredits(quote, plan, balance);
-    payable = applied.payable;
-    creditsUsed = applied.creditsUsed;
-
-    // Only pull a reward if there's still something to discount — never burn a
-    // member's reward on a wash that credits already dropped to $0.
-    if (payable > 0) {
-      const { data: issued } = await admin.from('redemptions')
-        .select('id, reward').eq('membership_id', membership.id).eq('status', 'issued')
-        .order('created_at').limit(1);
-      if (issued?.[0]) {
-        appliedRedemption = issued[0] as { id: string; reward: RewardKey };
-        payable = applyReward(payable, appliedRedemption.reward, quote);
-      }
-    }
+    const [{ data: creditRows }, { data: issued }] = await Promise.all([
+      admin.from('credit_ledger').select('delta').eq('membership_id', membership.id),
+      // Oldest first — the same one the app shows (member profile issuedRewards[0]).
+      admin.from('redemptions').select('id, reward').eq('membership_id', membership.id).eq('status', 'issued')
+        .order('created_at').limit(1),
+    ]);
+    const credits = (creditRows ?? []).reduce((s, r) => s + r.delta, 0);
+    const reward = (issued?.[0] ?? null) as { id: string; reward: RewardKey } | null;
+    const priced = memberPrice(quote, cfg.plans[membership.tier], credits, reward?.reward ?? null);
+    payable = priced.payable;
+    creditsUsed = priced.creditsUsed;
+    memberDiscount = priced.memberDiscount;
+    if (priced.rewardUsed) appliedRedemption = reward;
   }
   const anchored = !membership && body.anchor === true;
   if (anchored) payable += cfg.anchorPrice;
 
-  const depositPercent = quote.depositPercent;
-  const deposit = payable === 0 ? 0 : Math.round((payable * depositPercent) / 100);
-  if (deposit > 0 && !body.card) return Response.json({ error: 'card_required' }, { status: 400 });
+  const payMode: PayMode = body.payMode === 'full' ? 'full' : 'deposit';
+  const wallet = acct ? await walletBalance(admin, acct.customerId) : 0;
+  const { walletUsed, rest, deposit, due, atDetail } = splitPayment(payable, wallet, quote.depositPercent, payMode);
+  const returnUrl = String(body.returnUrl ?? '');
+  const pay = due > 0 ? await getProvider(admin) : null;
+  if (due > 0) {
+    if (!pay) return Response.json({ error: 'payments_not_configured' }, { status: 503 });
+    if (returnUrl.length > 300 || !APP_LINK.test(returnUrl)) return Response.json({ error: 'bad_return_url' }, { status: 400 });
+  }
 
-  // Resolve the customer row this booking hangs off. An owner-issued member
-  // already HAS a customers row — created at membership time, keyed by their
-  // (unique) email with a placeholder id that predates their auth account. Book
-  // under that existing row; a fresh upsert by auth-uid would hit the unique
-  // email constraint and fail every owner-issued member's first booking. Only
-  // the name is refreshed (email is the identity key, already set by the owner).
-  // Non-members upsert by their auth uid as before.
-  let customerId = user.id;
-  if (membership) {
-    customerId = membership.customer_id;
-    if (body.name) await admin.from('customers').update({ name: body.name }).eq('id', customerId);
+  // ——— the customer row this booking hangs off ———
+  // A code already points at one (keyed by their unique email); only the name is
+  // refreshed. Guests reuse the row for a known email — a returning guest, or a
+  // member booking without their code — and otherwise get a new one.
+  let customerId: string;
+  let customerEmail: string;
+  if (acct) {
+    customerId = acct.customerId;
+    if (name) await admin.from('customers').update({ name }).eq('id', customerId);
+    const { data: c } = await admin.from('customers').select('email').eq('id', customerId).single();
+    customerEmail = c?.email ?? '';
   } else {
-    // Resolve by email (unique) first. A member booking as a guest — no code —
-    // already owns a customers row under their placeholder id; upserting by
-    // auth uid would collide on the unique email and fail the booking. Reuse
-    // the existing row when the email is taken; otherwise create by auth uid.
-    const { data: existing } = await admin.from('customers').select('id').eq('email', user.email).limit(1);
-    if (existing && existing.length > 0) {
-      customerId = existing[0].id;
-      if (body.name) await admin.from('customers').update({ name: body.name }).eq('id', customerId);
-    } else {
-      await admin.from('customers').upsert({ id: user.id, email: user.email, name: body.name ?? '' });
-    }
+    await admin.from('customers')
+      .upsert({ id: crypto.randomUUID(), email: guestEmail, name }, { onConflict: 'email', ignoreDuplicates: true });
+    const { data: c } = await admin.from('customers').select('id').eq('email', guestEmail).single();
+    if (!c) return Response.json({ error: 'booking_insert_failed' }, { status: 500 });
+    customerId = c.id;
+    customerEmail = guestEmail;
   }
 
   const confirmToken = crypto.randomUUID().replaceAll('-', '') + crypto.randomUUID().replaceAll('-', '');
-  const fullQuote = { ...quote, payable, deposit, remainder: payable - deposit, creditsUsed, anchored };
+  const fullQuote = {
+    ...quote, payable, deposit, remainder: rest - deposit, creditsUsed, anchored,
+    payMode, paidOnline: due, balanceDue: atDetail, walletUsed, memberDiscount,
+    savings: membership ? quote.total - payable : 0,
+    tier: membership?.tier ?? null, reward: appliedRedemption?.reward ?? null,
+    ...(acct?.isTest ? { test: true } : {}),
+  };
   const { data: booking, error: insErr } = await admin
     .from('bookings')
     .insert({
       customer_id: customerId,
-      items: body.items,
+      items,
       quote: fullQuote,
-      address: body.address.trim(),
+      address,
       preferred_day: body.preferredDay,
-      time_slot: escalated ? null : body.timeSlot ?? null,
+      time_slot: body.timeSlot ?? null,
       time_window: body.window,
-      notes: body.notes ?? '',
+      notes: String(body.notes ?? '').slice(0, 500),
       remainder_method: body.remainderMethod,
       status: 'pending_payment',
       confirm_token: confirmToken,
@@ -173,143 +191,102 @@ Deno.serve(async (req) => {
       anchored,
       rank: bookerRank,
       paid_with_credit: creditsUsed > 0,
+      pay_mode: payMode,
     })
-    .select()
+    .select('id')
     .single();
   if (insErr) return Response.json({ error: 'booking_insert_failed' }, { status: 500 });
 
-  if (deposit > 0) {
-    const charge = await getProvider().chargeDeposit({
-      bookingId: booking.id,
-      amountCents: deposit * 100,
-      card: body.card!,
-    });
-    if (!charge.ok) return Response.json({ error: charge.error }, { status: 402 });
-    await admin.from('payments').insert({
-      booking_id: booking.id, kind: 'deposit', amount_cents: deposit * 100,
-      status: 'succeeded', provider: 'fake', provider_ref: charge.ref,
-    });
-  }
-
-  // ——— commit side effects AFTER money: credits, redemption, bump ———
-  // These consume scarce balances (credits, a one-time reward). If a concurrent
-  // booking already spent them, we must NOT hand out the discount we already
-  // applied to `payable` — so on conflict we refund the deposit and void the
-  // booking rather than give a wash away for free.
-  const refundDeposit = async () => {
-    if (deposit <= 0) return;
-    const { data: pay } = await admin.from('payments').select('provider_ref')
-      .eq('booking_id', booking.id).eq('kind', 'deposit').eq('status', 'succeeded').single();
-    if (pay?.provider_ref) {
-      const r = await getProvider().refund({ bookingId: booking.id, providerRef: pay.provider_ref });
-      if (r.ok) {
-        await admin.from('payments').insert({
-          booking_id: booking.id, kind: 'refund', amount_cents: deposit * 100,
-          status: 'succeeded', provider: 'fake', provider_ref: r.ref,
-        });
-      }
-    }
-  };
-
+  // ——— reserve the member's credits and reward, and the balance, BEFORE any money moves ———
+  // All are scarce: a concurrent booking may have just spent them. Reserving first
+  // means a conflict costs nothing (no charge to refund); a checkout the customer walks
+  // away from hands them back (declinePending).
   if (membership && creditsUsed > 0) {
-    // The credit_ledger non-negative trigger surfaces over-spend as an error
-    // (it does not throw). A raced credit means the discount was never validly
-    // covered — undo everything.
+    // The credit_ledger non-negative trigger surfaces over-spend as an error.
     const { error: debitErr } = await admin.from('credit_ledger').insert({
       membership_id: membership.id, delta: -creditsUsed, reason: 'wash', booking_id: booking.id,
     });
     if (debitErr) {
-      await refundDeposit();
-      await admin.from('bookings').update({ status: 'declined' }).eq('id', booking.id);
+      await declinePending(admin, booking.id);
       return Response.json({ error: 'credit_conflict' }, { status: 409 });
     }
   }
   if (appliedRedemption) {
-    // Conditional flip: only claim the reward if it is still 'issued'. Zero rows
-    // back means another booking already took it — undo this one so a single
+    // Conditional flip: only claim the reward if it is still 'issued', so a single
     // reward can never discount two washes.
     const { data: flipped } = await admin.from('redemptions')
       .update({ status: 'applied', booking_id: booking.id })
       .eq('id', appliedRedemption.id).eq('status', 'issued')
       .select('id');
     if (!flipped || flipped.length === 0) {
-      if (membership && creditsUsed > 0) {
-        await admin.from('credit_ledger').insert({
-          membership_id: membership.id, delta: creditsUsed, reason: 'wash_rollback', booking_id: booking.id,
-        });
-      }
-      await refundDeposit();
-      await admin.from('bookings').update({ status: 'declined' }).eq('id', booking.id);
+      await declinePending(admin, booking.id); // hands the reserved credit back
       return Response.json({ error: 'reward_conflict' }, { status: 409 });
     }
   }
-
-  if (bumped && holderBooking) {
-    const { data: takenRows } = await admin.rpc('slot_states', { day: body.preferredDay });
-    const taken = ((takenRows ?? []) as { slot: string }[]).map((r) => r.slot);
-    const target = nextOpenSlot([...taken, body.timeSlot!], body.timeSlot!);
-    if (target) {
-      await admin.from('bookings')
-        .update({ time_slot: target, bumped_from: body.timeSlot, time_window: Number(target.slice(0, 2)) < 12 ? 'morning' : 'afternoon' })
-        .eq('id', holderBooking.id);
-      const { data: holderCust } = await admin.from('customers').select('email').eq('id', holderBooking.customer_id).single();
-      if (holderCust?.email) {
-        await sendEmail(holderCust.email, `Your detail moved to ${target} — here's why`,
-          `<h2 style="color:#A855F7;margin:0 0 12px">Small schedule change</h2>
-           <p>A VIP member reserved your original window, so your detail on <b>${body.preferredDay}</b> moved from ${body.timeSlot} to <b>${target}</b>.</p>
-           <p style="color:#A9A4AF">Members never get bumped — ask us about membership, or add a $${cfg.anchorPrice} Slot Anchor next time to lock your time.</p>`);
-      }
-    } else {
-      // Nowhere to move the holder — do not double-book. Escalate instead.
-      escalated = true;
-      await admin.from('bookings').update({ time_slot: null }).eq('id', booking.id);
-      await sendEmail(ownerEmail(), `Slot conflict needs you — ${body.preferredDay} ${body.timeSlot}`,
-        `<h2 style="color:#A855F7;margin:0 0 12px">No room to bump</h2>
-         <p>A rank-${bookerRank} member booked ${body.preferredDay} ${body.timeSlot}, but the day is full so nobody can be moved automatically. Set the exact time on the confirm page.</p>
-         ${button(`${functionsBaseUrl()}/confirm?token=${confirmToken}`, 'Resolve →')}`);
+  if (walletUsed > 0) {
+    // The wallet_ledger trigger refuses to go below zero (a concurrent spend won).
+    const { error: walletErr } = await admin.from('wallet_ledger').insert({
+      customer_id: customerId, delta: -walletUsed, reason: 'booking', booking_id: booking.id, ref: `book:${booking.id}`,
+    });
+    if (walletErr) {
+      await declinePending(admin, booking.id);
+      return Response.json({ error: 'balance_conflict' }, { status: 409 });
     }
   }
-  if (escalated && !bumped) {
-    await sendEmail(ownerEmail(), `Two members want ${body.preferredDay} ${body.timeSlot} — pick one`,
-      `<h2 style="color:#A855F7;margin:0 0 12px">Equal-rank conflict</h2>
-       <p>Two members of the same tier want <b>${body.preferredDay} ${body.timeSlot}</b>. The newer booking has no time yet — set its exact time on the confirm page.</p>
-       ${button(`${functionsBaseUrl()}/confirm?token=${confirmToken}`, 'Resolve →')}`);
+
+  // Nothing to pay now (credit or balance covers it, or it's all due at the detail):
+  // booked right now.
+  if (due === 0) {
+    await fulfillBooking(admin, booking.id, null);
+    const { data: done } = await admin.from('bookings').select('time_slot').eq('id', booking.id).single();
+    return Response.json({
+      bookingId: booking.id, paid: true, escalated: !!body.timeSlot && !done?.time_slot, quote: fullQuote, payable, creditsUsed, walletUsed,
+    });
   }
 
-  await admin.from('bookings').update({ status: 'requested' }).eq('id', booking.id);
-
-  const summary = body.items
-    .map((i, n) => `<div>Car ${n + 1}: <b>${i.service}</b> / ${i.size}${i.extras.length ? ' + ' + i.extras.join(', ') : ''}</div>`)
-    .join('');
-  const link = `${functionsBaseUrl()}/confirm?token=${confirmToken}`;
-  const shortSummary = body.items.map((i) => `${i.service}/${i.size}`).join(', ');
-  const memberTag = membership ? ` — MEMBER ${membership.tier.toUpperCase()}${creditsUsed ? ` (${creditsUsed} credit)` : ''}` : '';
-  const rewardTag = appliedRedemption ? `<p style="color:#F5B942">Reward attached: ${REWARD_LABELS[appliedRedemption.reward]}</p>` : '';
-
-  await sendEmail(
-    ownerEmail(),
-    `New detail — ${shortSummary}${memberTag} — $${deposit} deposit${deposit ? ' PAID' : ' (credit)'}`,
-    `<h2 style="color:#A855F7;margin:0 0 12px">New Detail Request${memberTag}</h2>
-     ${summary}${rewardTag}
-     <p style="color:#A9A4AF">${body.preferredDay} · ${escalated ? 'TIME CONFLICT — resolve' : body.timeSlot ?? body.window} · ${body.address}</p>
-     <p style="color:#A9A4AF">Notes: ${body.notes || '—'}</p>
-     <p>Retail $${quote.total} · Payable $${payable} · Deposit $${deposit} · $${payable - deposit} due (${body.remainderMethod})${anchored ? ' · ANCHORED' : ''}</p>
-     ${button(link, 'Confirm or decline →')}`,
-  );
-
-  await sendEmail(
-    user.email,
-    membership && payable === 0
-      ? 'Your member wash is booked'
-      : `We got your detail request — $${deposit} deposit received`,
-    `<h2 style="color:#A855F7;margin:0 0 12px">Thanks${body.name ? ', ' + body.name : ''}!</h2>
-     ${summary}${rewardTag}
-     <p style="color:#A9A4AF">${body.preferredDay} · ${escalated ? "we'll confirm your exact time shortly" : body.timeSlot ?? body.window} · ${body.address}</p>
-     ${creditsUsed ? `<p>Paid with ${creditsUsed} membership credit${creditsUsed > 1 ? 's' : ''}.</p>` : ''}
-     ${deposit ? `<p>Deposit paid: $${deposit}. Due at the detail: $${payable - deposit} (${body.remainderMethod}).</p>` : ''}
-     ${anchored ? `<p>Slot Anchor active — your time is locked. 🔒</p>` : ''}
-     <p style="color:#A9A4AF">We'll email you shortly to lock in your exact time.</p>`,
-  );
-
-  return Response.json({ bookingId: booking.id, quote: fullQuote, payable, creditsUsed, bumped, escalated });
+  const perks = [
+    creditsUsed ? `${creditsUsed} member credit${creditsUsed > 1 ? 's' : ''} applied` : '',
+    appliedRedemption ? REWARD_LABELS[appliedRedemption.reward] : '',
+    memberDiscount ? `${membership!.tier.toUpperCase()} member price −$${memberDiscount}` : '',
+    walletUsed ? `$${walletUsed} from your balance` : '',
+    anchored ? 'Slot Anchor' : '',
+  ].filter(Boolean);
+  const line = checkoutLine({
+    items, mode: payMode, balance: atDetail, perks, address,
+    when: formatWhen(body.preferredDay, body.timeSlot, body.window),
+  });
+  const session = await pay!.createCheckout({
+    kind: 'booking', ref: booking.id, amountCents: due * 100, email: customerEmail, ...line,
+    returnUrl: `${functionsBaseUrl()}/checkout-return?to=${encodeURIComponent(returnUrl)}`,
+  });
+  if (!session.ok) {
+    await declinePending(admin, booking.id);
+    return Response.json({ error: 'payments_unavailable' }, { status: 502 });
+  }
+  const { error: linkErr } = await admin.from('bookings').update({ stripe_session_id: session.id }).eq('id', booking.id);
+  if (linkErr) {
+    await pay!.expireCheckout(session.id);
+    await declinePending(admin, booking.id);
+    return Response.json({ error: 'booking_insert_failed' }, { status: 500 });
+  }
+  return Response.json({ bookingId: booking.id, checkoutUrl: session.url, sessionId: session.id, quote: fullQuote, payable, creditsUsed, walletUsed });
 });
+
+// The customer is back from Stripe Checkout. The session id is the proof: only the
+// app that opened this checkout has it.
+// deno-lint-ignore no-explicit-any
+async function settle(admin: any, raw: Record<string, unknown>): Promise<Response> {
+  const sessionId = String(raw.sessionId ?? '');
+  const { data: b } = await admin.from('bookings')
+    .select('id, status, stripe_session_id, pay_mode')
+    .eq('id', String(raw.bookingId ?? '')).maybeSingle();
+  if (!b || !sessionId || b.stripe_session_id !== sessionId) return Response.json({ error: 'not_found' }, { status: 404 });
+  try {
+    const status = await settleBooking(admin, await getProvider(admin), b);
+    const { data: after } = await admin.from('bookings').select('time_slot').eq('id', b.id).single();
+    return Response.json({ status, escalated: status === 'paid' && !after?.time_slot });
+  } catch (e) {
+    console.error('settle failed', b.id, (e as Error).message);
+    return Response.json({ error: 'payments_unavailable' }, { status: 502 });
+  }
+}

@@ -33,3 +33,16 @@ test('anchor toggles and resets', () => {
   st = orderReducer(st, { type: 'RESET' });
   expect(st.anchor).toBe(false);
 });
+
+test('SET_CAR picks a saved car; changing its size makes it a plain car again', () => {
+  let s = orderReducer(initialOrder, { type: 'SET_CAR', index: 0, label: 'Black Tahoe', size: 'suv' });
+  expect(s.items[0]).toEqual({ size: 'suv', service: 'full', extras: [], label: 'Black Tahoe' });
+  s = orderReducer(s, { type: 'SET_SIZE', index: 0, size: 'truck' });
+  expect(s.items[0]).toEqual({ size: 'truck', service: 'full', extras: [] });
+  expect(s.items[0]).not.toHaveProperty('label');
+});
+
+test('pay mode defaults to deposit and can switch to full', () => {
+  expect(initialOrder.payMode).toBe('deposit');
+  expect(orderReducer(initialOrder, { type: 'SET_FIELD', field: 'payMode', value: 'full' }).payMode).toBe('full');
+});

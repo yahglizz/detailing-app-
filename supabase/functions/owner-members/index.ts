@@ -123,12 +123,19 @@ Deno.serve(async (req) => {
       return renderHome(token);
     }
     if (action === 'done') {
+      // Claim first: only the tap that moves the job to done grants stamps, so a
+      // double-tap or a resubmitted form can't grant them twice.
+      const { data: won } = await db.from('bookings').update({ status: 'done' })
+        .eq('id', id).in('status', ['requested', 'confirmed']).select('id');
+      if (!won?.length) return renderHome(token);
       const { data: b } = await db.from('bookings')
-        .select('id, items, membership_id, customers(email, name)').eq('id', id).single();
-      if (!b) return renderHome(token);
-      await db.from('bookings').update({ status: 'done' }).eq('id', b.id);
-      if (b.membership_id) {
-        const stamps = (b.items as unknown[]).length;
+        .select('id, items, quote, membership_id, customers(email, name)').eq('id', id).single();
+      if (b?.membership_id) {
+        // Stamps per car by the tier the member booked at (Gold earns more).
+        const { data: cat } = await db.from('catalog').select('config').eq('id', 1).single();
+        const tier = (b.quote as { tier?: Tier | null }).tier;
+        const perCar = (tier && (cat!.config as MemberCatalog).plans[tier]?.stampsPerCar) || 1;
+        const stamps = (b.items as unknown[]).length * perCar;
         await db.from('reward_ledger').insert({
           membership_id: b.membership_id, delta: stamps, reason: 'wash completed', booking_id: b.id,
         });

@@ -1,0 +1,47 @@
+import { StyleSheet } from 'react-native';
+import { fonts, themes, type Theme } from './theme';
+
+// The checkout look (top bar, numbered sections, sheets, gradient card, sticky footer),
+// shared by Build and the member screens.
+const make = (t: Theme) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: t.bg[0] },
+  content: { paddingHorizontal: 18, paddingTop: 8, paddingBottom: 28 },
+  topbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 26 },
+  topButton: { width: 42, height: 42, borderRadius: 15, backgroundColor: t.sheet, borderWidth: 1, borderColor: t.sheetBorder, alignItems: 'center', justifyContent: 'center' },
+  topButtonText: { color: t.text, fontSize: 30, lineHeight: 32 },
+  topTitle: { color: t.text, fontFamily: fonts.heading, fontSize: 14, letterSpacing: 0.8 },
+  topSub: { color: t.muted, fontSize: 11 },
+  logo: { width: 42, height: 42 },
+  eyebrow: { color: t.accent, fontSize: 10, fontWeight: '700', letterSpacing: 1.5 },
+  title: { color: t.text, fontFamily: fonts.headingBlack, fontSize: 40, lineHeight: 42, marginTop: 8 },
+  intro: { color: t.muted, fontSize: 15, lineHeight: 21, marginTop: 9, marginBottom: 7 },
+  sectionHead: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 29, marginBottom: 11 },
+  sectionNum: { backgroundColor: t.primary, color: '#FFFFFF', fontFamily: fonts.heading, fontSize: 12, overflow: 'hidden', borderRadius: 14, paddingHorizontal: 10, paddingVertical: 7 },
+  sectionTitle: { color: t.text, fontFamily: fonts.headingBlack, fontSize: 22, letterSpacing: 0.2 },
+  sheet: { backgroundColor: t.sheet, borderWidth: 1, borderColor: t.sheetBorder, borderRadius: 28, padding: 18, shadowColor: '#2A1446', shadowOpacity: 0.07, shadowRadius: 18, shadowOffset: { width: 0, height: 9 }, elevation: 2 },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  fieldHeading: { color: t.text, fontFamily: fonts.heading, fontSize: 20 },
+  fieldLabel: { color: t.muted, fontSize: 10, fontWeight: '700', letterSpacing: 1.2, marginTop: 22, marginBottom: 9 },
+  hint: { color: t.muted, fontSize: 12, lineHeight: 18, marginTop: 8 },
+  input: { minHeight: 51, backgroundColor: t.field, borderRadius: 15, borderWidth: 1, borderColor: t.line, color: t.text, fontSize: 15, paddingHorizontal: 14, marginBottom: 9 },
+  chip: { flex: 1, minHeight: 45, borderRadius: 15, backgroundColor: t.chip, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  chipOn: { backgroundColor: t.primary },
+  chipText: { color: t.muted, fontFamily: fonts.heading, fontSize: 13, textAlign: 'center' },
+  chipTextOn: { color: '#FFFFFF' },
+  button: { minHeight: 52, borderRadius: 16, backgroundColor: t.primary, paddingHorizontal: 21, alignItems: 'center', justifyContent: 'center' },
+  buttonText: { color: '#FFFFFF', fontFamily: fonts.heading, fontSize: 14, letterSpacing: 0.4 },
+  summary: { borderRadius: 25, padding: 21, marginTop: 25, overflow: 'hidden' },
+  summaryOverline: { color: 'rgba(255,255,255,0.72)', fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginBottom: 16 },
+  summaryLabel: { color: '#FFFFFF', fontSize: 15 },
+  summaryValue: { color: '#FFFFFF', fontFamily: fonts.heading, fontSize: 18 },
+  summaryBig: { color: '#FFFFFF', fontFamily: fonts.headingBlack, fontSize: 30 },
+  summaryNote: { color: 'rgba(255,255,255,0.72)', fontSize: 12, marginTop: 4 },
+  summaryRule: { height: 1, backgroundColor: 'rgba(255,255,255,0.24)', marginVertical: 15 },
+  finePrint: { color: t.faint, fontSize: 11, textAlign: 'center', marginTop: 14 },
+  footer: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 19, paddingVertical: 10, backgroundColor: t.footer, borderTopWidth: 1, borderTopColor: t.line },
+  footerLabel: { color: t.muted, fontSize: 10, fontWeight: '700', letterSpacing: 1 },
+  footerAmount: { color: t.text, fontFamily: fonts.headingBlack, fontSize: 28 },
+  error: { color: t.error, fontSize: 12, lineHeight: 17, marginTop: 7 },
+});
+
+export const ui = { light: make(themes.light), dark: make(themes.dark) };

@@ -1,7 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { getProvider } from '../_shared/payments/provider.ts';
-import { sendEmail } from '../_shared/notify.ts';
+import { esc, sendEmail } from '../_shared/notify.ts';
 import { restoreMemberBalances } from '../_shared/member_refund.ts';
+import { refundBooking } from '../_shared/booking_payment.ts';
 
 const admin = () => createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
@@ -38,16 +38,19 @@ Deno.serve(async (req) => {
     if (b.status !== 'requested') {
       return page(`<div class="card"><h1>Already handled</h1><p class="muted">Status: ${b.status}</p></div>`);
     }
-    const items = (b.items as { size: string; service: string; extras: string[] }[])
-      .map((i, n) => `<div>Car ${n + 1}: <b>${i.service}</b> / ${i.size}${i.extras.length ? ' + ' + i.extras.join(', ') : ''}</div>`)
+    const items = (b.items as { size: string; service: string; extras: string[]; label?: string }[])
+      .map((i, n) => `<div>Car ${n + 1}${i.label ? ` (${esc(i.label)})` : ''}: <b>${i.service}</b> / ${i.size}${i.extras.length ? ' + ' + i.extras.join(', ') : ''}</div>`)
       .join('');
-    const q = b.quote as { total: number; deposit: number; remainder: number };
+    // paidOnline/balanceDue since Stripe checkout; older bookings only have deposit/remainder.
+    const q = b.quote as { total: number; deposit: number; remainder: number; paidOnline?: number; balanceDue?: number; walletUsed?: number };
+    const paidOnline = q.paidOnline ?? q.deposit;
+    const balance = q.balanceDue ?? q.remainder;
     return page(`
       <div class="card"><h1>New Detail Request</h1>
         ${items}
-        <p class="muted">${b.preferred_day} · ${b.time_window} · ${b.address}</p>
-        <p class="muted">Notes: ${b.notes || '—'}</p>
-        <p>Total $${q.total} · Deposit $${q.deposit} PAID · $${q.remainder} due (${b.remainder_method})</p>
+        <p class="muted">${b.preferred_day} · ${b.time_slot ?? b.time_window} · ${esc(b.address)}</p>
+        <p class="muted">Notes: ${esc(b.notes) || '—'}</p>
+        <p>Total $${q.total}${q.walletUsed ? ` · From balance $${q.walletUsed}` : ''} · Paid online $${paidOnline} · $${balance} due${balance > 0 ? ` (${b.remainder_method})` : ''}</p>
       </div>
       <form method="POST" class="card">
         <input type="hidden" name="token" value="${token}">
@@ -85,23 +88,20 @@ Deno.serve(async (req) => {
       return page('<div class="card"><h1>Proposal sent</h1><p class="muted">Booking stays pending until you confirm.</p></div>');
     }
     if (action === 'decline') {
-      const { data: pay } = await db.from('payments').select('provider_ref')
-        .eq('booking_id', b.id).eq('kind', 'deposit').eq('status', 'succeeded').single();
-      if (pay?.provider_ref) {
-        const r = await getProvider().refund({ bookingId: b.id, providerRef: pay.provider_ref });
-        if (r.ok) {
-          const q = b.quote as { deposit: number };
-          await db.from('payments').insert({
-            booking_id: b.id, kind: 'refund', amount_cents: q.deposit * 100,
-            status: 'succeeded', provider: 'fake', provider_ref: r.ref,
-          });
-        }
+      // Claim it first so a double-tap (or the 48h auto-refund) can't refund twice.
+      const { data: won } = await db.from('bookings').update({ status: 'refunded' })
+        .eq('id', b.id).eq('status', 'requested').select('id');
+      if (!won?.length) return page('<div class="card"><h1>Already handled</h1></div>');
+      const r = await refundBooking(db, b.id);
+      if (!r.ok) {
+        await db.from('bookings').update({ status: 'requested' }).eq('id', b.id);
+        return page('<div class="card"><h1>Refund didn\'t go through</h1><p class="muted">Nothing changed and the customer wasn\'t emailed. Try again in a minute, or refund it from the Stripe dashboard.</p></div>');
       }
-      await restoreMemberBalances(db, b);
-      await db.from('bookings').update({ status: 'refunded' }).eq('id', b.id);
-      await sendEmail(customerEmail, 'Your deposit has been refunded',
+      const walletBack = await restoreMemberBalances(db, b);
+      await sendEmail(customerEmail, r.amountCents ? 'Your payment has been refunded' : 'About your detail request',
         `<h2 style="color:#A855F7;margin:0 0 12px">Sorry — we couldn't take this one</h2>
-         <p>Your deposit has been refunded in full.</p>
+         ${r.amountCents ? `<p>Your $${r.amountCents / 100} payment has been refunded in full. It can take 5–10 days to show on your statement.</p>` : ''}
+         ${walletBack ? `<p>The $${walletBack} from your balance is back on your balance.</p>` : ''}
          <p style="color:#A9A4AF">Hope to catch you next time.</p>`);
       return page('<div class="card"><h1>Declined &amp; refunded</h1><p class="muted">Customer has been emailed.</p></div>');
     }

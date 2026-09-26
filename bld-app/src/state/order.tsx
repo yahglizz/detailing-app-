@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useReducer } from 'react';
 import type { CarItem, Extra, Service, Size } from '../../../supabase/functions/_shared/pricing';
+import type { PayMode } from '../../../supabase/functions/_shared/payments/checkout';
 
 export interface OrderState {
   items: CarItem[];
@@ -9,6 +10,7 @@ export interface OrderState {
   window: 'morning' | 'afternoon' | 'either';
   notes: string;
   remainderMethod: 'cash' | 'card';
+  payMode: PayMode;
   name: string;
   anchor: boolean;
 }
@@ -16,9 +18,10 @@ export interface OrderState {
 export type OrderAction =
   | { type: 'SET_CAR_COUNT'; count: number }
   | { type: 'SET_SIZE'; index: number; size: Size }
+  | { type: 'SET_CAR'; index: number; label: string; size: Size } // a member's saved car
   | { type: 'SET_SERVICE'; index: number; service: Service }
   | { type: 'TOGGLE_EXTRA'; index: number; extra: Extra }
-  | { type: 'SET_FIELD'; field: 'address' | 'preferredDay' | 'timeSlot' | 'window' | 'notes' | 'remainderMethod' | 'name'; value: string }
+  | { type: 'SET_FIELD'; field: 'address' | 'preferredDay' | 'timeSlot' | 'window' | 'notes' | 'remainderMethod' | 'payMode' | 'name'; value: string }
   | { type: 'SET_ANCHOR'; anchor: boolean }
   | { type: 'RESET' };
 
@@ -32,6 +35,7 @@ export const initialOrder: OrderState = {
   window: 'either',
   notes: '',
   remainderMethod: 'cash',
+  payMode: 'deposit',
   name: '',
   anchor: false,
 };
@@ -44,8 +48,10 @@ export function orderReducer(state: OrderState, action: OrderAction): OrderState
       while (items.length < count) items.push(newCar());
       return { ...state, items };
     }
-    case 'SET_SIZE':
-      return { ...state, items: state.items.map((c, i) => (i === action.index ? { ...c, size: action.size } : c)) };
+    case 'SET_SIZE': // a new size means it's no longer that saved car
+      return { ...state, items: state.items.map((c, i) => (i === action.index ? { service: c.service, extras: c.extras, size: action.size } : c)) };
+    case 'SET_CAR':
+      return { ...state, items: state.items.map((c, i) => (i === action.index ? { ...c, label: action.label, size: action.size } : c)) };
     case 'SET_SERVICE':
       return { ...state, items: state.items.map((c, i) => (i === action.index ? { ...c, service: action.service } : c)) };
     case 'TOGGLE_EXTRA':
