@@ -1,11 +1,16 @@
 #!/usr/bin/env node
-// End-to-end acceptance proof for BLD member mode, run against the LIVE
-// Supabase project (fake-payment provider). Exercises: member creation via
-// the owner page, credit-covered bookings, rank-based bumping, slot anchors,
-// booking-window enforcement, stamp earning, reward redemption, and
-// equal-rank escalation. Exits non-zero on the first failed assertion.
+// End-to-end acceptance proof for BLD member mode + prepaid balance, run against the
+// LIVE Supabase project. Exercises: member creation via the owner page, credit-covered
+// bookings, member prices, balance-paid bookings, rank-based bumping, slot anchors,
+// booking-window enforcement, stamps per car, reward redemption, equal-rank
+// escalation, and the credit / reward / balance give-back on decline.
 //
-// Run:  node scripts/e2e-member.mjs
+// Nothing here pays through Stripe: every booking is covered by member credits or a
+// test balance (e2e-setup wallet-credit), so nothing is due at checkout. The test days
+// are picked from days with no bookings at all, so no real customer is ever bumped.
+// Exits non-zero on the first failed assertion; test data is deleted at the end.
+//
+// Run:  BLD_OWNER_TOKEN=<token> node scripts/e2e-member.mjs
 // Requires Node 18+ (global fetch). No npm deps.
 
 const SUPABASE_URL = 'https://fiaadogbkvjcddehnymj.supabase.co';
@@ -18,8 +23,6 @@ if (!OWNER_ADMIN_TOKEN) {
   console.error('Set BLD_OWNER_TOKEN env var (owner admin token) before running.');
   process.exit(1);
 }
-const PASSWORD = 'Test123456!';
-const FAKE_CARD = { number: '4242424242424242', expMonth: 12, expYear: 2030, cvc: '123' };
 
 const prefix = `bld-e2e-${Date.now()}`;
 const emails = {
@@ -48,27 +51,27 @@ async function jsonFetch(url, opts) {
   return { status: res.status, body };
 }
 
-async function createUser(email) {
-  const { status, body } = await jsonFetch(`${SUPABASE_URL}/functions/v1/e2e-setup`, {
+function jsonPost(url, payload) {
+  return jsonFetch(url, {
     method: 'POST',
     headers: { apikey: ANON, Authorization: `Bearer ${ANON}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token: OWNER_ADMIN_TOKEN, action: 'create-user', email, password: PASSWORD }),
+    body: JSON.stringify(payload),
   });
-  if (status !== 200 || !body.ok) throw new Error(`createUser(${email}) failed: ${status} ${JSON.stringify(body)}`);
-  return body.userId;
 }
 
-async function mintSession(email) {
-  const { status, body } = await jsonFetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-    method: 'POST',
-    headers: { apikey: ANON, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password: PASSWORD }),
-  });
-  if (status !== 200 || !body.access_token) throw new Error(`mintSession(${email}) failed: ${status} ${JSON.stringify(body)}`);
-  return body.access_token;
+async function setup(action, args) {
+  const { status, body } = await jsonPost(`${SUPABASE_URL}/functions/v1/e2e-setup`, { token: OWNER_ADMIN_TOKEN, action, ...args });
+  if (status !== 200 || !body.ok) throw new Error(`e2e-setup ${action} failed: ${status} ${JSON.stringify(body)}`);
+  return body;
 }
 
-function bookBody({ preferredDay, timeSlot, memberCode, anchor, expectedTotal = 120, window = 'morning' }) {
+// Test balance for an @bldtest.co account; returns the code it logs in with.
+async function walletCredit(email, amount) {
+  return (await setup('wallet-credit', { email, amount })).code;
+}
+
+// Code-holders (members / balance accounts) book here, so nothing is ever due.
+function bookBody({ preferredDay, timeSlot, code, anchor, email, expectedTotal = 120, window = 'morning' }) {
   const body = {
     items: [{ size: 'sedan', service: 'full', extras: [] }],
     address: '123 Test St, Testville',
@@ -79,19 +82,17 @@ function bookBody({ preferredDay, timeSlot, memberCode, anchor, expectedTotal = 
     remainderMethod: 'cash',
     name: 'E2E Tester',
     expectedTotal,
-    card: FAKE_CARD,
+    payMode: 'deposit',
+    returnUrl: 'bld://e2e',
   };
-  if (memberCode) body.memberCode = memberCode;
+  if (code) body.memberCode = code;
+  if (email) body.email = email;
   if (anchor) body.anchor = true;
   return body;
 }
 
-async function book(accessToken, args) {
-  return jsonFetch(`${SUPABASE_URL}/functions/v1/book`, {
-    method: 'POST',
-    headers: { apikey: ANON, Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(bookBody(args)),
-  });
+function book(args) {
+  return jsonPost(`${SUPABASE_URL}/functions/v1/book`, bookBody(args));
 }
 
 async function memberCall(payload) {
@@ -139,12 +140,7 @@ function extractMembershipId(html, code) {
 }
 
 async function bookingToken(bookingId) {
-  const { status, body } = await jsonFetch(`${SUPABASE_URL}/functions/v1/e2e-setup`, {
-    method: 'POST',
-    headers: { apikey: ANON, Authorization: `Bearer ${ANON}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token: OWNER_ADMIN_TOKEN, action: 'booking-token', bookingId }),
-  });
-  if (status !== 200 || !body.ok) throw new Error(`bookingToken(${bookingId}) failed: ${status} ${JSON.stringify(body)}`);
+  const body = await setup('booking-token', { bookingId });
   if (!body.confirmToken) throw new Error(`bookingToken(${bookingId}) returned no confirm_token: ${JSON.stringify(body)}`);
   return body.confirmToken;
 }
@@ -160,294 +156,229 @@ async function confirmDecline(confirmToken) {
 }
 
 async function slotStates(day) {
-  const { status, body } = await jsonFetch(`${SUPABASE_URL}/rest/v1/rpc/slot_states`, {
-    method: 'POST',
-    headers: { apikey: ANON, Authorization: `Bearer ${ANON}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ day }),
-  });
+  const { status, body } = await jsonPost(`${SUPABASE_URL}/rest/v1/rpc/slot_states`, { day });
   if (status !== 200) throw new Error(`slot_states(${day}) failed: ${status} ${JSON.stringify(body)}`);
   return body;
 }
 
-async function cleanup() {
-  const { status, body } = await jsonFetch(`${SUPABASE_URL}/functions/v1/e2e-setup`, {
-    method: 'POST',
-    headers: { apikey: ANON, Authorization: `Bearer ${ANON}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token: OWNER_ADMIN_TOKEN, action: 'cleanup', emailLike: prefix }),
-  });
-  return { status, body };
+// YYYY-MM-DD, `n` days from today (UTC, like book's booking window).
+function dayPlus(n) {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+// The first day in [from, to] with no booked slot at all, skipping days already taken
+// for this run. Test bookings bump whoever holds a slot, so they only go on empty days.
+async function emptyDay(from, to, used) {
+  for (let n = from; n <= to; n++) {
+    const day = dayPlus(n);
+    if (used.includes(day)) continue;
+    if ((await slotStates(day)).length === 0) { used.push(day); return day; }
+  }
+  throw new Error(`no empty day between +${from} and +${to} days: refusing to risk bumping a real customer`);
+}
+
+function cleanup() {
+  return jsonPost(`${SUPABASE_URL}/functions/v1/e2e-setup`, { token: OWNER_ADMIN_TOKEN, action: 'cleanup', emailLike: prefix });
 }
 
 // ——— test sequence ———
 
-async function main() {
-  // Step 1: create users + mint sessions
-  await createUser(emails.gold1);
-  await createUser(emails.nm);
-  await createUser(emails.gold2);
-  const tokGold1 = await mintSession(emails.gold1);
-  const tokNm = await mintSession(emails.nm);
-  const tokGold2 = await mintSession(emails.gold2);
-  pass('1. created 3 users + minted 3 sessions');
+async function profile(code) {
+  const { status, body } = await memberCall({ code });
+  assert(status === 200, `member(${code}) http ${status}: ${JSON.stringify(body)}`);
+  return body;
+}
 
-  // Step 2: owner adds 2 gold members, scrape codes
+async function main() {
+  // Step 1: owner adds 3 gold members; a non-member loads a test balance.
   const code1 = await ownerAddMember('E2E Gold One', emails.gold1, 'gold');
   const code3 = await ownerAddMember('E2E Gold Two', emails.gold2, 'gold');
-  assert(/^BLD-[A-Z2-9]{6}$/.test(code1), `code1 malformed: ${code1}`);
-  assert(/^BLD-[A-Z2-9]{6}$/.test(code3), `code3 malformed: ${code3}`);
-  pass(`2. owner added 2 gold members: code1=${code1} code3=${code3}`);
+  const codeR = await ownerAddMember('E2E Refund Gold', emails.refund, 'gold');
+  for (const c of [code1, code3, codeR]) assert(/^BLD-[A-Z2-9]{6}$/.test(c), `code malformed: ${c}`);
+  const nmCode = await walletCredit(emails.nm, 500);
+  assert(/^BLD-[A-Z2-9]{6}$/.test(nmCode), `balance account code malformed: ${nmCode}`);
+  pass(`1. owner added 3 gold members; non-member balance account ${nmCode} loaded $500`);
 
-  // Step 3: member profile for code1
+  // Step 2: profiles
   {
-    const { status, body } = await memberCall({ code: code1 });
-    assert(status === 200, `member(code1) http ${status}: ${JSON.stringify(body)}`);
-    assert(body.credits === 2, `expected credits==2, got ${body.credits}`);
-    assert(body.stamps === 0, `expected stamps==0, got ${body.stamps}`);
-    pass('3. member(code1) credits==2 stamps==0');
+    const p = await profile(code1);
+    assert(p.credits === 2 && p.stamps === 0 && p.wallet === 0, `expected credits 2, stamps 0, wallet 0, got ${JSON.stringify(p)}`);
+    assert(p.isTest === false, 'a real member must not be a test account');
+    const n = await profile(nmCode);
+    assert(n.member.tier === null && n.wallet === 500, `expected non-member with $500, got ${JSON.stringify(n.member)} wallet ${n.wallet}`);
+    pass('2. member(code1) credits 2 / stamps 0 / wallet 0; balance account has no tier and $500');
   }
 
-  // Step 4: non-member books 2026-07-17 10:00, no anchor
-  let nmBookingId;
+  // Test days: D1/D2 inside the 7-day public window, DR inside the 30-day member window.
+  const used = [];
+  const D1 = await emptyDay(1, 6, used);
+  const D2 = await emptyDay(1, 6, used);
+  const D3 = await emptyDay(8, 29, used);
+  const DR = await emptyDay(8, 29, used);
+  pass(`3. empty test days: ${D1}, ${D2}, ${D3}, ${DR}`);
+
+  // Step 4: non-member books D1 10:00, paid from the balance (nothing due).
   {
-    const { status, body } = await book(tokNm, { preferredDay: '2026-07-17', timeSlot: '10:00' });
-    assert(status === 200, `non-member book http ${status}: ${JSON.stringify(body)}`);
-    assert(body.bumped === false, `expected bumped==false, got ${body.bumped}`);
-    nmBookingId = body.bookingId;
-    pass('4. non-member booked 2026-07-17 10:00, bumped==false');
+    const { status, body } = await book({ preferredDay: D1, timeSlot: '10:00', code: nmCode });
+    assert(status === 200 && body.paid === true, `non-member book http ${status}: ${JSON.stringify(body)}`);
+    assert(body.walletUsed === 120 && body.payable === 120, `expected $120 from the balance, got ${JSON.stringify(body)}`);
+    assert(body.quote.tier === null && body.quote.savings === 0, `non-member must pay retail, got ${JSON.stringify(body.quote)}`);
+    pass(`4. non-member booked ${D1} 10:00, $120 paid from balance`);
   }
 
-  // Step 5: gold member (code1) books SAME slot -> bump
+  // Step 5: gold member (code1) books the SAME slot -> bump; a credit covers it.
   let goldBookingId;
   {
-    const { status, body } = await book(tokGold1, { preferredDay: '2026-07-17', timeSlot: '10:00', memberCode: code1 });
-    assert(status === 200, `gold member book http ${status}: ${JSON.stringify(body)}`);
-    assert(body.bumped === true, `expected bumped==true, got ${body.bumped}`);
-    assert(body.creditsUsed === 1, `expected creditsUsed==1, got ${body.creditsUsed}`);
-    assert(body.payable === 0, `expected payable==0, got ${body.payable}`);
+    const { status, body } = await book({ preferredDay: D1, timeSlot: '10:00', code: code1 });
+    assert(status === 200 && body.paid === true, `gold member book http ${status}: ${JSON.stringify(body)}`);
+    assert(body.creditsUsed === 1 && body.payable === 0, `expected creditsUsed 1 / payable 0, got ${JSON.stringify(body)}`);
+    assert(body.quote.savings === 120, `expected savings 120 with a credit, got ${body.quote.savings}`);
     goldBookingId = body.bookingId;
-    pass('5. gold member bumped non-member at 2026-07-17 10:00, creditsUsed==1, payable==0');
+    pass('5. gold member took 10:00 with a credit, payable 0, savings 120');
   }
 
-  // Step 6: slot_states for 2026-07-17
+  // Step 6: slot_states — gold holds 10:00, the non-member was bumped to 11:00.
   {
-    const states = await slotStates('2026-07-17');
+    const states = await slotStates(D1);
     const slot10 = states.find((s) => s.slot === '10:00');
     const slot11 = states.find((s) => s.slot === '11:00');
-    assert(slot10 && slot10.rank === 3, `expected 10:00 rank==3, got ${JSON.stringify(slot10)}`);
-    assert(slot11 && slot11.rank === 0, `expected 11:00 rank==0 (bumped non-member), got ${JSON.stringify(slot11)}`);
-    pass('6. slot_states: 10:00 rank=3 (gold), 11:00 rank=0 (bumped non-member)');
+    assert(slot10 && slot10.rank === 3, `expected 10:00 rank 3, got ${JSON.stringify(slot10)}`);
+    assert(slot11 && slot11.rank === 0, `expected 11:00 rank 0 (bumped non-member), got ${JSON.stringify(slot11)}`);
+    pass('6. slot_states: 10:00 rank 3 (gold), 11:00 rank 0 (bumped non-member)');
   }
 
-  // Step 7: member profile credits==1
+  // Step 7: member credits 1
   {
-    const { status, body } = await memberCall({ code: code1 });
-    assert(status === 200, `member(code1) http ${status}: ${JSON.stringify(body)}`);
-    assert(body.credits === 1, `expected credits==1, got ${body.credits}`);
-    pass('7. member(code1) credits==1');
+    const p = await profile(code1);
+    assert(p.credits === 1, `expected credits 1, got ${p.credits}`);
+    pass('7. member(code1) credits 1');
   }
 
-  // Step 8: non-member books DIFFERENT day WITH anchor; gold member tries same slot -> 409
+  // Step 8: non-member anchors D2 09:00 (+$10); gold member is blocked from it.
   {
-    const { status, body } = await book(tokNm, { preferredDay: '2026-07-18', timeSlot: '09:00', anchor: true });
+    const { status, body } = await book({ preferredDay: D2, timeSlot: '09:00', code: nmCode, anchor: true });
     assert(status === 200, `non-member anchor book http ${status}: ${JSON.stringify(body)}`);
-    assert(body.payable === 130, `expected payable==130 (120+10 anchor), got ${body.payable}`);
-    pass('8a. non-member anchored booking 2026-07-18 09:00, payable==130');
+    assert(body.payable === 130 && body.walletUsed === 130, `expected 130 (120 + 10 anchor) from balance, got ${JSON.stringify(body)}`);
+    const n = await profile(nmCode);
+    assert(n.wallet === 250, `expected balance 500 - 120 - 130 = 250, got ${n.wallet}`);
+    pass('8a. non-member anchored 09:00, $130 from balance, balance now $250');
 
-    const { status: s2, body: b2 } = await book(tokGold1, { preferredDay: '2026-07-18', timeSlot: '09:00', memberCode: code1 });
-    assert(s2 === 409, `expected 409 slot_taken, got ${s2}: ${JSON.stringify(b2)}`);
-    assert(b2.error === 'slot_taken', `expected error=='slot_taken', got ${JSON.stringify(b2)}`);
+    const { status: s2, body: b2 } = await book({ preferredDay: D2, timeSlot: '09:00', code: code1 });
+    assert(s2 === 409 && b2.error === 'slot_taken', `expected 409 slot_taken, got ${s2}: ${JSON.stringify(b2)}`);
     pass('8b. gold member blocked by anchored slot -> 409 slot_taken');
   }
 
-  // Step 9: owner marks gold member's 2026-07-17 booking done -> stamps==1
+  // Step 9: owner marks the gold booking done -> Gold earns 3 stamps per car.
   {
     const { status, text } = await ownerMembersPost({ action: 'done', id: goldBookingId });
     assert(status === 200, `owner done http ${status}: ${text.slice(0, 300)}`);
-    const { status: ms, body: mb } = await memberCall({ code: code1 });
-    assert(ms === 200, `member(code1) http ${ms}: ${JSON.stringify(mb)}`);
-    assert(mb.stamps === 1, `expected stamps==1 after done, got ${mb.stamps}`);
-    pass('9. owner marked gold booking done, member(code1) stamps==1');
+    const p = await profile(code1);
+    assert(p.stamps === 3, `expected 3 stamps (Gold, 1 car), got ${p.stamps}`);
+    const again = await ownerMembersPost({ action: 'done', id: goldBookingId });
+    assert(again.status === 200 && (await profile(code1)).stamps === 3, 'a second done must not grant stamps again');
+    pass('9. done granted 3 stamps (Gold x1 car); a repeat done granted none');
   }
 
-  // Step 10: scrape membershipId, grant 2 stamps, redeem tireShine
-  let membershipId1;
+  // Step 10: redeem tireShine
   {
-    const { status, text } = await ownerMembersGet();
-    assert(status === 200, `owner GET http ${status}`);
-    membershipId1 = extractMembershipId(text, code1);
-    assert(membershipId1, `could not scrape membershipId for ${code1} from owner page`);
-    pass(`10a. scraped membershipId for code1: ${membershipId1}`);
-
-    await ownerMembersPost({ action: 'stamp', id: membershipId1 });
-    await ownerMembersPost({ action: 'stamp', id: membershipId1 });
-    const { status: ms, body: mb } = await memberCall({ code: code1 });
-    assert(ms === 200, `member(code1) http ${ms}: ${JSON.stringify(mb)}`);
-    assert(mb.stamps === 3, `expected stamps==3 before redeem, got ${mb.stamps}`);
-    pass('10b. granted 2 manual stamps, stamps==3');
-
+    const p = await profile(code1);
+    const cost = p.rewardMenu.find((r) => r.key === 'tireShine')?.cost;
+    assert(cost && cost <= p.stamps, `tireShine cost ${cost} vs stamps ${p.stamps}`);
     const { status: rs, body: rb } = await memberCall({ code: code1, action: 'redeem', reward: 'tireShine' });
     assert(rs === 200 && rb.ok, `redeem tireShine failed: ${rs} ${JSON.stringify(rb)}`);
-    pass('10c. redeemed tireShine ok');
-
-    const { status: ps, body: pb } = await memberCall({ code: code1 });
-    assert(ps === 200, `member(code1) http ${ps}: ${JSON.stringify(pb)}`);
-    assert(pb.issuedRewards.length === 1, `expected issuedRewards.length==1, got ${pb.issuedRewards.length}`);
-    assert(pb.stamps === 0, `expected stamps==0 after redeem, got ${pb.stamps}`);
-    pass('10d. member(code1) issuedRewards.length==1, stamps==0');
+    const after = await profile(code1);
+    assert(after.issuedRewards.length === 1 && after.stamps === p.stamps - cost, `expected 1 issued reward and ${p.stamps - cost} stamps, got ${after.issuedRewards.length} / ${after.stamps}`);
+    pass(`10. redeemed tireShine (${cost} stamps), issuedRewards 1`);
   }
 
-  // Step 11: gold member books again, credit covers to $0
+  // Step 11: gold books again; the last credit covers it, so the reward is kept.
   {
-    const { status: preS, body: preB } = await memberCall({ code: code1 });
-    assert(preS === 200, `member(code1) http ${preS}: ${JSON.stringify(preB)}`);
-    const creditsBefore = preB.credits;
-
-    const { status, body } = await book(tokGold1, { preferredDay: '2026-07-19', timeSlot: '09:00', memberCode: code1 });
-    assert(status === 200, `gold member 2nd book http ${status}: ${JSON.stringify(body)}`);
-    assert(body.payable === 0, `expected payable==0 (credit covers), got ${body.payable}`);
-    assert(body.creditsUsed === 1, `expected creditsUsed==1, got ${body.creditsUsed}`);
-    pass(`11a. gold member booked 2026-07-19 09:00, payable==0, creditsUsed==1 (credits before=${creditsBefore})`);
-
-    const { status: postS, body: postB } = await memberCall({ code: code1 });
-    assert(postS === 200, `member(code1) http ${postS}: ${JSON.stringify(postB)}`);
-    assert(postB.credits === creditsBefore - 1, `expected credits to drop by 1, got ${postB.credits} (was ${creditsBefore})`);
-    // Reward: book.ts only pulls an issued reward when payable > 0 after credits.
-    // Here credits alone already drop payable to $0, so the payable>0 guard skips
-    // the reward — it is NOT consumed. Document what actually happened:
-    if (postB.issuedRewards.length === 1) {
-      pass('11b. issuedRewards still length 1 — payable>0 guard skipped the reward because credits alone covered the wash to $0 (documented behavior, not a bug)');
-    } else if (postB.issuedRewards.length === 0) {
-      pass('11b. issuedRewards dropped to length 0 — reward was applied/attached on this booking');
-    } else {
-      throw new Error(`unexpected issuedRewards.length: ${postB.issuedRewards.length}`);
-    }
+    const { status, body } = await book({ preferredDay: D3, timeSlot: '09:00', code: code1 });
+    assert(status === 200 && body.payable === 0 && body.creditsUsed === 1, `gold 2nd book: ${status} ${JSON.stringify(body)}`);
+    const p = await profile(code1);
+    assert(p.credits === 0, `expected credits 0, got ${p.credits}`);
+    assert(p.issuedRewards.length === 1, `reward only applies when something is payable; got ${p.issuedRewards.length} issued`);
+    pass(`11. gold booked ${D3} with the last credit; reward kept (nothing payable)`);
   }
 
-  // Step 12: equal-rank escalation — gold #2 books same slot held by gold #1 (rank 3)
+  // Step 12: equal-rank escalation — gold #2 books the slot gold #1 holds.
   {
-    const { status, body } = await book(tokGold2, { preferredDay: '2026-07-17', timeSlot: '10:00', memberCode: code3 });
-    assert(status === 200, `gold2 escalation book http ${status}: ${JSON.stringify(body)}`);
-    assert(body.escalated === true, `expected escalated==true, got ${body.escalated}`);
-    // The escalated booking is stored with time_slot=null, so it must NOT show up
-    // as a slot holder. We can't read the row directly — member bookings now hang
-    // off membership.customer_id (not the auth uid), so RLS blocks the booker's own
-    // session from reading it. Verify the null time_slot indirectly: 10:00 still has
-    // exactly ONE holder (gold #1, rank 3); the escalated booking claimed no slot.
-    const states = await slotStates('2026-07-17');
-    const holders10 = states.filter((s) => s.slot === '10:00');
-    assert(holders10.length === 1, `expected exactly 1 holder at 10:00 (escalated booking has no slot), got ${holders10.length}: ${JSON.stringify(holders10)}`);
-    assert(holders10[0].rank === 3, `expected the remaining 10:00 holder to be gold #1 rank 3, got ${JSON.stringify(holders10[0])}`);
-    pass('12. equal-rank escalation: escalated==true, escalated booking took no slot (10:00 still has 1 holder, rank 3)');
+    const { status, body } = await book({ preferredDay: D1, timeSlot: '10:00', code: code3 });
+    assert(status === 200 && body.escalated === true, `expected escalated, got ${status} ${JSON.stringify(body)}`);
+    const holders10 = (await slotStates(D1)).filter((s) => s.slot === '10:00');
+    assert(holders10.length === 1 && holders10[0].rank === 3, `expected 1 holder at 10:00 (rank 3), got ${JSON.stringify(holders10)}`);
+    pass('12. equal-rank escalation: escalated, no slot taken (10:00 still 1 holder)');
   }
 
-  // Step 13: booking window enforcement
+  // Step 13: booking windows (checked before any payment)
   {
-    const { status, body } = await book(tokGold1, { preferredDay: '2026-08-30', timeSlot: '09:00', memberCode: code1 });
-    assert(status === 400, `expected 400, got ${status}: ${JSON.stringify(body)}`);
-    assert(body.error === 'too_far_out', `expected error=='too_far_out', got ${JSON.stringify(body)}`);
-    pass('13a. gold member 2026-08-30 (>30 days) -> 400 too_far_out');
+    const far = dayPlus(31);
+    const { status, body } = await book({ preferredDay: far, timeSlot: '09:00', code: code1 });
+    assert(status === 400 && body.error === 'too_far_out', `member +31 days: ${status} ${JSON.stringify(body)}`);
+    pass('13a. member +31 days -> 400 too_far_out');
 
-    const { status: s2, body: b2 } = await book(tokNm, { preferredDay: '2026-07-28', timeSlot: '09:00' });
-    assert(s2 === 400, `expected 400, got ${s2}: ${JSON.stringify(b2)}`);
-    assert(b2.error === 'too_far_out', `expected error=='too_far_out', got ${JSON.stringify(b2)}`);
-    pass('13b. non-member 2026-07-28 (>7 days) -> 400 too_far_out');
+    const { status: s2, body: b2 } = await book({ preferredDay: dayPlus(8), timeSlot: '09:00', code: nmCode });
+    assert(s2 === 400 && b2.error === 'too_far_out', `non-member +8 days: ${s2} ${JSON.stringify(b2)}`);
+    pass('13b. non-member +8 days -> 400 too_far_out');
   }
 
-  // Step 15: FIX 1 — declining/auto-refunding a member booking restores the
-  // spent credit AND un-applies any attached reward (restoreMemberBalances,
-  // wired into confirm decline + sweep). Use a fresh isolated gold member.
+  // Step 15: declining a member booking gives back credits, the reward, and the balance.
   {
-    await createUser(emails.refund);
-    const tokR = await mintSession(emails.refund);
-    const codeR = await ownerAddMember('E2E Refund Gold', emails.refund, 'gold');
+    // 15a/b: credit wash, then the owner declines it -> credit back.
+    const { status, body } = await book({ preferredDay: DR, timeSlot: '09:00', code: codeR });
+    assert(status === 200 && body.creditsUsed === 1 && body.payable === 0, `credit wash: ${status} ${JSON.stringify(body)}`);
+    assert((await profile(codeR)).credits === 1, 'expected credits 1 after the credit wash');
+    const { status: ds } = await confirmDecline(await bookingToken(body.bookingId));
+    assert(ds === 200, `decline http ${ds}`);
+    assert((await profile(codeR)).credits === 2, 'expected the credit back after decline');
+    pass('15a. credit wash declined -> credits back to 2');
 
-    // 15a: fresh member starts with 2 credits.
-    {
-      const { status, body } = await memberCall({ code: codeR });
-      assert(status === 200 && body.credits === 2, `expected fresh member credits==2, got ${status} ${JSON.stringify(body)}`);
-      pass('15a. fresh gold member(codeR) credits==2');
+    // 15b: use both credits, earn + redeem a reward, load a balance.
+    for (const slot of ['10:00', '11:00']) {
+      const w = await book({ preferredDay: DR, timeSlot: slot, code: codeR });
+      assert(w.status === 200 && w.body.creditsUsed === 1, `exhaust wash ${slot}: ${w.status} ${JSON.stringify(w.body)}`);
     }
+    const { text: html } = await ownerMembersGet();
+    const membershipIdR = extractMembershipId(html, codeR);
+    assert(membershipIdR, `could not scrape membershipId for ${codeR}`);
+    const cost = (await profile(codeR)).rewardMenu.find((r) => r.key === 'tireShine').cost;
+    for (let i = 0; i < cost; i++) await ownerMembersPost({ action: 'stamp', id: membershipIdR });
+    const redeem = await memberCall({ code: codeR, action: 'redeem', reward: 'tireShine' });
+    assert(redeem.status === 200 && redeem.body.ok, `redeem failed: ${redeem.status} ${JSON.stringify(redeem.body)}`);
+    await walletCredit(emails.refund, 200);
+    const before = await profile(codeR);
+    assert(before.credits === 0 && before.issuedRewards.length === 1 && before.wallet === 200, `setup: ${JSON.stringify({ c: before.credits, r: before.issuedRewards.length, w: before.wallet })}`);
+    pass('15b. credits used up, 1 reward issued, $200 balance');
 
-    // 15b: member books a credit wash -> credits drop to 1.
-    let declineBookingId;
-    {
-      const { status, body } = await book(tokR, { preferredDay: '2026-07-20', timeSlot: '09:00', memberCode: codeR });
-      assert(status === 200 && body.creditsUsed === 1 && body.payable === 0, `credit wash book failed: ${status} ${JSON.stringify(body)}`);
-      declineBookingId = body.bookingId;
-      const { body: prof } = await memberCall({ code: codeR });
-      assert(prof.credits === 1, `expected credits==1 after credit wash, got ${prof.credits}`);
-      pass('15b. member booked credit wash, credits==1');
-    }
+    // 15c: a paid wash — Gold price 20% off $120 = $96, all from the balance; reward attaches.
+    const paid = await book({ preferredDay: DR, timeSlot: '12:00', code: codeR });
+    assert(paid.status === 200 && paid.body.paid === true, `paid wash: ${paid.status} ${JSON.stringify(paid.body)}`);
+    assert(paid.body.payable === 96 && paid.body.walletUsed === 96, `expected Gold price $96 from balance, got ${JSON.stringify(paid.body)}`);
+    assert(paid.body.quote.memberDiscount === 24 && paid.body.quote.savings === 24, `expected $24 member discount/savings, got ${JSON.stringify(paid.body.quote)}`);
+    const mid = await profile(codeR);
+    assert(mid.wallet === 104 && mid.issuedRewards.length === 0, `expected balance 104 and reward attached, got ${mid.wallet} / ${mid.issuedRewards.length}`);
+    pass('15c. Gold price $96 (saved $24) paid from balance; reward attached');
 
-    // 15c + 15d: read confirm_token, POST the owner decline.
-    {
-      const token = await bookingToken(declineBookingId);
-      const { status } = await confirmDecline(token);
-      assert(status === 200, `confirm decline http ${status}`);
-      pass('15c/d. read confirm_token + posted owner decline');
-    }
-
-    // 15e: credit restored — back to 2.
-    {
-      const { body } = await memberCall({ code: codeR });
-      assert(body.credits === 2, `expected credits restored to 2 after decline, got ${body.credits}`);
-      pass('15e. credit restored on decline: credits==2');
-    }
-
-    // ——— reward-restore path ———
-    // A reward only attaches when payable stays > 0 AFTER credits (book's
-    // payable>0 guard). So first exhaust both credits, then book a paid wash so
-    // the issued reward actually attaches, then decline and confirm it resets.
-    {
-      // Exhaust 2 credits with two credit washes on open slots.
-      const w1 = await book(tokR, { preferredDay: '2026-07-20', timeSlot: '10:00', memberCode: codeR });
-      assert(w1.status === 200 && w1.body.creditsUsed === 1, `exhaust wash 1 failed: ${w1.status} ${JSON.stringify(w1.body)}`);
-      const w2 = await book(tokR, { preferredDay: '2026-07-20', timeSlot: '11:00', memberCode: codeR });
-      assert(w2.status === 200 && w2.body.creditsUsed === 1, `exhaust wash 2 failed: ${w2.status} ${JSON.stringify(w2.body)}`);
-      const { body: prof0 } = await memberCall({ code: codeR });
-      assert(prof0.credits === 0, `expected credits==0 after exhausting, got ${prof0.credits}`);
-      pass('15f. exhausted both credits, credits==0');
-
-      // Get to 3 stamps and redeem tireShine.
-      const { text: html } = await ownerMembersGet();
-      const membershipIdR = extractMembershipId(html, codeR);
-      assert(membershipIdR, `could not scrape membershipId for ${codeR}`);
-      await ownerMembersPost({ action: 'stamp', id: membershipIdR });
-      await ownerMembersPost({ action: 'stamp', id: membershipIdR });
-      await ownerMembersPost({ action: 'stamp', id: membershipIdR });
-      const redeem = await memberCall({ code: codeR, action: 'redeem', reward: 'tireShine' });
-      assert(redeem.status === 200 && redeem.body.ok, `redeem tireShine failed: ${redeem.status} ${JSON.stringify(redeem.body)}`);
-      const { body: profIssued } = await memberCall({ code: codeR });
-      assert(profIssued.issuedRewards.length === 1, `expected issuedRewards==1 after redeem, got ${profIssued.issuedRewards.length}`);
-      pass('15g. redeemed tireShine, issuedRewards==1');
-
-      // Book a PAID wash (credits==0 -> payable 120 > 0) so the reward attaches.
-      const rewardBook = await book(tokR, { preferredDay: '2026-07-20', timeSlot: '12:00', memberCode: codeR });
-      assert(rewardBook.status === 200, `reward-attach book failed: ${rewardBook.status} ${JSON.stringify(rewardBook.body)}`);
-      assert(rewardBook.body.creditsUsed === 0, `expected creditsUsed==0 (credits exhausted), got ${rewardBook.body.creditsUsed}`);
-      const rewardBookingId = rewardBook.body.bookingId;
-      const { body: profAttached } = await memberCall({ code: codeR });
-      assert(profAttached.issuedRewards.length === 0, `expected issuedRewards==0 after reward attached to booking, got ${profAttached.issuedRewards.length}`);
-      pass('15h. paid wash attached the reward, issuedRewards==0');
-
-      // Decline that booking -> reward reset to issued.
-      const rToken = await bookingToken(rewardBookingId);
-      const { status: ds } = await confirmDecline(rToken);
-      assert(ds === 200, `reward-booking decline http ${ds}`);
-      const { body: profRestored } = await memberCall({ code: codeR });
-      assert(profRestored.issuedRewards.length === 1, `expected issuedRewards restored to 1 after decline, got ${profRestored.issuedRewards.length}`);
-      pass('15i. reward restored on decline: issuedRewards==1');
-    }
+    // 15d: decline -> reward re-issued and the $96 back on the balance.
+    const { status: ds2 } = await confirmDecline(await bookingToken(paid.body.bookingId));
+    assert(ds2 === 200, `decline http ${ds2}`);
+    const after = await profile(codeR);
+    assert(after.issuedRewards.length === 1, `expected the reward back, got ${after.issuedRewards.length}`);
+    assert(after.wallet === 200, `expected the balance back to 200, got ${after.wallet}`);
+    pass('15d. decline gave back the reward and the $96 balance');
   }
 
-  // Step 16: FIX 2 — a member booking as a GUEST (no memberCode) with their OWN
-  // email (which already has an owner-created customers row) used to 500 on the
-  // upsert email collision. Now fixed (book v6). Reuse gold1's session, book
-  // without a code on an open slot.
+  // Step 16: guests and test-only actions.
   {
-    const { status, body } = await book(tokGold1, { preferredDay: '2026-07-22', timeSlot: '12:00' });
-    assert(status === 200, `member-email guest booking should be 200, got ${status}: ${JSON.stringify(body)}`);
-    pass('16. gold member email booked as guest (no code) -> 200, no email-collision 500');
+    // A guest must type a valid email.
+    const { status, body } = await book({ preferredDay: D2, timeSlot: '12:00', email: 'not-an-email' });
+    assert(status === 400 && body.error === 'bad_email', `guest bad email: ${status} ${JSON.stringify(body)}`);
+    // A real member's code can't use the test-account tier switcher.
+    const t = await memberCall({ code: code1, action: 'test_tier', tier: 'silver' });
+    assert(t.status === 403, `test_tier on a real member must be 403, got ${t.status} ${JSON.stringify(t.body)}`);
+    pass('16. guest bad email -> 400; test_tier on a real member -> 403');
   }
 
   console.log(`\nALL PASSED (${passCount} steps)`);
@@ -467,7 +398,7 @@ main()
         process.exitCode = 1;
         return;
       }
-      const total = (body.deleted.customers ?? 0) + (body.deleted.bookings ?? 0) + (body.deleted.members ?? 0) + (body.deleted.users ?? 0);
+      const total = (body.deleted.customers ?? 0) + (body.deleted.bookings ?? 0) + (body.deleted.members ?? 0);
       if (total <= 0) {
         console.error(`cleanup deleted nothing: ${JSON.stringify(body.deleted)}`);
         process.exitCode = 1;

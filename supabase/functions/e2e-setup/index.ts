@@ -3,9 +3,11 @@
 // it from being an open backdoor. Actions:
 //   create-user    { email, password } -> mints a confirmed email user + session-able account
 //   booking-token  { bookingId }       -> returns a booking's confirm_token + status (for decline)
+//   wallet-credit  { email, amount }    -> test balance for an @bldtest.co account; returns its login code
 //   cleanup        { emailLike }        -> deletes all test data for emails matching a prefix
 // The legacy phone create-user path is kept for older callers.
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { loginCode } from '../_shared/codes.ts';
 
 const admin = () => createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
@@ -55,6 +57,23 @@ Deno.serve(async (req) => {
     if (!id) return Response.json({ error: 'bookingId required' }, { status: 400 });
     const { data } = await db.from('bookings').select('confirm_token, status').eq('id', id).single();
     return Response.json({ ok: true, confirmToken: data?.confirm_token ?? null, status: data?.status ?? null });
+  }
+
+  if (action === 'wallet-credit') {
+    // Balance without a Stripe payment, so the E2E can book with nothing due. Test
+    // addresses only: it must not be a way to hand a real account free money.
+    const email = String(body.email ?? '').trim().toLowerCase();
+    const amount = Number(body.amount);
+    if (!/^[^\s@]+@bldtest\.co$/.test(email)) return Response.json({ error: 'test emails only' }, { status: 400 });
+    if (!Number.isInteger(amount) || amount < 1 || amount > 1000) return Response.json({ error: 'bad amount' }, { status: 400 });
+    await db.from('customers').upsert({ id: crypto.randomUUID(), email, name: 'E2E Tester' }, { onConflict: 'email', ignoreDuplicates: true });
+    const { data: c } = await db.from('customers').select('id').eq('email', email).single();
+    if (!c) return Response.json({ error: 'customer_failed' }, { status: 500 });
+    const { error } = await db.from('wallet_ledger').insert({
+      customer_id: c.id, delta: amount, reason: 'e2e credit', ref: `e2e:${crypto.randomUUID()}`,
+    });
+    if (error) return Response.json({ error: error.message }, { status: 500 });
+    return Response.json({ ok: true, code: await loginCode(db, c.id) });
   }
 
   if (action === 'cleanup') {
