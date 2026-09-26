@@ -49,6 +49,7 @@ function dayPlus(n) {
 }
 
 const cleanup = [];
+let OPEN = false; // app_config.admin_open: no login needed, wrong codes also get in
 
 async function main() {
   // 1. sign-in + overview
@@ -57,9 +58,11 @@ async function main() {
     assert(me.status === 200 && me.body.role === 'owner', `me: ${me.status} ${JSON.stringify(me.body)}`);
     const ov = await owner('overview');
     assert(ov.status === 200 && Array.isArray(ov.body.bookings) && typeof ov.body.stats?.awaiting === 'number', `overview: ${ov.status}`);
+    OPEN = (await admin('', 'me')).status === 200;
     const bad = await admin('STAFF-NOPE0-NOPE0', 'me');
-    assert(bad.status === 401, `wrong code must be 401, got ${bad.status}`);
-    pass('1. owner signs in; overview loads; a wrong code is refused (401)');
+    assert(OPEN ? bad.status === 200 : bad.status === 401, `wrong code: ${bad.status} (open mode ${OPEN})`);
+    pass(OPEN ? '1. owner signs in; overview loads; LOGIN IS OFF (admin_open) — anyone gets in'
+      : '1. owner signs in; overview loads; a wrong code is refused (401)');
   }
 
   // 2. calendar + closing a day → app sees it closed, book refuses it; cap 0 → full
@@ -113,8 +116,9 @@ async function main() {
 
     const rm = await owner('staff_remove', { id: add.body.id });
     const after = await mgr('me');
-    assert(rm.status === 200 && after.status === 401, `removed manager must be locked out, got ${after.status}`);
-    pass('3. manager: overview + calendar allowed; prices/refunds/staff/Stripe/members 403; removed → 401');
+    assert(rm.status === 200 && (OPEN ? after.body.role === 'owner' && after.body.open : after.status === 401),
+      `removed manager must lose their manager login, got ${after.status} ${JSON.stringify(after.body)}`);
+    pass(`3. manager: overview + calendar allowed; prices/refunds/staff/Stripe/members 403; removed → ${OPEN ? 'manager login gone' : '401'}`);
   }
 
   // 4. private report with a photo on the test customer

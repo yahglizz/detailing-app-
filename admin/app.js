@@ -221,7 +221,14 @@ function ActionButton({ run, class: cls = 'btn', children, confirmText, disabled
 // ═══════════════════════════ app ═══════════════════════════
 function App() {
   const [me, setMe] = useState(null);
-  const [phase, setPhase] = useState(staffCode ? 'checking' : 'out');
+  const [phase, setPhase] = useState('checking');
+
+  // Always ask the server first: while the owner has the login switched off (admin_open)
+  // it lets everyone straight in, and the sign-in screen only shows once it's back on.
+  const check = useCallback(() => {
+    setPhase('checking');
+    api('me').then((m) => { setMe(m); setPhase('in'); }).catch((e) => setPhase(e.status === 401 ? 'out' : 'offline'));
+  }, []);
 
   const signOut = useCallback(() => {
     staffCode = '';
@@ -230,14 +237,9 @@ function App() {
     setPhase('out');
   }, []);
 
-  const check = useCallback(() => {
-    setPhase('checking');
-    api('me').then((m) => { setMe(m); setPhase('in'); }).catch((e) => setPhase(e.status === 401 ? 'out' : 'offline'));
-  }, []);
-
   useEffect(() => {
     onSignedOut = signOut;
-    if (staffCode) check();
+    check();
   }, []);
 
   let body;
@@ -350,7 +352,7 @@ function Shell({ me, signOut }) {
         <div class="avatar">${initials(me.name)}</div>
         <div><b>${me.name}</b><small>${me.role}</small></div>
         <button class="icon-btn" title="Change theme" aria-label="Change theme" onClick=${cycleTheme}><${Icon} name="moon" size=${18} /></button>
-        <button class="icon-btn" title="Sign out" aria-label="Sign out" onClick=${signOut}><${Icon} name="logout" size=${18} /></button>
+        ${!me.open && html`<button class="icon-btn" title="Sign out" aria-label="Sign out" onClick=${signOut}><${Icon} name="logout" size=${18} /></button>`}
       </div>
     </aside>
     ${menu && html`<div class="scrim" style="z-index:45" onClick=${() => setMenu(false)}></div>`}
@@ -397,6 +399,8 @@ function Bookings({ ov, me, reload }) {
   const refresh = async () => { setSpin(true); await reload(); setSpin(false); };
 
   return html`
+    ${me.open && html`<div class="banner rise"><${Icon} name="lock" />
+      <div><b>Login is off.</b> Anyone with this link can use the dashboard. Turn it back on before launch.</div></div>`}
     <${Head} eyebrow="A good day at BLD" title=${html`${greet()}, <em>${first}</em>.`}
       lede="Every car on the schedule, and what needs you next." />
     ${stats.awaiting > 0 && html`<div class="banner rise" style="--i:1"><${Icon} name="clock" />
@@ -976,10 +980,10 @@ function Settings({ me, signOut }) {
       <${Team} me=${me} />
       <${StripeCard} />
     </div>
-    <section class="card rise" style="--i:4;margin-top:20px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+    ${!me.open && html`<section class="card rise" style="--i:4;margin-top:20px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
       <div><b>Signed in as ${me.name}</b><div class="muted small">Sign out on shared devices.</div></div>
       <button class="btn" onClick=${signOut}><${Icon} name="logout" size=${18} /> Sign out</button>
-    </section>`;
+    </section>`}`;
 }
 
 function Team({ me }) {

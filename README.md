@@ -40,7 +40,10 @@ Vercel project, `brotherly-love-detailing`; deploy with `vercel deploy --prod` f
 - **Leads:** every instant quote and quote request from the website.
 - **Owner only:** Members, Pricing (edits flow to the app, the website and Stripe at once),
   and Settings (team codes, Stripe).
-- **Signing in:** each person has a personal staff code (Settings → Team; shown once).
+- **Login is OFF for now (pre-launch).** Anyone with the link gets in as the owner and the
+  dashboard shows a reminder. Turn it back on before launch — no redeploy:
+  `update app_config set value = 'false', updated_at = now() where key = 'admin_open';`
+- **Signing in (once login is on):** each person has a personal staff code (Settings → Team; shown once).
   The owner's first sign-in uses the owner key:
   `select value from app_config where key='owner_admin_token';` — then add yourself a
   personal code and use that. Managers can't touch prices, refunds, members, team or Stripe.

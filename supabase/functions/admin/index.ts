@@ -1,7 +1,7 @@
 // The owner / management dashboard's API (the dashboard itself is a static page on
 // Vercel — Supabase serves HTML from functions as text/plain, so no pages live here).
 //
-// POST {action, ...} with header x-staff-code:
+// POST {action, ...} with header x-staff-code (not needed while admin_open is on, below):
 //   - a staff member's personal code (only its sha256 is stored), or
 //   - the owner master key, app_config.owner_admin_token (scripts use this too).
 // Wrong codes share the member-code rate limit (code_attempts). Every action is checked
@@ -33,7 +33,7 @@ const result = (r: ActionResult) =>
 
 // deno-lint-ignore no-explicit-any
 type Obj = Record<string, any>;
-type Staff = { id: string | null; name: string; role: Role };
+type Staff = { id: string | null; name: string; role: Role; open?: boolean };
 
 const TIERS: Tier[] = ['bronze', 'silver', 'gold'];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -61,10 +61,21 @@ function staffCode(): string {
   return `STAFF-${s.slice(0, 5)}-${s.slice(5)}`;
 }
 
+// Pre-launch switch (owner's call): app_config.admin_open = 'true' lets anyone in as the
+// owner with no code. Turn the login back on before launch:
+//   update app_config set value = 'false' where key = 'admin_open';
+const OPEN_OWNER: Staff = { id: null, name: 'Owner', role: 'owner', open: true };
+async function isOpen(): Promise<boolean> {
+  const { data } = await db.from('app_config').select('value').eq('key', 'admin_open').maybeSingle();
+  return data?.value === 'true';
+}
+
 async function signIn(req: Request): Promise<Staff | 'rate_limited' | null> {
   const ip = clientIp(req);
-  if (await rateLimited(db, ip)) return 'rate_limited';
   const code = (req.headers.get('x-staff-code') ?? '').trim();
+  const open = await isOpen();
+  if (open && !code) return OPEN_OWNER;
+  if (await rateLimited(db, ip)) return open ? OPEN_OWNER : 'rate_limited';
   if (code.length >= 8 && code.length <= 128) {
     const { data: s } = await db.from('staff').select('id, name, role')
       .eq('code_hash', await sha256(code.toUpperCase())).eq('active', true).maybeSingle();
@@ -77,6 +88,7 @@ async function signIn(req: Request): Promise<Staff | 'rate_limited' | null> {
     // Hash both sides so the comparison time says nothing about the key.
     if (token && (await sha256(code)) === (await sha256(token))) return { id: null, name: 'Owner', role: 'owner' };
   }
+  if (open) return OPEN_OWNER;
   await recordMiss(db, ip);
   return null;
 }
@@ -125,7 +137,7 @@ function shape(b: Obj) {
 type Handler = (body: Obj, me: Staff) => Promise<Response>;
 
 const handlers: Record<string, Handler> = {
-  me: async (_b, me) => json({ id: me.id, name: me.name, role: me.role }),
+  me: async (_b, me) => json({ id: me.id, name: me.name, role: me.role, open: !!me.open }),
 
   overview: async (_b, me) => {
     const today = todayISO();
@@ -140,7 +152,7 @@ const handlers: Record<string, Handler> = {
     const bookings = (rows ?? []).map(shape);
     const open = (s: string) => s === 'requested' || s === 'confirmed';
     return json({
-      me: { id: me.id, name: me.name, role: me.role }, today, newLeads: newLeads ?? 0, bookings,
+      me: { id: me.id, name: me.name, role: me.role, open: !!me.open }, today, newLeads: newLeads ?? 0, bookings,
       stats: {
         today: bookings.filter((b) => b.day === today && b.status !== 'refunded').length,
         upcoming: bookings.filter((b) => b.day >= today && open(b.status)).length,
