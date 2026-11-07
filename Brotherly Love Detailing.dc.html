@@ -1,587 +1,574 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brotherly Love Ministry Detailing</title>
 <script src="./support.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/ui/buttons.css">
 <style>
-/* ===== Mobile optimization (<=768px). Overrides target the inline styles
-   used throughout the page; !important wins because inline styles here
-   carry no !important of their own. ===== */
-/* NOTE: the .dc renderer re-emits inline styles as "prop: value" (colon+space,
-   comma+space), so selectors below match that normalized form, not the source. */
-@media (max-width: 768px) {
-  /* Nav: drop the desktop link row, tighten padding + quote button */
-  [style*="gap: 30px"][style*="text-transform: uppercase"] { display: none !important; }
-  nav[style] { padding: 14px 18px !important; gap: 12px !important; }
-  [style*="padding: 13px 22px"] { padding: 11px 15px !important; font-size: 12px !important; }
+/* Obsidian + one violet accent. Tokens come from assets/ui/buttons.css (:root). */
+*{box-sizing:border-box;margin:0;padding:0}
+html{background:var(--bg)}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+body{background:var(--bg);color:var(--muted);font:400 16px/1.5 'Hanken Grotesk',sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:var(--violet);text-decoration:none}
+img,video{display:block;max-width:100%}
+::selection{background:var(--violet-deep);color:#fff}
+:focus-visible{outline:2px solid var(--violet);outline-offset:2px}
+h1,h2,h3{font-family:'League Spartan',sans-serif;color:var(--text);letter-spacing:-.01em;line-height:1.02}
+h2{font-size:clamp(32px,5vw,48px);font-weight:800}
+h3{font-size:20px;font-weight:700}
+ul,ol{list-style:none}
+fieldset{border:0;min-width:0}
+.i{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.i-fill{fill:currentColor}
+.i-flip{transform:scaleX(-1)}
+/* Kit primary hover (#A855F7) is 3.96:1 with white text; this keeps AA. */
+.btn-primary:hover:not(:disabled):not([aria-busy=true]){background:#8B3FE0}
+.btn .i{width:20px;height:20px}
+.wrap{max-width:1200px;margin:0 auto;padding:0 32px}
+.sec{padding:112px 0;border-top:1px solid var(--line)}
+.sec-alt{background:#0D0C10}
+.sec-head{margin-bottom:48px;max-width:640px}
+.sec-head.center{margin-inline:auto;text-align:center}
+.eyebrow{font:700 12px/1 'Hanken Grotesk',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:var(--violet);margin-bottom:16px}
+.lede{font-size:17px;color:var(--muted);margin-top:16px}
 
-  /* Section / container padding — reclaim horizontal space */
-  [style*="padding: 96px 32px"] { padding: 56px 20px !important; }
-  [style*="padding: 56px 32px 40px"] { padding: 40px 20px 28px !important; }
-  [style*="padding: 22px 32px"] { padding: 18px 20px !important; }
-  [style*="padding: 44px 32px 52px"] { padding: 28px 20px 36px !important; }
+/* Promo bar */
+.promo{display:flex;justify-content:center;align-items:center;gap:6px 14px;flex-wrap:wrap;background:var(--violet-deep);color:#fff;font:600 14px/1.3 'Hanken Grotesk',sans-serif;padding:8px 16px;text-align:center;position:relative;z-index:300}
+.promo a{color:#fff;display:inline-flex;align-items:center;gap:6px;min-height:44px;text-decoration:underline;text-underline-offset:3px}
+.promo .i{width:16px;height:16px}
 
-  /* Collapse every multi-column grid to a single column */
-  [style*="grid-template-columns: repeat(3, 1fr)"],
-  [style*="grid-template-columns: 1fr 1.1fr"],
-  [style*="grid-template-columns: 1.4fr 1fr 1fr"],
-  [style*="grid-template-columns: 1fr auto"],
-  [style*="grid-template-columns: 1fr 1fr"] { grid-template-columns: 1fr !important; }
+/* Header */
+.hdr{position:sticky;top:0;z-index:100;background:rgba(8,8,11,.86);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+.hdr nav{max-width:1200px;margin:0 auto;padding:12px 32px;display:flex;align-items:center;justify-content:space-between;gap:24px}
+.brand{display:flex;align-items:center;gap:12px;color:var(--text);min-height:44px}
+.brand img{height:44px;width:auto}
+.brand b{font:800 15px/1 'League Spartan',sans-serif;letter-spacing:.06em}
+.brand small{display:block;font:500 10px/1 'Hanken Grotesk',sans-serif;letter-spacing:.24em;color:var(--muted);margin-top:4px}
+.nav-links{display:flex;gap:4px}
+.nav-links a{color:var(--muted);font-weight:600;font-size:14px;padding:0 12px;min-height:44px;display:inline-flex;align-items:center;border-radius:8px;transition:color 160ms ease}
+.nav-links a:hover{color:var(--text)}
 
-  /* Membership CTA card: shrink its oversized inner padding */
-  [style*="rgba(112, 40, 201, 0.22)"] { padding: 26px !important; }
+/* Hero */
+.hero{position:relative;overflow:hidden;isolation:isolate}
+.hero-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:-2}
+.hero-shade{position:absolute;inset:0;z-index:-1;background:linear-gradient(90deg,rgba(8,8,11,.95) 0%,rgba(8,8,11,.75) 40%,rgba(8,8,11,.25) 75%),linear-gradient(180deg,transparent 55%,rgba(8,8,11,.9) 100%)}
+.hero-in{min-height:640px;display:flex;flex-direction:column;justify-content:center;gap:40px;padding-top:64px;padding-bottom:64px}
+.hero-logo{width:min(260px,60vw);height:auto}
+.hero-copy{max-width:600px}
+.hero .tag{gap:8px;margin-bottom:20px;background:rgba(20,18,23,.7);color:var(--text)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+.h1-pre{display:block;font-size:22px;font-weight:600;color:var(--muted);margin-bottom:8px;letter-spacing:0}
+h1{font-size:clamp(40px,6.4vw,68px);font-weight:800}
+h1 em{font-style:normal;color:var(--violet)}
+.cta-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:32px}
+.trust{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line);background:rgba(13,12,16,.85);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.trust li{display:flex;align-items:center;justify-content:center;gap:10px;padding:20px 16px;color:var(--text);font-weight:600;font-size:14px;border-left:1px solid var(--line)}
+.trust li:first-child{border-left:0}
+.trust .i{color:var(--violet)}
 
-  /* Headings scale down so they don't blow past the viewport */
-  [style*="font-size: 52px"] { font-size: 33px !important; }
-  [style*="font-size: 46px"] { font-size: 30px !important; }
-  [style*="font-size: 26px"] { font-size: 18px !important; }
+/* Load reveal: one staggered rise, hero only */
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.rv{animation:rise .7s cubic-bezier(.2,.7,.2,1) both}
+.rv1{animation-delay:.05s}.rv2{animation-delay:.15s}.rv3{animation-delay:.25s}.rv4{animation-delay:.35s}.rv5{animation-delay:.5s}
 
-  /* Hero: let it size to content, trim the floating logo */
-  [style*="min-height: 600px"] { min-height: auto !important; }
-  [style*="max-width: 380px"] { max-width: 250px !important; }
+/* App */
+.app-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:64px;align-items:center}
+.steps{display:grid;gap:12px;margin:32px 0}
+.steps li{display:flex;align-items:center;gap:14px;color:var(--text);font-weight:600}
+.ic{display:grid;place-items:center;width:44px;height:44px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--violet);flex:none}
+.app-phone{max-width:320px;width:100%;margin:0 auto}
+.app-phone video{width:100%;height:auto;border-radius:28px;border:1px solid var(--line)}
+
+/* Cards (shared) */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;transition:border-color 200ms ease,transform 200ms ease}
+.card:hover{border-color:#5a5263}
+@media (hover:hover) and (prefers-reduced-motion:no-preference){.card:hover{transform:translateY(-2px)}}
+
+/* Services */
+.ribbon{display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:0 14px;border:1px solid var(--violet-deep);border-radius:999px;background:#1c1226;color:var(--text);font:600 13px/1 'Hanken Grotesk',sans-serif}
+.ribbon .i{width:16px;height:16px;color:var(--violet)}
+#bld-ribbon-services{margin:0 0 24px}
+#bld-ribbon-packages{text-align:center;margin:0 0 20px}
+.sv-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.sv-card{overflow:hidden;display:flex;flex-direction:column}
+.sv-card img{width:100%;aspect-ratio:16/10;object-fit:cover;border-bottom:1px solid var(--line)}
+.sv-body{padding:20px;display:flex;flex-direction:column;gap:6px;flex:1}
+.sv-body p{font-size:14px}
+.sv-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:auto;padding-top:16px}
+.sv-price{font-size:13px}
+.sv-amt{font:700 26px/1 'League Spartan',sans-serif;color:var(--text);margin-left:4px}
+.sv-book .lbl-added{display:none}
+.sv-book.is-added{border-color:var(--ok);color:var(--ok)}
+.sv-book.is-added .lbl-add{display:none}
+.sv-book.is-added .lbl-added{display:inline-flex;align-items:center;gap:8px}
+.lbl-add{display:inline-flex;align-items:center;gap:8px}
+.sv-bar{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-top:24px;padding:16px 16px 16px 20px;border:1px solid var(--line);border-radius:10px;background:#0D0C10}
+.sv-bar p{display:flex;align-items:center;gap:10px;font-size:14px}
+.sv-bar p .i{color:var(--violet)}
+.count{display:inline-grid;place-items:center;min-width:24px;height:24px;padding:0 6px;border-radius:999px;background:#fff;color:var(--violet-deep);font-size:13px;font-weight:700}
+.count::after{content:attr(data-n)}
+
+/* Packages */
+.pk-toggle{display:flex;justify-content:center;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:40px}
+.pk-save{transition:opacity 200ms ease}
+.pk-save.is-off{opacity:0}
+.pk-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;align-items:stretch}
+.pk-card{padding:28px;display:flex;flex-direction:column;gap:8px;position:relative}
+.pk-card.is-pop{border-color:var(--violet-deep);background:#17121d}
+.pk-pop{align-self:flex-start;gap:6px;color:var(--text);border-color:var(--violet-deep)}
+.pk-pop .i{width:14px;height:14px;color:var(--violet)}
+.pk-card > p{font-size:14px}
+.pk-price{display:flex;align-items:baseline;gap:8px;margin:12px 0 4px}
+.pk-amt{font:800 44px/1 'League Spartan',sans-serif;color:var(--text)}
+.pk-unit{font-size:13px}
+.feats{display:grid;gap:10px;margin:16px 0 24px;flex:1}
+.feats li{display:flex;gap:10px;align-items:flex-start;font-size:14px;color:var(--text)}
+.feats .i{width:18px;height:18px;color:var(--violet);margin-top:1px}
+.pk-card .btn{width:100%}
+.mb{margin-top:16px;padding:32px;display:grid;grid-template-columns:.8fr 1.2fr;gap:32px;align-items:center}
+.mb h3{font-size:28px;font-weight:800}
+.perks{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+.perks li{display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:0 12px;border:1px solid var(--line);border-radius:999px;font-size:13px;font-weight:600;color:var(--text)}
+.perks .i{width:16px;height:16px;color:var(--violet)}
+.tiers{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.tier{display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px;padding:20px 16px;border:1px solid var(--line);border-radius:10px;background:#0D0C10}
+.tier img{width:84px;height:84px;mix-blend-mode:lighten;margin-bottom:8px}
+.tier-name{font:700 12px/1 'Hanken Grotesk',sans-serif;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+.tier-price{font:800 30px/1.1 'League Spartan',sans-serif;color:var(--text)}
+.tier-price small{font:500 13px/1 'Hanken Grotesk',sans-serif;color:var(--muted)}
+.tier-inc{font-size:13px;margin-bottom:12px}
+.tier .btn{width:100%}
+
+/* Gallery */
+.row-head{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;max-width:none}
+.reel-nav{display:flex;gap:8px}
+.reels{display:flex;gap:16px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;padding-bottom:4px}
+.reels::-webkit-scrollbar{display:none}
+.reel{position:relative;flex:none;width:260px;aspect-ratio:9/16;scroll-snap-align:start;border-radius:10px;overflow:hidden;border:1px solid var(--line);background:var(--surface)}
+.reel video{width:100%;height:100%;object-fit:cover}
+.reel figcaption{position:absolute;left:0;right:0;bottom:0;padding:40px 16px 16px;background:linear-gradient(180deg,transparent,rgba(8,8,11,.9));color:var(--text);font-weight:600;font-size:14px}
+
+/* Reviews */
+.rv-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.review{padding:28px;display:flex;flex-direction:column;gap:20px}
+.stars{display:flex;gap:4px;color:var(--violet)}
+.stars .i{width:18px;height:18px}
+.review blockquote{font-size:18px;line-height:1.45;color:var(--text);flex:1}
+.review figcaption b{display:block;color:var(--text);font-weight:700}
+.review figcaption span{font-size:13px}
+
+/* Quote */
+.q-grid{display:grid;grid-template-columns:.9fr 1.1fr;gap:64px;align-items:start}
+.contact{display:flex;flex-wrap:wrap;gap:8px;margin-top:32px}
+.contact .tag{min-height:44px;gap:8px;padding:0 14px}
+.q-card{padding:32px;display:grid;gap:20px}
+.f-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.field label,legend{display:block;font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.field input,.field select,.field textarea{width:100%;min-height:48px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px 14px;color:var(--text);font:400 16px/1.3 'Hanken Grotesk',sans-serif;transition:border-color 160ms ease}
+.field textarea{resize:vertical}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--violet)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.seg-wide{display:flex}
+.seg-wide button{flex:1}
+.q-card > .btn-primary{width:100%}
+.q-err{color:var(--danger);font-size:14px;text-align:center}
+.q-res{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:20px}
+.q-meta{font-size:13px;letter-spacing:.08em;text-transform:uppercase}
+.q-now{font:800 44px/1 'League Spartan',sans-serif;color:var(--text)}
+.q-was{text-decoration:line-through;margin-left:10px}
+.q-off{color:var(--violet);font-weight:600;font-size:14px;margin-top:6px}
+.q-actions{gap:8px;margin-top:16px}
+.q-actions .btn{flex:1}
+.q-done{text-align:center;padding:8px 4px}
+.q-done h3{margin:12px 0 6px}
+.q-done p{font-size:15px;max-width:360px;margin:0 auto}
+.ok-mark{display:inline-grid;place-items:center;width:48px;height:48px;border-radius:50%;border:1px solid #235a40;color:var(--ok)}
+.fine{font-size:13px;text-align:center}
+
+/* Modal + panels */
+.modal{position:fixed;inset:0;z-index:1000;background:rgba(4,4,8,.8);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:16px}
+.modal-box{width:100%;max-width:520px;max-height:92vh;overflow-y:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:32px;position:relative}
+.modal-box h3{font-size:26px;margin-bottom:20px;padding-right:48px}
+.x{position:absolute;top:12px;right:12px}
+.stack{display:grid;gap:14px}
+.stack .btn-primary{width:100%;margin-top:6px}
+.promo-pop{display:none;position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:9999;width:calc(100% - 32px);max-width:400px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:24px;box-shadow:0 24px 60px rgba(0,0,0,.6)}
+.promo-pop h3{font-size:24px;margin:14px 0 6px;padding-right:44px}
+.promo-pop p{font-size:14px;margin-bottom:18px}
+.promo-pop .btn{width:100%}
+#sv-fab{position:fixed;right:16px;bottom:20px;z-index:9998;display:none;border-radius:999px;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+#sv-scrim{position:fixed;inset:0;z-index:10000;background:rgba(4,4,8,.75);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);display:none}
+.sv-panel{position:fixed;z-index:10001;background:#0D0C10;border:1px solid var(--line);color:var(--text);display:none;flex-direction:column}
+#sv-cart{top:0;right:0;bottom:0;width:min(420px,100%);border-width:0 0 0 1px}
+#sv-co{top:50%;left:50%;transform:translate(-50%,-50%);width:min(860px,calc(100% - 24px));max-height:calc(100% - 24px);border-radius:10px;overflow:auto}
+.sv-h{display:flex;justify-content:space-between;align-items:center;padding:14px 14px 14px 22px;border-bottom:1px solid var(--line);font:700 18px/1 'League Spartan',sans-serif}
+.sv-items{flex:1;overflow:auto;padding:4px 22px}
+.sv-it{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px 0;border-bottom:1px solid #24202a}
+.sv-it b{display:block;font-weight:600}
+.sv-it small{color:var(--muted);display:block;margin-bottom:8px}
+.sv-sum{padding:18px 22px;border-top:1px solid var(--line);background:#101014}
+.sv-row{display:flex;justify-content:space-between;gap:12px;margin:6px 0;color:var(--muted);font-size:14px}
+.sv-row.due{color:var(--text);font:700 18px/1.2 'League Spartan',sans-serif;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.sv-row.due span:last-child{color:var(--violet)}
+.sv-sum .btn,.sv-aside .btn{width:100%;margin-top:14px}
+.sv-empty{text-align:center;padding:56px 0;color:var(--muted)}
+.sv-co-grid{display:grid;grid-template-columns:1.2fr 1fr}
+.sv-form{padding:22px;display:grid;grid-template-columns:1fr 1fr;gap:14px;align-content:start}
+.sv-form .full{grid-column:1/-1}
+.sv-aside{padding:22px;background:#101014;border-left:1px solid var(--line)}
+.sv-note{font-size:13px;color:var(--muted);margin-top:12px;text-align:center}
+
+/* Footer */
+.ft{border-top:1px solid var(--line)}
+.ft-grid{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:40px;padding-top:56px;padding-bottom:40px}
+.ft-motto{margin-top:16px;font:600 13px/1.4 'Hanken Grotesk',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--violet)}
+.ft-col{display:flex;flex-direction:column;align-items:flex-start}
+.ft-col h3{font-size:13px;font-family:'Hanken Grotesk',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--text);margin-bottom:8px}
+.ft-col a,.ft-col button,.ft-col span{display:inline-flex;align-items:center;min-height:44px;color:var(--muted);font:400 15px/1.2 'Hanken Grotesk',sans-serif;background:none;border:0;cursor:pointer;padding:0;transition:color 160ms ease}
+.ft-col a:hover,.ft-col button:hover{color:var(--text)}
+.ft-col span{cursor:default}
+.ft-base{border-top:1px solid var(--line);padding-top:20px;padding-bottom:28px;font-size:13px}
+
+@media (max-width:900px){
+  .wrap{padding:0 20px}
+  .hdr nav{padding:10px 20px}
+  .nav-links{display:none}
+  .sec{padding:72px 0}
+  .hero-in{min-height:0;padding-top:48px;padding-bottom:48px}
+  .trust{grid-template-columns:1fr 1fr}
+  .trust li{justify-content:flex-start;padding:16px 20px}
+  .trust li:nth-child(3){border-left:0}
+  .trust li:nth-child(n+3){border-top:1px solid var(--line)}
+  .app-grid,.q-grid,.mb{grid-template-columns:1fr;gap:40px}
+  .sv-grid,.pk-grid,.rv-grid{grid-template-columns:1fr 1fr}
+  .ft-grid{grid-template-columns:1fr 1fr}
+  .ft-grid > :first-child{grid-column:1/-1}
+}
+@media (max-width:600px){
+  .hdr .brand{min-width:44px;justify-content:center}
+  .hdr .brand img{height:36px}
+  .hdr .brand span{display:none}
+  .sv-grid,.pk-grid,.rv-grid,.tiers,.f-row,.sv-form,.sv-co-grid,.ft-grid{grid-template-columns:1fr}
+  .sv-aside{border-left:0;border-top:1px solid var(--line)}
+  .cta-row .btn{flex:1}
+  .row-head{flex-direction:column;align-items:flex-start}
+  .reel{width:72vw}
+  .q-card,.mb,.modal-box{padding:20px}
+  .tier{flex-direction:row;flex-wrap:wrap;text-align:left;justify-content:space-between}
+  .tier img{width:56px;height:56px;margin:0}
+  .tier .btn{width:auto}
+}
+@media (prefers-reduced-motion:reduce){
+  .rv{animation:none}
+  .card,.pk-save,.nav-links a,.ft-col a,.field input{transition:none}
 }
 </style>
 </head>
 <body>
-<div id="bld-promo-banner" style="background:linear-gradient(90deg,#7028C9,#A855F7);color:#fff;text-align:center;font-family:'League Spartan',sans-serif;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;font-size:18px;padding:16px 20px;box-shadow:0 4px 18px rgba(112,40,201,.5);position:relative;z-index:300">
-  ✨ New customers get <span style="color:#F5B942">10% OFF</span> your first wash — <a href="#quote" style="color:#fff;text-decoration:underline">get your instant quote &rarr;</a>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M4 12h15m-6-6 6 6-6 6"/></symbol>
+  <symbol id="i-arrow-up-right" viewBox="0 0 24 24"><path d="M5 19 19 5M8 5h11v11"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="m13.5 2.5-8 11h6l-1 8 8-11h-6l1-8Z"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4m8-4v4M4 10h16M8 14h2m4 0h2m-8 3h2"/></symbol>
+  <symbol id="i-car" viewBox="0 0 24 24"><path d="m4 14 1.4-4.3A2.5 2.5 0 0 1 7.8 8h8.4a2.5 2.5 0 0 1 2.4 1.7L20 14v4H4v-4Z"/><path d="M4 14h16M7 18v2m10-2v2M7 15.5h1m8 0h1M7 8l1-2h8l1 2"/></symbol>
+  <symbol id="i-cart" viewBox="0 0 24 24"><path d="M3 4h2l2 10h10.5l2-7H6"/><circle cx="9" cy="19" r="1"/><circle cx="17" cy="19" r="1"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m4.5 12 5 5 10-10"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+  <symbol id="i-cross" viewBox="0 0 24 24"><path d="M12 3v18M7 8h10"/></symbol>
+  <symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 3C10 6.2 6.5 9.7 6.5 13a5.5 5.5 0 0 0 11 0C17.5 9.7 14 6.2 12 3Z"/><path d="M9 13.5a3 3 0 0 0 3 3"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 4v2"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="m4.5 7 7.5 6 7.5-6"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><path d="M7 3.5 4.5 5c-.8.5-.5 3.7 2.9 7.9 3.4 4.2 6.8 6.9 9.4 7.5l2.7-2.5-3.8-3-2.1 1.5a15 15 0 0 1-5.7-5.7l1.5-2.1L7 3.5Z"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z"/><circle cx="12" cy="10" r="2.5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4.5 6v5.2c0 4.5 2.9 7.8 7.5 9.8 4.6-2 7.5-5.3 7.5-9.8V6L12 3Z"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.8 5.8 6.4.9-4.6 4.5 1.1 6.3-5.7-3-5.7 3 1.1-6.3-4.6-4.5 6.4-.9L12 3Z"/></symbol>
+</svg>
+<div id="bld-promo-banner" class="promo">
+  <span>New customers save 10% on the first wash.</span>
+  <a href="#quote">Get your instant quote <svg class="i" aria-hidden="true"><use href="#i-arrow-right"/></svg></a>
 </div>
 <x-dc>
 <helmet>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&family=Great+Vibes&display=swap" rel="stylesheet">
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    html{scroll-behavior:smooth}
-    body{background:#08080B;color:#D5D7DC;font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased}
-    a{color:#A855F7;text-decoration:none}
-    a:hover{color:#C084FC}
-    ::selection{background:#7028C9;color:#fff}
-    @keyframes glowpulse{0%,100%{opacity:.55}50%{opacity:.9}}
-    @keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
-    @keyframes marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}
-    @keyframes badgeFloat{0%,100%{transform:translateY(0) rotate(-6deg)}50%{transform:translateY(-6px) rotate(6deg)}}
-    [data-reelrail]::-webkit-scrollbar{display:none}
-  </style>
   <script src="./image-slot.js"></script>
 </helmet>
 
-<div style="max-width:100%;overflow-x:hidden;background:#08080B">
+<div>
+
+  <div id="bld-promo-pop" class="promo-pop" role="dialog" aria-label="First wash offer">
+    <button id="bld-promo-close" type="button" class="btn btn-icon x" aria-label="Close"><svg class="i" aria-hidden="true"><use href="#i-close"></use></svg></button>
+    <span class="badge">New customers</span>
+    <h3>Save 10% on your first wash</h3>
+    <p>Instant price in seconds.</p>
+    <button id="bld-promo-cta" type="button" class="btn btn-primary btn-lg">Get my quote <svg class="i" aria-hidden="true"><use href="#i-arrow-right"></use></svg></button>
+  </div>
 
   <!-- NAV -->
-  <div id="bld-promo-pop" style="display:none;position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:9999;width:calc(100% - 32px);max-width:420px;background:#141217;border:1px solid #A855F7;border-radius:18px;box-shadow:0 24px 60px rgba(0,0,0,.6),0 0 0 1px rgba(168,85,247,.4);padding:24px 24px 22px;font-family:'Inter',sans-serif">
-    <button id="bld-promo-close" type="button" aria-label="Close" style="position:absolute;top:10px;right:14px;background:none;border:none;color:#A9A4AF;font-size:24px;line-height:1;cursor:pointer">&times;</button>
-    <div style="display:inline-flex;align-items:center;gap:7px;background:rgba(245,185,66,.14);border:1px solid #F5B942;border-radius:999px;padding:5px 12px;margin-bottom:12px"><span style="color:#F5B942;font-family:'League Spartan',sans-serif;font-weight:800;font-size:11px;letter-spacing:1px">LIMITED · NEW CUSTOMERS</span></div>
-    <div style="font-family:'League Spartan',sans-serif;font-weight:900;font-size:24px;color:#fff;letter-spacing:.5px;line-height:1.1">Save <span style="color:#F5B942">10%</span> on your first wash</div>
-    <p style="color:#A9A4AF;font-size:14px;line-height:1.5;margin:9px 0 16px">Get an instant price in seconds &mdash; accept and we&rsquo;ll lock in your discount.</p>
-    <button id="bld-promo-cta" type="button" style="width:100%;cursor:pointer;border:none;background:linear-gradient(135deg,#7028C9,#A855F7);color:#fff;font-family:'League Spartan',sans-serif;font-weight:800;letter-spacing:1px;text-transform:uppercase;font-size:15px;padding:15px;border-radius:12px;box-shadow:0 10px 26px rgba(112,40,201,.5)">Get my quote &rarr;</button>
-  </div>
-  <header style="position:sticky;top:0;z-index:100;background:rgba(8,8,11,0.82);backdrop-filter:blur(14px);border-bottom:1px solid #34303A">
-    <nav style="max-width:1240px;margin:0 auto;padding:16px 32px;display:flex;align-items:center;justify-content:space-between;gap:24px">
-      <a href="#top" style="display:flex;align-items:center;gap:12px;color:#fff">
-        <img src="assets/bld-logo-transparent.png" alt="Brotherly Love" style="height:52px;width:auto;display:block" />
-        <span style="font-family:'League Spartan',sans-serif;font-weight:800;letter-spacing:1px;font-size:15px;line-height:1;color:#fff">BROTHERLY LOVE<br><span style="font-weight:500;font-size:10px;letter-spacing:3px;color:#A9A4AF">MINISTRY DETAILING</span></span>
+  <header class="hdr">
+    <nav aria-label="Main">
+      <a href="#top" class="brand">
+        <img src="assets/bld-logo-transparent.png" alt="Brotherly Love" />
+        <span><b>BROTHERLY LOVE</b><small>MINISTRY DETAILING</small></span>
       </a>
-      <div style="display:flex;align-items:center;gap:30px;font-family:'League Spartan',sans-serif;font-weight:600;font-size:14px;letter-spacing:1px;text-transform:uppercase">
-        <a href="#services" style="color:#D5D7DC">Services</a>
-        <a href="#packages" style="color:#D5D7DC">Packages</a>
-        <a href="#gallery" style="color:#D5D7DC">Gallery</a>
-        <a href="#reviews" style="color:#D5D7DC">Reviews</a>
-        <a href="#quote" style="color:#D5D7DC">Contact</a>
+      <div class="nav-links">
+        <a href="#services">Services</a>
+        <a href="#packages">Packages</a>
+        <a href="#gallery">Gallery</a>
+        <a href="#reviews">Reviews</a>
+        <a href="#quote">Contact</a>
       </div>
-      <a onClick="{{ openModal }}" style="cursor:pointer;background:linear-gradient(135deg,#7028C9,#A855F7);color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:13px;padding:13px 22px;border-radius:10px;box-shadow:0 6px 20px rgba(112,40,201,.45)">Request a Quote</a>
+      <button type="button" class="btn btn-primary" onClick="{{ openModal }}">Get a Quote</button>
     </nav>
   </header>
 
   <!-- HERO -->
-  <section id="top" style="position:relative;padding:0;overflow:hidden;background:#08080B;display:flex;flex-direction:column">
-    <div style="position:absolute;inset:0;z-index:0"><video ref="{{ videoRef }}" src="assets/hero-video.mp4" autoplay muted loop playsinline style="width:100%;height:100%;object-fit:cover;display:block"></video></div>
-    <div style="position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(90deg,rgba(8,8,11,.94) 0%,rgba(8,8,11,.7) 34%,rgba(8,8,11,.2) 60%,rgba(8,8,11,.15) 100%),linear-gradient(180deg,rgba(8,8,11,.25) 0%,transparent 30%,rgba(8,8,11,.55) 100%)"></div>
-    <div style="position:relative;z-index:2;max-width:1240px;width:100%;margin:0 auto;padding:44px 32px 52px;min-height:600px;display:flex;flex-direction:column;justify-content:space-between;pointer-events:none">
-      <div style="pointer-events:auto;align-self:flex-start">
-        <img src="assets/bld-hero-logo.png" alt="Brotherly Love Ministry Detailing" style="width:100%;max-width:380px;height:auto;display:block;filter:drop-shadow(0 12px 44px rgba(168,85,247,.4));animation:floaty 6s ease-in-out infinite" />
-      </div>
-      <div style="pointer-events:auto;max-width:560px">
-        <div style="display:inline-flex;align-items:center;gap:9px;border:1px solid #34303A;background:rgba(20,18,23,.72);backdrop-filter:blur(6px);border-radius:999px;padding:6px 14px;margin-bottom:18px">
-          <span style="width:7px;height:7px;border-radius:50%;background:#32D583;box-shadow:0 0 8px #32D583"></span>
-          <span style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#D5D7DC;font-weight:600">Premium Mobile Detailing · Tri-State Area</span>
-        </div>
-        <h1 style="font-family:'League Spartan',sans-serif;font-weight:900;line-height:1;letter-spacing:-.5px;margin-bottom:16px;text-shadow:0 4px 30px rgba(0,0,0,.7)">
-          <span style="display:block;font-weight:600;font-size:26px;color:#D5D7DC;letter-spacing:0;margin-bottom:4px">Philadelphia's</span>
-          <span style="display:block;font-size:52px;color:#fff">Brotherly <span style="color:#A855F7;text-shadow:0 0 40px rgba(168,85,247,.7)">Standard</span> of Clean</span>
-        </h1>
-        <p style="font-size:16px;line-height:1.6;color:#D5D7DC;max-width:460px;margin-bottom:28px;text-shadow:0 2px 12px rgba(0,0,0,.7)">Premium mobile detailing built on faith, integrity, and unmatched attention to detail.</p>
-        <div style="display:flex;gap:14px;flex-wrap:wrap">
-          <a onClick="{{ openModal }}" style="cursor:pointer;background:linear-gradient(135deg,#7028C9,#A855F7);color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:15px;padding:16px 30px;border-radius:12px;box-shadow:0 10px 30px rgba(112,40,201,.5)">Book Your Detail</a>
-          <a href="#packages" style="border:1px solid #34303A;background:rgba(20,18,23,.72);backdrop-filter:blur(6px);color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:15px;padding:16px 30px;border-radius:12px">View Packages</a>
+  <section id="top" class="hero">
+    <video class="hero-bg" ref="{{ videoRef }}" src="assets/hero-video.mp4" autoplay muted loop playsinline aria-hidden="true"></video>
+    <div class="hero-shade"></div>
+    <div class="wrap hero-in">
+      <img class="hero-logo rv rv1" src="assets/bld-hero-logo.png" alt="Brotherly Love Ministry Detailing" />
+      <div class="hero-copy">
+        <span class="tag rv rv2"><span class="dot"></span>Mobile detailing · Tri-State</span>
+        <h1 class="rv rv2"><span class="h1-pre">Philadelphia's</span>Brotherly <em>Standard</em> of Clean</h1>
+        <p class="lede rv rv3">Premium mobile detailing built on faith and integrity.</p>
+        <div class="cta-row rv rv4">
+          <button type="button" class="btn btn-primary btn-lg" onClick="{{ openModal }}">Book Your Detail</button>
+          <a href="#packages" class="btn btn-secondary btn-lg">View Packages</a>
         </div>
       </div>
     </div>
-    <!-- SCROLLING TRUST BAR -->
-    <div style="position:relative;z-index:2;border-top:1px solid #34303A;border-bottom:1px solid #34303A;background:rgba(14,13,17,.78);backdrop-filter:blur(6px);overflow:hidden">
-      <div style="display:flex;width:max-content;animation:marquee 30s linear infinite">
-        <div style="display:flex;align-items:center;gap:52px;padding:20px 26px">
-          <div style="display:flex;align-items:center;gap:12px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="13" height="10" rx="1.5"/><path d="M14 9h4l3 3v4h-7z"/><circle cx="6" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/></svg><div><div style="font-family:'League Spartan',sans-serif;font-weight:700;color:#fff;font-size:14px;letter-spacing:.5px">MOBILE DETAILING</div><div style="font-size:12px;color:#A9A4AF">We come to you</div></div></div>
-          <div style="display:flex;align-items:center;gap:12px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M8 8h8"/></svg><div><div style="font-family:'League Spartan',sans-serif;font-weight:700;color:#fff;font-size:14px;letter-spacing:.5px">FAITH-DRIVEN</div><div style="font-size:12px;color:#A9A4AF">Honest service</div></div></div>
-          <div style="display:flex;align-items:center;gap:12px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 6.1L20 11l-6.1 1.9L12 19l-1.9-6.1L4 11l6.1-1.9z"/></svg><div><div style="font-family:'League Spartan',sans-serif;font-weight:700;color:#fff;font-size:14px;letter-spacing:.5px">PRO PRODUCTS</div><div style="font-size:12px;color:#A9A4AF">Premium results</div></div></div>
-          <div style="display:flex;align-items:center;gap:12px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l2.6 5.7 6.2.6-4.7 4.1 1.4 6.1L12 16.9 6.5 20.1l1.4-6.1L3.2 9.8l6.2-.6z"/></svg><div><div style="font-family:'League Spartan',sans-serif;font-weight:700;color:#fff;font-size:14px;letter-spacing:.5px">SATISFACTION</div><div style="font-size:12px;color:#A9A4AF">100% focused</div></div></div>
-          <div style="display:flex;align-items:center;gap:12px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4-3 7-7 8-4-1-7-4-7-8V6z"/></svg><div><div style="font-family:'League Spartan',sans-serif;font-weight:700;color:#fff;font-size:14px;letter-spacing:.5px">FULLY INSURED</div><div style="font-size:12px;color:#A9A4AF">Peace of mind</div></div></div>
-        </div>
-        <div style="display:flex;align-items:center;gap:52px;padding:20px 26px" aria-hidden="true">
-          <div style="display:flex;align-items:center;gap:12px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="13" height="10" rx="1.5"/><path d="M14 9h4l3 3v4h-7z"/><circle cx="6" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/></svg><div><div style="font-family:'League Spartan',sans-serif;font-weight:700;color:#fff;font-size:14px;letter-spacing:.5px">MOBILE DETAILING</div><div style="font-size:12px;color:#A9A4AF">We come to you</div></div></div>
-          <div style="display:flex;align-items:center;gap:12px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M8 8h8"/></svg><div><div style="font-family:'League Spartan',sans-serif;font-weight:700;color:#fff;font-size:14px;letter-spacing:.5px">FAITH-DRIVEN</div><div style="font-size:12px;color:#A9A4AF">Honest service</div></div></div>
-          <div style="display:flex;align-items:center;gap:12px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 6.1L20 11l-6.1 1.9L12 19l-1.9-6.1L4 11l6.1-1.9z"/></svg><div><div style="font-family:'League Spartan',sans-serif;font-weight:700;color:#fff;font-size:14px;letter-spacing:.5px">PRO PRODUCTS</div><div style="font-size:12px;color:#A9A4AF">Premium results</div></div></div>
-          <div style="display:flex;align-items:center;gap:12px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5l2.6 5.7 6.2.6-4.7 4.1 1.4 6.1L12 16.9 6.5 20.1l1.4-6.1L3.2 9.8l6.2-.6z"/></svg><div><div style="font-family:'League Spartan',sans-serif;font-weight:700;color:#fff;font-size:14px;letter-spacing:.5px">SATISFACTION</div><div style="font-size:12px;color:#A9A4AF">100% focused</div></div></div>
-          <div style="display:flex;align-items:center;gap:12px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4-3 7-7 8-4-1-7-4-7-8V6z"/></svg><div><div style="font-family:'League Spartan',sans-serif;font-weight:700;color:#fff;font-size:14px;letter-spacing:.5px">FULLY INSURED</div><div style="font-size:12px;color:#A9A4AF">Peace of mind</div></div></div>
-        </div>
-      </div>
-    </div>
+    <ul class="trust rv rv5">
+      <li><svg class="i" aria-hidden="true"><use href="#i-car"></use></svg>We come to you</li>
+      <li><svg class="i" aria-hidden="true"><use href="#i-cross"></use></svg>Faith-driven</li>
+      <li><svg class="i" aria-hidden="true"><use href="#i-drop"></use></svg>Pro products</li>
+      <li><svg class="i" aria-hidden="true"><use href="#i-shield"></use></svg>Fully insured</li>
+    </ul>
   </section>
 
   <!-- APP SHOWCASE -->
-  <section id="app" style="background:radial-gradient(90% 70% at 50% 0,rgba(112,40,201,.14),transparent 60%),#0E0D11;border-bottom:1px solid #34303A">
-    <div style="max-width:1240px;margin:0 auto;padding:96px 32px;display:flex;gap:60px;align-items:center;flex-wrap:wrap">
-      <div style="flex:1 1 400px;min-width:300px">
-        <div style="font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#A855F7;font-size:13px;margin-bottom:14px">Book From Your Phone</div>
-        <h2 style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:46px;color:#fff;letter-spacing:-.5px;line-height:1.02;margin-bottom:18px">FAST, AMAZING DETAILING —<br><span style="color:#A855F7;text-shadow:0 0 40px rgba(168,85,247,.6)">IN A COUPLE TAPS</span></h2>
-        <p style="color:#A9A4AF;font-size:17px;line-height:1.65;max-width:480px;margin-bottom:26px">Pick your vehicle, choose a service, lock your time with a small deposit — the whole booking takes about a minute. No calls, no back-and-forth. We come to you.</p>
-        <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:30px">
-          <div style="display:flex;align-items:center;gap:12px"><span style="flex-shrink:0;width:26px;height:26px;border-radius:8px;background:rgba(112,40,201,.16);border:1px solid #34303A;display:flex;align-items:center;justify-content:center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span><span style="color:#D5D7DC;font-size:16px">Build your detail with live pricing — no surprises</span></div>
-          <div style="display:flex;align-items:center;gap:12px"><span style="flex-shrink:0;width:26px;height:26px;border-radius:8px;background:rgba(112,40,201,.16);border:1px solid #34303A;display:flex;align-items:center;justify-content:center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span><span style="color:#D5D7DC;font-size:16px">Pick the day &amp; time that works for you</span></div>
-          <div style="display:flex;align-items:center;gap:12px"><span style="flex-shrink:0;width:26px;height:26px;border-radius:8px;background:rgba(112,40,201,.16);border:1px solid #34303A;display:flex;align-items:center;justify-content:center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span><span style="color:#D5D7DC;font-size:16px">A small deposit locks it in — pay the rest at the job</span></div>
-        </div>
-        <a onClick="{{ openModal }}" style="cursor:pointer;display:inline-block;background:linear-gradient(135deg,#7028C9,#A855F7);color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:15px;padding:16px 32px;border-radius:12px;box-shadow:0 10px 30px rgba(112,40,201,.5)">Book Your Detail</a>
+  <section id="app" class="sec sec-alt">
+    <div class="wrap app-grid">
+      <div>
+        <p class="eyebrow">Book from your phone</p>
+        <h2>Detailing in a couple taps</h2>
+        <ol class="steps">
+          <li><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-car"></use></svg></span>Pick your vehicle</li>
+          <li><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-calendar"></use></svg></span>Choose day and time</li>
+          <li><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-lock"></use></svg></span>Small deposit locks it in</li>
+        </ol>
+        <button type="button" class="btn btn-primary btn-lg" onClick="{{ openModal }}">Book Your Detail <svg class="i" aria-hidden="true"><use href="#i-arrow-right"></use></svg></button>
       </div>
-      <div style="flex:0 1 330px;width:100%;max-width:330px;margin:0 auto">
-        <video ref="{{ videoRef }}" src="assets/app-showcase.mp4" autoplay muted loop playsinline style="width:100%;height:auto;display:block;border-radius:30px;box-shadow:0 40px 100px rgba(0,0,0,.6),0 0 0 1px #34303A"></video>
+      <div class="app-phone">
+        <video ref="{{ videoRef }}" src="assets/app-showcase.mp4" autoplay muted loop playsinline aria-label="Booking app preview"></video>
       </div>
     </div>
   </section>
 
-  <!-- SERVICES (visual build — cart + checkout are UI only until payments are wired) -->
-  <style>
-    #services{max-width:1240px;margin:0 auto;padding:96px 32px;font-family:'Inter',sans-serif}
-    #services .sv-eyebrow{display:inline-block;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#A855F7;font-size:13px;border:1px solid #7028C9;border-radius:999px;padding:9px 22px;background:rgba(112,40,201,.10)}
-    #services .sv-top{position:relative;display:flex;align-items:center;min-height:380px;margin-bottom:28px}
-    #services .sv-copy{position:relative;z-index:2;max-width:560px}
-    #services h2{font-family:'League Spartan',sans-serif;font-weight:800;font-size:56px;color:#fff;letter-spacing:-.5px;line-height:.98;margin:22px 0 16px}
-    #services h2 em{font-style:normal;color:#A855F7;text-shadow:0 0 40px rgba(168,85,247,.55)}
-    #services .sv-sub{color:#A9A4AF;font-size:17px;border-left:3px solid #7028C9;padding-left:14px}
-    #services .sv-hero{position:absolute;right:-20px;top:0;bottom:0;width:62%;background:url(assets/services/svc-hero.jpg) center/cover no-repeat;border-radius:20px;-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 45%);mask-image:linear-gradient(90deg,transparent 0,#000 45%);opacity:.95}
-    #services .sv-promo{display:inline-flex;align-items:center;gap:14px;margin-bottom:28px;background:linear-gradient(90deg,rgba(112,40,201,.55),rgba(20,18,23,.9));border:1px solid #34303A;border-left:4px solid #A855F7;border-radius:14px;padding:14px 26px;min-width:min(100%,420px)}
-    #services .sv-promo b{display:block;font-family:'League Spartan',sans-serif;font-weight:800;letter-spacing:.5px;color:#fff;font-size:16px;text-transform:uppercase}
-    #services .sv-promo span{color:#A9A4AF;font-size:13px}
-    #services .sv-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
-    #services .sv-card{position:relative;display:grid;grid-template-columns:1.05fr .95fr;min-height:236px;overflow:hidden;border:1px solid #34303A;border-radius:18px;background:linear-gradient(135deg,#1a1424 0,#141217 55%,#0E0D11 100%);transition:transform .2s,border-color .2s,box-shadow .2s}
-    #services .sv-card:hover{transform:translateY(-3px);border-color:#7028C9;box-shadow:0 12px 40px rgba(112,40,201,.22)}
-    #services .sv-body{position:relative;z-index:2;padding:26px 8px 26px 26px;display:flex;flex-direction:column}
-    #services .sv-body h3{font-family:'League Spartan',sans-serif;font-weight:700;font-size:23px;color:#fff;margin:0 0 8px}
-    #services .sv-body p{color:#A9A4AF;font-size:14px;line-height:1.6;margin:0 0 auto}
-    #services .sv-price{margin:16px 0 12px;padding-top:10px;border-top:1px solid #34303A;font-family:'League Spartan',sans-serif;font-weight:700;color:#A9A4AF;font-size:15px}
-    #services .sv-price span{color:#fff;font-size:28px;margin-left:6px}
-    #services .sv-book{align-self:flex-start;cursor:pointer;border:none;color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:14px;letter-spacing:.4px;padding:11px 22px;border-radius:10px;background:linear-gradient(135deg,#7028C9,#A855F7);box-shadow:0 6px 20px rgba(112,40,201,.4);transition:transform .15s,box-shadow .15s}
-    #services .sv-book:hover{transform:translateY(-1px);box-shadow:0 8px 26px rgba(168,85,247,.55)}
-    #services .sv-book.sv-added{background:linear-gradient(135deg,#32D583,#12B76A);color:#04120B;box-shadow:0 6px 20px rgba(50,213,131,.3)}
-    #services .sv-img{background-size:cover;background-position:center;clip-path:polygon(16% 0,100% 0,100% 100%,0 100%)}
-    #services .sv-trust{display:grid;grid-template-columns:repeat(4,1fr);margin-top:28px;border:1px solid #34303A;border-radius:16px;background:#101014}
-    #services .sv-trust div{display:flex;align-items:center;gap:14px;padding:20px 22px;border-left:1px solid #34303A}
-    #services .sv-trust div:first-child{border-left:none}
-    #services .sv-trust b{display:block;color:#fff;font-family:'League Spartan',sans-serif;font-size:15px}
-    #services .sv-trust span{color:#A9A4AF;font-size:13px}
-    @media(max-width:900px){
-      #services{padding:64px 20px}
-      #services h2{font-size:38px}
-      #services .sv-top{min-height:0;flex-direction:column;align-items:stretch}
-      #services .sv-hero{position:relative;order:-1;width:100%;right:0;height:220px;margin-bottom:8px;-webkit-mask-image:linear-gradient(0deg,transparent 0,#000 40%);mask-image:linear-gradient(0deg,transparent 0,#000 40%)}
-      #services .sv-grid{grid-template-columns:1fr}
-      #services .sv-trust{grid-template-columns:1fr 1fr}
-      #services .sv-trust div:nth-child(3){border-left:none}
-      #services .sv-trust div:nth-child(n+3){border-top:1px solid #34303A}
-    }
-    @media(max-width:520px){#services .sv-card{grid-template-columns:1fr}#services .sv-img{order:-1;height:150px;clip-path:none}#services .sv-body{padding:20px}}
-
-    /* cart + checkout (visual only) */
-    #sv-fab{position:fixed;right:20px;bottom:24px;z-index:9998;display:none;align-items:center;gap:10px;cursor:pointer;border:none;color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:15px;padding:14px 20px;border-radius:999px;background:linear-gradient(135deg,#7028C9,#A855F7);box-shadow:0 10px 30px rgba(112,40,201,.55)}
-    #sv-fab i{font-style:normal;background:#fff;color:#7028C9;border-radius:999px;min-width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:13px}
-    #sv-scrim{position:fixed;inset:0;z-index:10000;background:rgba(4,4,8,.7);backdrop-filter:blur(4px);display:none}
-    .sv-panel{position:fixed;z-index:10001;background:#0E0D11;border:1px solid #34303A;color:#fff;font-family:'Inter',sans-serif;display:none;flex-direction:column}
-    #sv-cart{top:0;right:0;bottom:0;width:min(420px,100%);border-width:0 0 0 1px}
-    #sv-co{top:50%;left:50%;transform:translate(-50%,-50%);width:min(880px,calc(100% - 24px));max-height:calc(100% - 24px);border-radius:20px;overflow:auto}
-    .sv-h{display:flex;justify-content:space-between;align-items:center;padding:20px 22px;border-bottom:1px solid #34303A;font-family:'League Spartan',sans-serif;font-weight:800;font-size:20px;letter-spacing:.5px}
-    .sv-x{cursor:pointer;background:none;border:none;color:#A9A4AF;font-size:26px;line-height:1}
-    .sv-items{flex:1;overflow:auto;padding:8px 22px}
-    .sv-it{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px 0;border-bottom:1px solid #26222c}
-    .sv-it b{font-family:'League Spartan',sans-serif;font-size:16px;display:block}
-    .sv-it small{color:#A9A4AF}
-    .sv-qty{display:inline-flex;align-items:center;gap:10px;margin-top:8px;border:1px solid #34303A;border-radius:8px;padding:2px 8px}
-    .sv-qty button{cursor:pointer;background:none;border:none;color:#A855F7;font-size:18px;width:20px}
-    .sv-sum{padding:18px 22px;border-top:1px solid #34303A;background:#101014}
-    .sv-row{display:flex;justify-content:space-between;margin:6px 0;color:#A9A4AF;font-size:14px}
-    .sv-row.due{color:#fff;font-family:'League Spartan',sans-serif;font-weight:800;font-size:19px;margin-top:12px;padding-top:12px;border-top:1px solid #34303A}
-    .sv-row.due span:last-child{color:#A855F7}
-    .sv-cta{width:100%;margin-top:14px;cursor:pointer;border:none;color:#fff;font-family:'League Spartan',sans-serif;font-weight:800;font-size:16px;letter-spacing:.5px;padding:15px;border-radius:12px;background:linear-gradient(135deg,#7028C9,#A855F7);box-shadow:0 8px 26px rgba(112,40,201,.45)}
-    .sv-empty{color:#A9A4AF;text-align:center;padding:60px 0}
-    .sv-co-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:0}
-    .sv-form{padding:22px;display:grid;grid-template-columns:1fr 1fr;gap:14px;align-content:start}
-    .sv-form .full{grid-column:1/-1}
-    .sv-form label{display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600}
-    .sv-form input,.sv-form select{width:100%;box-sizing:border-box;background:#141217;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-size:15px;font-family:inherit}
-    .sv-form input:focus,.sv-form select:focus{outline:none;border-color:#A855F7}
-    .sv-aside{padding:22px;background:#101014;border-left:1px solid #34303A;border-radius:0 0 20px 0}
-    .sv-note{font-size:12px;color:#A9A4AF;line-height:1.5;margin-top:12px;text-align:center}
-    @media(max-width:760px){.sv-co-grid{grid-template-columns:1fr}.sv-aside{border-left:none;border-top:1px solid #34303A}.sv-form{grid-template-columns:1fr}}
-  </style>
-
-  <section id="services">
-    <div class="sv-top">
-      <div class="sv-copy">
-        <span class="sv-eyebrow">What We Do</span>
-        <h2>EVERYTHING<br><em>YOUR RIDE</em> NEEDS</h2>
-        <p class="sv-sub">Full-service detailing at honest, beginner-friendly prices.</p>
+  <!-- SERVICES (cart + checkout are UI only until payments are wired) -->
+  <section id="services" class="sec">
+    <div class="wrap">
+      <div class="sec-head">
+        <p class="eyebrow">Services</p>
+        <h2>Everything your ride needs</h2>
       </div>
-      <div class="sv-hero" role="img" aria-label="Detailed black sport sedan with purple lighting"></div>
-    </div>
-
-    <div class="sv-promo"><div><b>New customers save 10%</b><span>On your first wash</span></div></div>
-
-    <div class="sv-grid">
-      <div class="sv-card"><div class="sv-body"><h3>Exterior Wash &amp; Wax</h3><p>Hand wash, wheels, tires, and a protective wax for a deep, lasting shine.</p><div class="sv-price">Starting at <span id="bld-price-outside">$45</span></div><button type="button" class="sv-book" data-name="Exterior Wash &amp; Wax">Book Now →</button></div><div class="sv-img" style="background-image:url(assets/services/svc-exterior.jpg)"></div></div>
-      <div class="sv-card"><div class="sv-body"><h3>Interior Detail</h3><p>Vacuum, steam clean, wipe-down, and protect for a fresh, like-new cabin.</p><div class="sv-price">Starting at <span id="bld-price-inside">$60</span></div><button type="button" class="sv-book" data-name="Interior Detail">Book Now →</button></div><div class="sv-img" style="background-image:url(assets/services/svc-interior.jpg)"></div></div>
-      <div class="sv-card"><div class="sv-body"><h3>Full Detail</h3><p>Inside and out — the complete top-to-bottom treatment for your vehicle.</p><div class="sv-price">Starting at <span id="bld-price-full">$120</span></div><button type="button" class="sv-book" data-name="Full Detail">Book Now →</button></div><div class="sv-img" style="background-image:url(assets/services/svc-full.jpg)"></div></div>
-      <div class="sv-card"><div class="sv-body"><h3>Ceramic Coating</h3><p>Long-term paint protection with a slick, glossy, easy-to-clean finish.</p><div class="sv-price">Starting at <span id="bld-price-ceramic">$199</span></div><button type="button" class="sv-book" data-name="Ceramic Coating">Book Now →</button></div><div class="sv-img" style="background-image:url(assets/services/svc-ceramic.jpg)"></div></div>
-      <div class="sv-card"><div class="sv-body"><h3>Headlight Restoration</h3><p>Cut the haze and restore clarity for brighter, safer night driving.</p><div class="sv-price">Starting at <span>$40</span></div><button type="button" class="sv-book" data-name="Headlight Restoration">Book Now →</button></div><div class="sv-img" style="background-image:url(assets/services/svc-headlight.jpg)"></div></div>
-      <div class="sv-card"><div class="sv-body"><h3>Engine Bay &amp; Extras</h3><p>Engine bay cleaning, pet hair removal, odor treatment, and more add-ons.</p><div class="sv-price">Starting at <span>$35</span></div><button type="button" class="sv-book" data-name="Engine Bay &amp; Extras">Book Now →</button></div><div class="sv-img" style="background-image:url(assets/services/svc-engine.jpg)"></div></div>
-    </div>
-
-    <div class="sv-trust">
-      <div><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4-3 7-7 8-4-1-7-4-7-8V6z"/><path d="M9 12l2 2 4-4"/></svg><p style="margin:0"><b>Premium Quality</b><span>Detailing you can trust</span></p></div>
-      <div><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg><p style="margin:0"><b>Fast &amp; Reliable</b><span>Get back on the road</span></p></div>
-      <div><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16l1.6-4.4A2 2 0 0 1 7.5 10h9a2 2 0 0 1 1.9 1.6L20 16M4 16h16v3a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H7v1a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><circle cx="7.5" cy="16.5" r="1"/><circle cx="16.5" cy="16.5" r="1"/></svg><p style="margin:0"><b>Mobile Service</b><span>We come to you</span></p></div>
-      <div><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><p style="margin:0"><b>Satisfaction Guaranteed</b><span>Drive happy</span></p></div>
+      <div class="sv-grid">
+        <article class="card sv-card"><img src="assets/services/svc-exterior.jpg" alt="" loading="lazy" /><div class="sv-body"><h3>Exterior Wash &amp; Wax</h3><p>Hand wash, wheels, protective wax.</p><div class="sv-foot"><span class="sv-price">from<span class="sv-amt" id="bld-price-outside">$45</span></span><button type="button" class="btn btn-secondary btn-sm sv-book" data-name="Exterior Wash &amp; Wax"><span class="lbl-add"><svg class="i" aria-hidden="true"><use href="#i-plus"></use></svg>Add</span><span class="lbl-added"><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg>Added</span></button></div></div></article>
+        <article class="card sv-card"><img src="assets/services/svc-interior.jpg" alt="" loading="lazy" /><div class="sv-body"><h3>Interior Detail</h3><p>Vacuum, steam clean, protect.</p><div class="sv-foot"><span class="sv-price">from<span class="sv-amt" id="bld-price-inside">$60</span></span><button type="button" class="btn btn-secondary btn-sm sv-book" data-name="Interior Detail"><span class="lbl-add"><svg class="i" aria-hidden="true"><use href="#i-plus"></use></svg>Add</span><span class="lbl-added"><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg>Added</span></button></div></div></article>
+        <article class="card sv-card"><img src="assets/services/svc-full.jpg" alt="" loading="lazy" /><div class="sv-body"><h3>Full Detail</h3><p>Inside and out, top to bottom.</p><div class="sv-foot"><span class="sv-price">from<span class="sv-amt" id="bld-price-full">$120</span></span><button type="button" class="btn btn-secondary btn-sm sv-book" data-name="Full Detail"><span class="lbl-add"><svg class="i" aria-hidden="true"><use href="#i-plus"></use></svg>Add</span><span class="lbl-added"><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg>Added</span></button></div></div></article>
+        <article class="card sv-card"><img src="assets/services/svc-ceramic.jpg" alt="" loading="lazy" /><div class="sv-body"><h3>Ceramic Coating</h3><p>Long-term, glossy paint protection.</p><div class="sv-foot"><span class="sv-price">from<span class="sv-amt" id="bld-price-ceramic">$199</span></span><button type="button" class="btn btn-secondary btn-sm sv-book" data-name="Ceramic Coating"><span class="lbl-add"><svg class="i" aria-hidden="true"><use href="#i-plus"></use></svg>Add</span><span class="lbl-added"><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg>Added</span></button></div></div></article>
+        <article class="card sv-card"><img src="assets/services/svc-headlight.jpg" alt="" loading="lazy" /><div class="sv-body"><h3>Headlight Restoration</h3><p>Clear haze for brighter nights.</p><div class="sv-foot"><span class="sv-price">from<span class="sv-amt">$40</span></span><button type="button" class="btn btn-secondary btn-sm sv-book" data-name="Headlight Restoration"><span class="lbl-add"><svg class="i" aria-hidden="true"><use href="#i-plus"></use></svg>Add</span><span class="lbl-added"><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg>Added</span></button></div></div></article>
+        <article class="card sv-card"><img src="assets/services/svc-engine.jpg" alt="" loading="lazy" /><div class="sv-body"><h3>Engine Bay &amp; Extras</h3><p>Engine bay, pet hair, odor.</p><div class="sv-foot"><span class="sv-price">from<span class="sv-amt">$35</span></span><button type="button" class="btn btn-secondary btn-sm sv-book" data-name="Engine Bay &amp; Extras"><span class="lbl-add"><svg class="i" aria-hidden="true"><use href="#i-plus"></use></svg>Add</span><span class="lbl-added"><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg>Added</span></button></div></div></article>
+      </div>
+      <div class="sv-bar">
+        <p><svg class="i" aria-hidden="true"><use href="#i-lock"></use></svg>Deposit today. Rest at the detail.</p>
+        <button type="button" class="btn btn-primary btn-lg" data-sv-open><svg class="i" aria-hidden="true"><use href="#i-cart"></use></svg>View cart <span class="count" data-sv-count data-n="0"></span></button>
+      </div>
     </div>
   </section>
-
-  <!-- cart + checkout (visual only) -->
-  <button type="button" id="sv-fab" aria-label="Open cart">🛒 Cart <i id="sv-fab-n">0</i></button>
-  <div id="sv-scrim"></div>
-  <aside id="sv-cart" class="sv-panel" aria-label="Your cart">
-    <div class="sv-h"><span>YOUR CART</span><button type="button" class="sv-x" data-close aria-label="Close">×</button></div>
-    <div class="sv-items" id="sv-items"></div>
-    <div class="sv-sum">
-      <div class="sv-row"><span>Estimated total</span><span id="sv-c-total">$0</span></div>
-      <div class="sv-row due"><span>Deposit due now (25%)</span><span id="sv-c-dep">$0</span></div>
-      <button type="button" class="sv-cta" id="sv-checkout">CHECK OUT →</button>
-      <div class="sv-note">Only a deposit today. Pay the rest at the detail.</div>
-    </div>
-  </aside>
-  <div id="sv-co" class="sv-panel" role="dialog" aria-label="Checkout">
-    <div class="sv-h"><span>CHECKOUT</span><button type="button" class="sv-x" data-close aria-label="Close">×</button></div>
-    <div class="sv-co-grid">
-      <div class="sv-form">
-        <div><label>Name</label><input placeholder="Your name"></div>
-        <div><label>Phone</label><input type="tel" placeholder="(215) 555-0123"></div>
-        <div class="full"><label>Email</label><input type="email" placeholder="you@email.com"></div>
-        <div><label>Vehicle size</label><select><option>Sedan</option><option>SUV</option><option>Truck</option></select></div>
-        <div><label>Window</label><select><option>Morning</option><option>Afternoon</option></select></div>
-        <div><label>Date</label><input type="date" id="sv-date"></div>
-        <div><label>Zip</label><input placeholder="19104"></div>
-        <div class="full"><label>Address</label><input placeholder="Where should we come?"></div>
-      </div>
-      <div class="sv-aside">
-        <div id="sv-co-lines"></div>
-        <div class="sv-row"><span>Estimated total</span><span id="sv-o-total">$0</span></div>
-        <div class="sv-row"><span>Balance at the detail</span><span id="sv-o-bal">$0</span></div>
-        <div class="sv-row due"><span>Deposit today</span><span id="sv-o-dep">$0</span></div>
-        <button type="button" class="sv-cta" id="sv-pay">PAY DEPOSIT</button>
-        <div class="sv-note" id="sv-pay-note">Final price is confirmed by vehicle size. Card payment connects at launch.</div>
-      </div>
-    </div>
-  </div>
-  <script>
-  (function(){
-    var DEPOSIT=0.25; // ponytail: hardcoded 25%; read catalog.config.depositPercent when payments are wired
-    var cart=[];
-    var $=function(s){return document.querySelector(s)};
-    var money=function(n){return '$'+(n%1?n.toFixed(2):n)};
-    function priceOf(btn){var el=btn.closest('.sv-card').querySelector('.sv-price span');return parseFloat(el.textContent.replace(/[^0-9.]/g,''))||0}
-    function totals(){var t=0,n=0;cart.forEach(function(i){t+=i.price*i.qty;n+=i.qty});return{t:t,n:n,d:Math.round(t*DEPOSIT*100)/100}}
-    function render(){
-      var T=totals();
-      $('#sv-fab').style.display=T.n?'inline-flex':'none';
-      $('#sv-fab-n').textContent=T.n;
-      $('#sv-items').innerHTML=cart.length?cart.map(function(i,k){
-        return '<div class="sv-it"><div><b>'+i.name+'</b><small>from '+money(i.price)+'</small><div class="sv-qty"><button data-d="-1" data-k="'+k+'">−</button><span>'+i.qty+'</span><button data-d="1" data-k="'+k+'">+</button></div></div><b>'+money(i.price*i.qty)+'</b></div>';
-      }).join(''):'<div class="sv-empty">Your cart is empty.<br>Pick a service to start.</div>';
-      ['#sv-c-total','#sv-o-total'].forEach(function(s){$(s).textContent=money(T.t)});
-      ['#sv-c-dep','#sv-o-dep'].forEach(function(s){$(s).textContent=money(T.d)});
-      $('#sv-o-bal').textContent=money(T.t-T.d);
-      $('#sv-co-lines').innerHTML=cart.map(function(i){return '<div class="sv-row"><span>'+i.name+' × '+i.qty+'</span><span>'+money(i.price*i.qty)+'</span></div>'}).join('');
-      $('#sv-checkout').disabled=!T.n;
-    }
-    function open(id){$('#sv-scrim').style.display='block';$(id).style.display='flex'}
-    function closeAll(){$('#sv-scrim').style.display='none';$('#sv-cart').style.display='none';$('#sv-co').style.display='none'}
-    document.querySelectorAll('#services .sv-book').forEach(function(b){
-      b.addEventListener('click',function(){
-        var name=b.getAttribute('data-name'),f=cart.filter(function(i){return i.name===name})[0];
-        if(f)f.qty++;else cart.push({name:name,price:priceOf(b),qty:1});
-        b.classList.add('sv-added');b.textContent='Added ✓';
-        setTimeout(function(){b.classList.remove('sv-added');b.textContent='Book Now →'},1400);
-        render();open('#sv-cart');
-      });
-    });
-    $('#sv-items').addEventListener('click',function(e){
-      var k=e.target.getAttribute('data-k');if(k===null)return;
-      cart[k].qty+=parseInt(e.target.getAttribute('data-d'),10);
-      if(cart[k].qty<1)cart.splice(k,1);
-      render();
-    });
-    $('#sv-fab').addEventListener('click',function(){open('#sv-cart')});
-    $('#sv-scrim').addEventListener('click',closeAll);
-    document.querySelectorAll('[data-close]').forEach(function(x){x.addEventListener('click',closeAll)});
-    $('#sv-checkout').addEventListener('click',function(){if(!cart.length)return;$('#sv-cart').style.display='none';$('#sv-co').style.display='flex'});
-    $('#sv-pay').addEventListener('click',function(){$('#sv-pay-note').textContent='Visual preview only — payment is not connected yet.'});
-    var d=$('#sv-date');if(d)d.min=new Date().toISOString().slice(0,10);
-    render();
-  })();
-  </script>
 
   <!-- PACKAGES & MEMBERSHIP -->
-  <section id="packages" style="background:radial-gradient(90% 70% at 50% 0,rgba(112,40,201,.16),transparent 60%),#0E0D11;border-top:1px solid #34303A;border-bottom:1px solid #34303A">
-    <div style="max-width:1240px;margin:0 auto;padding:96px 32px">
-      <div style="text-align:center;margin-bottom:56px">
-        <div style="font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#A855F7;font-size:13px;margin-bottom:14px">Packages &amp; Pricing</div>
-        <h2 style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:46px;color:#fff;letter-spacing:-.5px;line-height:1">SIMPLE, HONEST PRICING</h2>
-        <p style="color:#A9A4AF;font-size:17px;margin-top:14px">Honest per-visit prices — flip to Member for exclusive savings on every wash.</p>
+  <section id="packages" class="sec sec-alt">
+    <div class="wrap">
+      <div class="sec-head center">
+        <p class="eyebrow">Packages</p>
+        <h2>Simple, honest pricing</h2>
       </div>
-      <div style="display:flex;justify-content:center;align-items:center;gap:14px;margin-bottom:44px;flex-wrap:wrap">
-        <span style="font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:.5px;text-transform:uppercase;font-size:14px;color:{{ oneTimeColor }}">One-Time</span>
-        <button onClick="{{ toggle }}" style="width:64px;height:34px;border-radius:999px;border:1px solid #34303A;background:#0E0D11;padding:4px;cursor:pointer;display:flex;align-items:center">
-          <span style="width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#7028C9,#A855F7);box-shadow:0 4px 12px rgba(112,40,201,.6);transform:translateX({{ knobX }});transition:transform .28s cubic-bezier(.76,0,.24,1)"></span>
-        </button>
-        <span style="font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:.5px;text-transform:uppercase;font-size:14px;color:{{ memberColor }}">Member</span>
-        <span style="font-family:'League Spartan',sans-serif;font-weight:700;font-size:12px;color:#32D583;background:rgba(50,213,131,.12);border:1px solid rgba(50,213,131,.4);border-radius:999px;padding:5px 12px;opacity:{{ saveOpacity }};transition:opacity .3s">Save up to 20%</span>
+      <div class="pk-toggle">
+        <div class="seg" role="group" aria-label="Pricing">
+          <button type="button" class="{{ oneTimeCls }}" aria-pressed="{{ oneTimePressed }}" onClick="{{ setOneTime }}">One-Time</button>
+          <button type="button" class="{{ memberCls }}" aria-pressed="{{ isMember }}" onClick="{{ setMember }}">Member</button>
+        </div>
+        <span class="{{ saveCls }}">Save up to 20%</span>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px;align-items:stretch">
+      <div class="pk-grid">
         <sc-for list="{{ plans }}" as="plan" hint-placeholder-count="3">
-          <div onMouseMove="{{ tiltMove }}" onMouseLeave="{{ tiltLeave }}" style="position:relative;background:{{ plan.cardBg }};border:{{ plan.cardBorder }};border-radius:20px;padding:34px 30px 30px;display:flex;flex-direction:column;box-shadow:{{ plan.cardShadow }};transition:transform .12s ease,box-shadow .25s ease;will-change:transform">
-            <div style="position:absolute;top:-18px;right:-12px;width:76px;height:76px;border-radius:50%;background:{{ plan.badgeBg }};border:2px solid #08080B;box-shadow:0 8px 22px rgba(0,0,0,.55),0 0 0 1px rgba(168,85,247,.35);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;animation:badgeFloat 5s ease-in-out infinite">
-              <div style="font-family:'League Spartan',sans-serif;font-weight:900;font-size:20px;line-height:1">$<span>{{ plan.priceStr }}</span></div>
-              <div style="font-size:9px;font-weight:700;letter-spacing:.5px;opacity:.9;text-transform:uppercase">{{ plan.unitShort }}</div>
-            </div>
-            <h3 style="font-family:'League Spartan',sans-serif;font-weight:900;font-size:24px;color:#fff;margin-bottom:8px;padding-right:60px">{{ plan.name }}</h3>
+          <article class="{{ plan.cardCls }}">
             <sc-if value="{{ plan.isPopular }}" hint-placeholder-val="{{ false }}">
-              <span style="align-self:flex-start;display:inline-block;background:linear-gradient(135deg,#7028C9,#A855F7);color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:10px;padding:5px 12px;border-radius:999px;margin-bottom:10px">★ Most Popular</span>
+              <span class="tag pk-pop"><svg class="i i-fill" aria-hidden="true"><use href="#i-star"></use></svg>Most Popular</span>
             </sc-if>
-            <p style="color:#A9A4AF;font-size:13px;line-height:1.5;margin-bottom:6px">{{ plan.tagline }}</p>
-            <p style="color:#A855F7;font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;margin-bottom:22px">{{ plan.unitLabel }}</p>
-            <div style="display:flex;flex-direction:column;gap:10px;flex:1;margin-bottom:26px">
-              <sc-for list="{{ plan.features }}" as="feat" hint-placeholder-count="5">
-                <div style="display:flex;align-items:center;gap:10px">
-                  <span style="flex:none;width:20px;height:20px;border-radius:6px;background:rgba(112,40,201,.18);border:1px solid #7028C9;display:flex;align-items:center;justify-content:center;color:#A855F7;font-size:11px;font-weight:800">✓</span>
-                  <span style="color:#D5D7DC;font-size:14px">{{ feat }}</span>
-                </div>
+            <h3>{{ plan.name }}</h3>
+            <p>{{ plan.tagline }}</p>
+            <div class="pk-price"><span class="pk-amt">${{ plan.priceStr }}</span><span class="pk-unit">{{ plan.unitLabel }}</span></div>
+            <ul class="feats">
+              <sc-for list="{{ plan.features }}" as="feat" hint-placeholder-count="4">
+                <li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg>{{ feat }}</li>
               </sc-for>
-            </div>
-            <a onClick="{{ openModal }}" style="cursor:pointer;text-align:center;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:14px;padding:15px;border-radius:12px;{{ plan.ctaStyle }}">Book This Wash</a>
-          </div>
+            </ul>
+            <button type="button" class="{{ plan.ctaCls }}" onClick="{{ openModal }}">Book This Wash</button>
+          </article>
         </sc-for>
       </div>
 
       <!-- MEMBERSHIP -->
-      <div style="margin-top:28px;background:linear-gradient(120deg,rgba(112,40,201,.22),rgba(20,18,23,.9));border:1px solid #7028C9;border-radius:20px;padding:44px;display:grid;grid-template-columns:1fr auto;gap:40px;align-items:center">
+      <div class="card mb">
         <div>
-          <div style="display:inline-block;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#A855F7;font-size:12px;border:1px solid #7028C9;border-radius:999px;padding:6px 14px;margin-bottom:16px">Membership</div>
-          <h3 style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:34px;color:#fff;margin-bottom:12px">THE BROTHERHOOD CLUB</h3>
-          <p style="color:#D5D7DC;font-size:15px;line-height:1.6;max-width:560px;margin-bottom:20px">Keep your vehicle spotless year-round. Members get scheduled washes every month, priority booking, and exclusive savings on every detail.</p>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:560px;font-size:14px;color:#D5D7DC">
-            <div>✓ Set number of washes each month</div>
-            <div>✓ Priority scheduling</div>
-            <div>✓ Member-only pricing on details</div>
-            <div>✓ Free upgrades &amp; add-ons</div>
-            <div>✓ Skip the line, book first</div>
-            <div>✓ Cancel anytime</div>
-          </div>
-          <div id="bld-tiers" style="display:flex;gap:14px;margin-top:18px;flex-wrap:wrap">
-            <div style="border:1px solid #CD7F32;border-radius:12px;padding:10px 16px"><span style="color:#CD7F32;font-family:'League Spartan',sans-serif;font-weight:700;font-size:12px;letter-spacing:1px">BRONZE</span><div style="color:#fff;font-family:'League Spartan',sans-serif;font-weight:900;font-size:20px">$<span id="bld-tier-bronze">79</span><span style="font-size:12px;color:#A9A4AF">/mo</span></div><div id="bld-tier-bronze-inc" style="color:#A9A4AF;font-size:12px">2 outside details</div><a id="bld-join-bronze" href="https://buy.stripe.com/00w4gAgbJ2pm4WF5MBgjC00" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:10px;background:#7028C9;color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:9px;border-radius:9px;text-decoration:none">Join Bronze</a></div>
-            <div style="border:1px solid #C0C0C0;border-radius:12px;padding:10px 16px"><span style="color:#C0C0C0;font-family:'League Spartan',sans-serif;font-weight:700;font-size:12px;letter-spacing:1px">SILVER</span><div style="color:#fff;font-family:'League Spartan',sans-serif;font-weight:900;font-size:20px">$<span id="bld-tier-silver">99</span><span style="font-size:12px;color:#A9A4AF">/mo</span></div><div id="bld-tier-silver-inc" style="color:#A9A4AF;font-size:12px">2 inside details</div><a id="bld-join-silver" href="https://buy.stripe.com/bJe9AU0cL2pm74N6QFgjC01" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:10px;background:#7028C9;color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:9px;border-radius:9px;text-decoration:none">Join Silver</a></div>
-            <div style="border:1px solid #F5B942;border-radius:12px;padding:10px 16px"><span style="color:#F5B942;font-family:'League Spartan',sans-serif;font-weight:700;font-size:12px;letter-spacing:1px">GOLD</span><div style="color:#fff;font-family:'League Spartan',sans-serif;font-weight:900;font-size:20px">$<span id="bld-tier-gold">199</span><span style="font-size:12px;color:#A9A4AF">/mo</span></div><div id="bld-tier-gold-inc" style="color:#A9A4AF;font-size:12px">2 full details</div><a id="bld-join-gold" href="https://buy.stripe.com/eVqdRa4t10he1Kta2RgjC02" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:10px;background:#7028C9;color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:9px;border-radius:9px;text-decoration:none">Join Gold</a></div>
-          </div>
+          <p class="eyebrow">Membership</p>
+          <h3>The Brotherhood Club</h3>
+          <ul class="perks">
+            <li><svg class="i" aria-hidden="true"><use href="#i-calendar"></use></svg>Monthly washes</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-clock"></use></svg>Priority booking</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-star"></use></svg>Member pricing</li>
+            <li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg>Cancel anytime</li>
+          </ul>
         </div>
-        <div style="text-align:center;background:#0E0D11;border:1px solid #34303A;border-radius:16px;padding:32px 40px">
-          <div style="font-family:'League Spartan',sans-serif;font-weight:700;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#A9A4AF">From</div>
-          <div style="font-family:'League Spartan',sans-serif;font-weight:900;font-size:52px;color:#A855F7;line-height:1">$49</div>
-          <div style="color:#A9A4AF;font-size:13px;margin-bottom:20px">/ month</div>
-          <a onClick="{{ openModal }}" style="cursor:pointer;display:block;background:linear-gradient(135deg,#7028C9,#A855F7);color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:14px;padding:15px 28px;border-radius:12px;box-shadow:0 10px 24px rgba(112,40,201,.5)">Join the Club</a>
+        <div id="bld-tiers" class="tiers">
+          <div class="tier"><img src="assets/ui/tiers/web/bronze.jpg" alt="" width="84" height="84" loading="lazy" /><div><span class="tier-name">Bronze</span><div class="tier-price">$<span id="bld-tier-bronze">79</span><small>/mo</small></div><div id="bld-tier-bronze-inc" class="tier-inc">2 outside details</div></div><a id="bld-join-bronze" class="btn btn-secondary btn-sm" href="https://buy.stripe.com/00w4gAgbJ2pm4WF5MBgjC00" target="_blank" rel="noopener">Join Bronze <svg class="i" aria-hidden="true"><use href="#i-arrow-up-right"></use></svg></a></div>
+          <div class="tier"><img src="assets/ui/tiers/web/silver.jpg" alt="" width="84" height="84" loading="lazy" /><div><span class="tier-name">Silver</span><div class="tier-price">$<span id="bld-tier-silver">99</span><small>/mo</small></div><div id="bld-tier-silver-inc" class="tier-inc">2 inside details</div></div><a id="bld-join-silver" class="btn btn-secondary btn-sm" href="https://buy.stripe.com/bJe9AU0cL2pm74N6QFgjC01" target="_blank" rel="noopener">Join Silver <svg class="i" aria-hidden="true"><use href="#i-arrow-up-right"></use></svg></a></div>
+          <div class="tier"><img src="assets/ui/tiers/web/gold.jpg" alt="" width="84" height="84" loading="lazy" /><div><span class="tier-name">Gold</span><div class="tier-price">$<span id="bld-tier-gold">199</span><small>/mo</small></div><div id="bld-tier-gold-inc" class="tier-inc">2 full details</div></div><a id="bld-join-gold" class="btn btn-secondary btn-sm" href="https://buy.stripe.com/eVqdRa4t10he1Kta2RgjC02" target="_blank" rel="noopener">Join Gold <svg class="i" aria-hidden="true"><use href="#i-arrow-up-right"></use></svg></a></div>
         </div>
       </div>
     </div>
   </section>
 
   <!-- GALLERY -->
-  <section id="gallery" style="max-width:1240px;margin:0 auto;padding:96px 32px">
-    <div style="text-align:center;margin-bottom:56px">
-      <div style="font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#A855F7;font-size:13px;margin-bottom:14px">Our Work</div>
-      <h2 style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:46px;color:#fff;letter-spacing:-.5px;line-height:1">DETAILING REELS</h2>
-      <p style="color:#A9A4AF;font-size:17px;margin-top:14px">Swipe through our latest work. Tap a reel to add your own video clip.</p>
-    </div>
-    <div style="position:relative">
-      <button onClick="{{ scrollLeftReels }}" style="position:absolute;left:-6px;top:50%;transform:translateY(-50%);z-index:5;width:48px;height:48px;border-radius:50%;border:1px solid #34303A;background:rgba(20,18,23,.9);backdrop-filter:blur(6px);color:#fff;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 20px rgba(0,0,0,.5)" aria-label="Scroll left">‹</button>
-      <button onClick="{{ scrollRightReels }}" style="position:absolute;right:-6px;top:50%;transform:translateY(-50%);z-index:5;width:48px;height:48px;border-radius:50%;border:1px solid #34303A;background:rgba(20,18,23,.9);backdrop-filter:blur(6px);color:#fff;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 20px rgba(0,0,0,.5)" aria-label="Scroll right">›</button>
-      <div ref="{{ reelScrollerRef }}" data-reelrail style="display:flex;gap:20px;overflow-x:auto;scroll-snap-type:x mandatory;scroll-behavior:smooth;padding:12px 44px 24px;scrollbar-width:none;-ms-overflow-style:none">
-        <div style="flex:none;width:268px;aspect-ratio:9/16;scroll-snap-align:center;border-radius:20px;overflow:hidden;border:1px solid #34303A;background:linear-gradient(165deg,#1a1030,#0E0D11);position:relative;box-shadow:0 16px 38px rgba(0,0,0,.45);transition:transform .3s ease" style-hover="transform:translateY(-8px) scale(1.02)">
-          <video ref="{{ videoRef }}" src="assets/reel-1.mp4" autoplay muted loop playsinline style="width:100%;height:100%;object-fit:cover;display:block"></video>
-          <div style="position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(8,8,11,.25) 0%,transparent 22%,transparent 62%,rgba(8,8,11,.85) 100%);display:flex;flex-direction:column;justify-content:space-between;padding:14px">
-            <span style="align-self:flex-end;background:rgba(8,8,11,.6);border:1px solid rgba(168,85,247,.5);color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:10px;letter-spacing:1px;padding:4px 9px;border-radius:999px">REEL</span>
-            <div style="display:flex;align-items:center;gap:9px"><span style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#7028C9,#A855F7);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px">▶</span><span style="color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:13px">Full Detail</span></div>
-          </div>
+  <section id="gallery" class="sec">
+    <div class="wrap">
+      <div class="sec-head row-head">
+        <div>
+          <p class="eyebrow">Our work</p>
+          <h2>Detailing reels</h2>
         </div>
-        <div style="flex:none;width:268px;aspect-ratio:9/16;scroll-snap-align:center;border-radius:20px;overflow:hidden;border:1px solid #34303A;background:linear-gradient(165deg,#1a1030,#0E0D11);position:relative;box-shadow:0 16px 38px rgba(0,0,0,.45);transition:transform .3s ease" style-hover="transform:translateY(-8px) scale(1.02)">
-          <video ref="{{ videoRef }}" src="assets/reel-2.mp4" autoplay muted loop playsinline style="width:100%;height:100%;object-fit:cover;display:block"></video>
-          <div style="position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(8,8,11,.25) 0%,transparent 22%,transparent 62%,rgba(8,8,11,.85) 100%);display:flex;flex-direction:column;justify-content:space-between;padding:14px">
-            <span style="align-self:flex-end;background:rgba(8,8,11,.6);border:1px solid rgba(168,85,247,.5);color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:10px;letter-spacing:1px;padding:4px 9px;border-radius:999px">REEL</span>
-            <div style="display:flex;align-items:center;gap:9px"><span style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#7028C9,#A855F7);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px">▶</span><span style="color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:13px">Interior Deep Clean</span></div>
-          </div>
+        <div class="reel-nav">
+          <button type="button" class="btn btn-icon" onClick="{{ scrollLeftReels }}" aria-label="Scroll reels left"><svg class="i i-flip" aria-hidden="true"><use href="#i-arrow-right"></use></svg></button>
+          <button type="button" class="btn btn-icon" onClick="{{ scrollRightReels }}" aria-label="Scroll reels right"><svg class="i" aria-hidden="true"><use href="#i-arrow-right"></use></svg></button>
         </div>
-        <div style="flex:none;width:268px;aspect-ratio:9/16;scroll-snap-align:center;border-radius:20px;overflow:hidden;border:1px solid #34303A;background:linear-gradient(165deg,#1a1030,#0E0D11);position:relative;box-shadow:0 16px 38px rgba(0,0,0,.45);transition:transform .3s ease" style-hover="transform:translateY(-8px) scale(1.02)">
-          <video ref="{{ videoRef }}" src="assets/reel-3.mp4" autoplay muted loop playsinline style="width:100%;height:100%;object-fit:cover;display:block"></video>
-          <div style="position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(8,8,11,.25) 0%,transparent 22%,transparent 62%,rgba(8,8,11,.85) 100%);display:flex;flex-direction:column;justify-content:space-between;padding:14px">
-            <span style="align-self:flex-end;background:rgba(8,8,11,.6);border:1px solid rgba(168,85,247,.5);color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:10px;letter-spacing:1px;padding:4px 9px;border-radius:999px">REEL</span>
-            <div style="display:flex;align-items:center;gap:9px"><span style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#7028C9,#A855F7);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px">▶</span><span style="color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:13px">Ceramic Coating</span></div>
-          </div>
-        </div>
-        <div style="flex:none;width:268px;aspect-ratio:9/16;scroll-snap-align:center;border-radius:20px;overflow:hidden;border:1px solid #34303A;background:linear-gradient(165deg,#1a1030,#0E0D11);position:relative;box-shadow:0 16px 38px rgba(0,0,0,.45);transition:transform .3s ease" style-hover="transform:translateY(-8px) scale(1.02)">
-          <video ref="{{ videoRef }}" src="assets/reel-4.mp4" autoplay muted loop playsinline style="width:100%;height:100%;object-fit:cover;display:block"></video>
-          <div style="position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(8,8,11,.25) 0%,transparent 22%,transparent 62%,rgba(8,8,11,.85) 100%);display:flex;flex-direction:column;justify-content:space-between;padding:14px">
-            <span style="align-self:flex-end;background:rgba(8,8,11,.6);border:1px solid rgba(168,85,247,.5);color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:10px;letter-spacing:1px;padding:4px 9px;border-radius:999px">REEL</span>
-            <div style="display:flex;align-items:center;gap:9px"><span style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#7028C9,#A855F7);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px">▶</span><span style="color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:13px">Wheels &amp; Tires</span></div>
-          </div>
-        </div>
-        <div style="flex:none;width:268px;aspect-ratio:9/16;scroll-snap-align:center;border-radius:20px;overflow:hidden;border:1px solid #34303A;background:linear-gradient(165deg,#1a1030,#0E0D11);position:relative;box-shadow:0 16px 38px rgba(0,0,0,.45);transition:transform .3s ease" style-hover="transform:translateY(-8px) scale(1.02)">
-          <video ref="{{ videoRef }}" src="assets/reel-5.mp4" autoplay muted loop playsinline style="width:100%;height:100%;object-fit:cover;display:block"></video>
-          <div style="position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(8,8,11,.25) 0%,transparent 22%,transparent 62%,rgba(8,8,11,.85) 100%);display:flex;flex-direction:column;justify-content:space-between;padding:14px">
-            <span style="align-self:flex-end;background:rgba(8,8,11,.6);border:1px solid rgba(168,85,247,.5);color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:10px;letter-spacing:1px;padding:4px 9px;border-radius:999px">REEL</span>
-            <div style="display:flex;align-items:center;gap:9px"><span style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#7028C9,#A855F7);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px">▶</span><span style="color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:13px">Paint Correction</span></div>
-          </div>
-        </div>
-        <div style="flex:none;width:268px;aspect-ratio:9/16;scroll-snap-align:center;border-radius:20px;overflow:hidden;border:1px solid #34303A;background:linear-gradient(165deg,#1a1030,#0E0D11);position:relative;box-shadow:0 16px 38px rgba(0,0,0,.45);transition:transform .3s ease" style-hover="transform:translateY(-8px) scale(1.02)">
-          <video ref="{{ videoRef }}" src="assets/reel-6.mp4" autoplay muted loop playsinline style="width:100%;height:100%;object-fit:cover;display:block"></video>
-          <div style="position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(8,8,11,.25) 0%,transparent 22%,transparent 62%,rgba(8,8,11,.85) 100%);display:flex;flex-direction:column;justify-content:space-between;padding:14px">
-            <span style="align-self:flex-end;background:rgba(8,8,11,.6);border:1px solid rgba(168,85,247,.5);color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:10px;letter-spacing:1px;padding:4px 9px;border-radius:999px">REEL</span>
-            <div style="display:flex;align-items:center;gap:9px"><span style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#7028C9,#A855F7);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px">▶</span><span style="color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:13px">The Big Reveal</span></div>
-          </div>
-        </div>
+      </div>
+      <div class="reels" ref="{{ reelScrollerRef }}" data-reelrail>
+        <figure class="reel"><video ref="{{ videoRef }}" src="assets/reel-1.mp4" poster="assets/services/svc-full.jpg" autoplay muted loop playsinline aria-label="Full Detail reel"></video><figcaption>Full Detail</figcaption></figure>
+        <figure class="reel"><video ref="{{ videoRef }}" src="assets/reel-2.mp4" poster="assets/services/svc-interior.jpg" autoplay muted loop playsinline aria-label="Interior Deep Clean reel"></video><figcaption>Interior Deep Clean</figcaption></figure>
+        <figure class="reel"><video ref="{{ videoRef }}" src="assets/reel-3.mp4" poster="assets/services/svc-ceramic.jpg" autoplay muted loop playsinline aria-label="Ceramic Coating reel"></video><figcaption>Ceramic Coating</figcaption></figure>
+        <figure class="reel"><video ref="{{ videoRef }}" src="assets/reel-4.mp4" poster="assets/services/svc-exterior.jpg" autoplay muted loop playsinline aria-label="Wheels and Tires reel"></video><figcaption>Wheels &amp; Tires</figcaption></figure>
+        <figure class="reel"><video ref="{{ videoRef }}" src="assets/reel-5.mp4" poster="assets/services/svc-hero.jpg" autoplay muted loop playsinline aria-label="Paint Correction reel"></video><figcaption>Paint Correction</figcaption></figure>
+        <figure class="reel"><video ref="{{ videoRef }}" src="assets/reel-6.mp4" poster="assets/services/svc-headlight.jpg" autoplay muted loop playsinline aria-label="The Big Reveal reel"></video><figcaption>The Big Reveal</figcaption></figure>
       </div>
     </div>
   </section>
 
   <!-- REVIEWS -->
-  <section id="reviews" style="background:#0E0D11;border-top:1px solid #34303A;border-bottom:1px solid #34303A">
-    <div style="max-width:1240px;margin:0 auto;padding:96px 32px">
-      <div style="text-align:center;margin-bottom:56px">
-        <div style="font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#A855F7;font-size:13px;margin-bottom:14px">Reviews</div>
-        <h2 style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:46px;color:#fff;letter-spacing:-.5px;line-height:1">WHAT OUR CLIENTS SAY</h2>
+  <section id="reviews" class="sec sec-alt">
+    <div class="wrap">
+      <div class="sec-head center">
+        <p class="eyebrow">Reviews</p>
+        <h2>What our clients say</h2>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px">
-        <div style="background:#141217;border:1px solid #34303A;border-radius:16px;padding:30px"><div style="color:#F5B942;font-size:16px;letter-spacing:3px;margin-bottom:14px">★★★★★</div><p style="color:#D5D7DC;font-size:15px;line-height:1.7;margin-bottom:20px">"My car looked brand new when they finished. Professional, respectful, and they came right to my driveway. Can't recommend these brothers enough."</p><div style="font-family:'League Spartan',sans-serif;font-weight:700;color:#fff">Marcus T.</div><div style="color:#A9A4AF;font-size:13px">Philadelphia, PA</div></div>
-        <div style="background:#141217;border:1px solid #34303A;border-radius:16px;padding:30px"><div style="color:#F5B942;font-size:16px;letter-spacing:3px;margin-bottom:14px">★★★★★</div><p style="color:#D5D7DC;font-size:15px;line-height:1.7;margin-bottom:20px">"The membership is worth every penny. My SUV gets cleaned every month and I never have to think about it. Great prices, even better people."</p><div style="font-family:'League Spartan',sans-serif;font-weight:700;color:#fff">Denise R.</div><div style="color:#A9A4AF;font-size:13px">Cherry Hill, NJ</div></div>
-        <div style="background:#141217;border:1px solid #34303A;border-radius:16px;padding:30px"><div style="color:#F5B942;font-size:16px;letter-spacing:3px;margin-bottom:14px">★★★★★</div><p style="color:#D5D7DC;font-size:15px;line-height:1.7;margin-bottom:20px">"Faith-driven and detail-obsessed. You can tell they genuinely care. The ceramic coating still beads water months later. Top-tier work."</p><div style="font-family:'League Spartan',sans-serif;font-weight:700;color:#fff">Anthony &amp; Kim</div><div style="color:#A9A4AF;font-size:13px">Wilmington, DE</div></div>
+      <div class="rv-grid">
+        <figure class="card review"><div class="stars" role="img" aria-label="5 out of 5 stars"><svg class="i i-fill" aria-hidden="true"><use href="#i-star"></use></svg><svg class="i i-fill" aria-hidden="true"><use href="#i-star"></use></svg><svg class="i i-fill" aria-hidden="true"><use href="#i-star"></use></svg><svg class="i i-fill" aria-hidden="true"><use href="#i-star"></use></svg><svg class="i i-fill" aria-hidden="true"><use href="#i-star"></use></svg></div><blockquote>"My car looked brand new when they finished."</blockquote><figcaption><b>Marcus T.</b><span>Philadelphia, PA</span></figcaption></figure>
+        <figure class="card review"><div class="stars" role="img" aria-label="5 out of 5 stars"><svg class="i i-fill" aria-hidden="true"><use href="#i-star"></use></svg><svg class="i i-fill" aria-hidden="true"><use href="#i-star"></use></svg><svg class="i i-fill" aria-hidden="true"><use href="#i-star"></use></svg><svg class="i i-fill" aria-hidden="true"><use href="#i-star"></use></svg><svg class="i i-fill" aria-hidden="true"><use href="#i-star"></use></svg></div><blockquote>"The membership is worth every penny."</blockquote><figcaption><b>Denise R.</b><span>Cherry Hill, NJ</span></figcaption></figure>
+        <figure class="card review"><div class="stars" role="img" aria-label="5 out of 5 stars"><svg class="i i-fill" aria-hidden="true"><use href="#i-star"></use></svg><svg class="i i-fill" aria-hidden="true"><use href="#i-star"></use></svg><svg class="i i-fill" aria-hidden="true"><use href="#i-star"></use></svg><svg class="i i-fill" aria-hidden="true"><use href="#i-star"></use></svg><svg class="i i-fill" aria-hidden="true"><use href="#i-star"></use></svg></div><blockquote>"The ceramic coating still beads water months later."</blockquote><figcaption><b>Anthony &amp; Kim</b><span>Wilmington, DE</span></figcaption></figure>
       </div>
     </div>
   </section>
 
   <!-- QUOTE / BOOKING -->
-  <section id="quote" style="position:relative;background:radial-gradient(90% 80% at 20% 30%,rgba(112,40,201,.24),transparent 60%),#08080B">
-    <div style="max-width:1240px;margin:0 auto;padding:96px 32px;display:grid;grid-template-columns:1fr 1.1fr;gap:56px;align-items:start">
+  <section id="quote" class="sec">
+    <div class="wrap q-grid">
       <div>
-        <div style="font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#A855F7;font-size:13px;margin-bottom:14px">Get Started</div>
-        <h2 style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:46px;color:#fff;letter-spacing:-.5px;line-height:1;margin-bottom:18px">REQUEST YOUR<br>FREE QUOTE</h2>
-        <p style="color:#A9A4AF;font-size:16px;line-height:1.7;margin-bottom:30px">Tell us about your vehicle and what you're after. We'll get back to you fast with an honest price. Serving the entire tri-state area.</p>
-        <p style="font-family:'Great Vibes',cursive;font-size:30px;color:#A855F7;margin-bottom:34px">Clean Cars. Clear Minds. Christ First.</p>
-        <div style="display:flex;flex-direction:column;gap:16px">
-          <div style="display:flex;align-items:center;gap:14px"><span style="width:44px;height:44px;border-radius:11px;background:#141217;border:1px solid #34303A;display:flex;align-items:center;justify-content:center;font-size:18px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h3l2 5-2.5 1.5a11 11 0 0 0 5 5L17 12l5 2v3a2 2 0 0 1-2 2A16 16 0 0 1 4 5a2 2 0 0 1 2-2z"/></svg></span><div><div style="color:#A9A4AF;font-size:12px;text-transform:uppercase;letter-spacing:1px">Call or Text</div><div style="color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:18px">(215) 555-0123</div></div></div>
-          <div style="display:flex;align-items:center;gap:14px"><span style="width:44px;height:44px;border-radius:11px;background:#141217;border:1px solid #34303A;display:flex;align-items:center;justify-content:center;font-size:18px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg></span><div><div style="color:#A9A4AF;font-size:12px;text-transform:uppercase;letter-spacing:1px">Email</div><div style="color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:18px">hello@brotherlylovedetailing.com</div></div></div>
-          <div style="display:flex;align-items:center;gap:14px"><span style="width:44px;height:44px;border-radius:11px;background:#141217;border:1px solid #34303A;display:flex;align-items:center;justify-content:center;font-size:18px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.3 7-11a7 7 0 0 0-14 0c0 4.7 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></span><div><div style="color:#A9A4AF;font-size:12px;text-transform:uppercase;letter-spacing:1px">Service Area</div><div style="color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:18px">PA · NJ · DE Tri-State</div></div></div>
+        <p class="eyebrow">Instant quote</p>
+        <h2>Your price in seconds</h2>
+        <p class="lede">New customers save 10% on the first wash.</p>
+        <div class="contact">
+          <a class="btn btn-secondary" href="tel:+12155550123"><svg class="i" aria-hidden="true"><use href="#i-phone"></use></svg>(215) 555-0123</a>
+          <a class="btn btn-secondary" href="mailto:hello@brotherlylovedetailing.com"><svg class="i" aria-hidden="true"><use href="#i-mail"></use></svg>Email us</a>
+          <span class="tag"><svg class="i" aria-hidden="true"><use href="#i-pin"></use></svg>PA · NJ · DE</span>
         </div>
       </div>
 
-      <div style="background:#141217;border:1px solid #34303A;border-radius:20px;padding:38px">
-        <div style="display:flex;flex-direction:column;gap:16px">
-          <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(245,185,66,.14);border:1px solid #F5B942;border-radius:999px;padding:6px 13px;align-self:flex-start">
-            <span style="color:#F5B942;font-family:'League Spartan',sans-serif;font-weight:800;font-size:12px;letter-spacing:1px">⚡ INSTANT QUOTE · 10% OFF FIRST WASH</span>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-            <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Name</label><input id="iq-name" placeholder="Your name" style="width:100%;box-sizing:border-box;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none" /></div>
-            <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Phone</label><input id="iq-phone" placeholder="(215) 555-0123" style="width:100%;box-sizing:border-box;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none" /></div>
-          </div>
-          <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Email</label><input id="iq-email" placeholder="you@email.com" style="width:100%;box-sizing:border-box;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none" /></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-            <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Service</label>
-              <select id="iq-service" style="width:100%;box-sizing:border-box;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none">
-                <option value="">Choose a service&hellip;</option>
-                <option value="outside">Exterior Wash &amp; Wax</option>
-                <option value="inside">Interior Detail</option>
-                <option value="full">Full Detail</option>
-                <option value="ceramic">Ceramic Coating</option>
-                <option value="membership">Membership</option>
-              </select>
-            </div>
-            <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Vehicle size</label>
-              <select id="iq-size" style="width:100%;box-sizing:border-box;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none">
-                <option value="sedan">Sedan / Coupe</option>
-                <option value="suv">SUV / Crossover</option>
-                <option value="truck">Truck / Van</option>
-              </select>
-            </div>
-          </div>
-          <button id="iq-go" type="button" style="cursor:pointer;border:none;background:linear-gradient(135deg,#7028C9,#A855F7);color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:15px;padding:16px;border-radius:12px;box-shadow:0 10px 28px rgba(112,40,201,.5)">⚡ Get my instant price</button>
-          <div id="iq-error" style="display:none;color:#F97066;font-size:13px;text-align:center"></div>
-          <div id="iq-result" style="display:none;background:#0E0D11;border:1px solid #34303A;border-radius:14px;padding:20px">
-            <div id="iq-price"></div>
-            <div id="iq-actions" style="display:flex;gap:10px;margin-top:16px">
-              <button id="iq-accept" type="button" style="flex:1;cursor:pointer;border:none;background:linear-gradient(135deg,#32D583,#12B76A);color:#04120B;font-family:'League Spartan',sans-serif;font-weight:800;letter-spacing:1px;text-transform:uppercase;font-size:14px;padding:14px;border-radius:11px">Accept offer</button>
-              <button id="iq-decline" type="button" style="flex:1;cursor:pointer;background:#141217;border:1px solid #34303A;color:#D5D7DC;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:14px;padding:14px;border-radius:11px">Decline</button>
-            </div>
-          </div>
-          <div id="iq-done" style="display:none;text-align:center;padding:6px 4px"></div>
-          <p style="text-align:center;color:#A9A4AF;font-size:12px">No spam. We only use your info to send your quote.</p>
+      <div class="card q-card">
+        <div class="f-row">
+          <div class="field"><label for="iq-name">Name</label><input id="iq-name" autocomplete="name" placeholder="Your name" /></div>
+          <div class="field"><label for="iq-phone">Phone</label><input id="iq-phone" type="tel" autocomplete="tel" placeholder="(215) 555-0123" /></div>
         </div>
+        <div class="field"><label for="iq-email">Email</label><input id="iq-email" type="email" autocomplete="email" placeholder="you@email.com" /></div>
+        <fieldset>
+          <legend>Service</legend>
+          <div id="iq-service" class="chips" data-pick role="group" aria-label="Service">
+            <button type="button" class="chip" aria-pressed="false" data-v="outside">Exterior</button>
+            <button type="button" class="chip" aria-pressed="false" data-v="inside">Interior</button>
+            <button type="button" class="chip" aria-pressed="false" data-v="full">Full Detail</button>
+            <button type="button" class="chip" aria-pressed="false" data-v="ceramic">Ceramic</button>
+            <button type="button" class="chip" aria-pressed="false" data-v="membership">Membership</button>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Vehicle size</legend>
+          <div id="iq-size" class="seg seg-wide" data-pick role="group" aria-label="Vehicle size">
+            <button type="button" class="is-selected" aria-pressed="true" data-v="sedan">Sedan</button>
+            <button type="button" aria-pressed="false" data-v="suv">SUV</button>
+            <button type="button" aria-pressed="false" data-v="truck">Truck</button>
+          </div>
+        </fieldset>
+        <button id="iq-go" type="button" class="btn btn-primary btn-lg"><svg class="i" aria-hidden="true"><use href="#i-bolt"></use></svg>Get my instant price</button>
+        <div id="iq-error" class="q-err" role="alert" style="display:none"></div>
+        <div id="iq-result" class="q-res" style="display:none" aria-live="polite">
+          <div id="iq-price"></div>
+          <div id="iq-actions" class="q-actions" style="display:flex">
+            <button id="iq-accept" type="button" class="btn btn-secondary"><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg>Accept offer</button>
+            <button id="iq-decline" type="button" class="btn btn-ghost">Decline</button>
+          </div>
+        </div>
+        <div id="iq-done" class="q-done" style="display:none" aria-live="polite"></div>
+        <p class="fine">No spam. Only used to send your quote.</p>
       </div>
     </div>
   </section>
 
   <!-- QUOTE MODAL -->
   <sc-if value="{{ modalOpen }}" hint-placeholder-val="{{ false }}">
-    <div onClick="{{ closeModal }}" style="position:fixed;inset:0;z-index:1000;background:rgba(8,8,11,.85);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:20px">
-      <div onClick="{{ stop }}" style="width:100%;max-width:540px;max-height:92vh;overflow-y:auto;background:#141217;border:1px solid #34303A;border-radius:20px;padding:36px;position:relative;box-shadow:0 30px 80px rgba(0,0,0,.7)">
-        <button onClick="{{ closeModal }}" style="position:absolute;top:14px;right:14px;width:34px;height:34px;border-radius:50%;border:1px solid #34303A;background:#0E0D11;color:#D5D7DC;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center" aria-label="Close">✕</button>
+    <div class="modal" onClick="{{ closeModal }}">
+      <div class="modal-box" role="dialog" aria-modal="true" aria-label="Request a quote" onClick="{{ stop }}">
+        <button type="button" class="btn btn-icon x" onClick="{{ closeModal }}" aria-label="Close"><svg class="i" aria-hidden="true"><use href="#i-close"></use></svg></button>
         <sc-if value="{{ submitted }}" hint-placeholder-val="{{ false }}">
-          <div style="text-align:center;padding:26px 6px">
-            <div style="font-size:48px;margin-bottom:14px">✨</div>
-            <h3 style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:26px;color:#fff;margin-bottom:10px">Thank You{{ nameSuffix }}!</h3>
-            <p style="color:#A9A4AF;font-size:15px;line-height:1.6;max-width:340px;margin:0 auto 22px">Your quote request is in. One of the brothers will reach out shortly. God bless!</p>
-            <button onClick="{{ reset }}" style="cursor:pointer;border:1px solid #34303A;background:#0E0D11;color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:13px;padding:12px 22px;border-radius:10px">Send another</button>
+          <div class="q-done">
+            <span class="ok-mark"><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg></span>
+            <h3>Thank You{{ nameSuffix }}!</h3>
+            <p>One of the brothers will reach out shortly. God bless!</p>
+            <button type="button" class="btn btn-secondary" style="margin-top:20px" onClick="{{ reset }}">Send another</button>
           </div>
         </sc-if>
         <sc-if value="{{ notSubmitted }}" hint-placeholder-val="{{ true }}">
           <div>
-            <div style="font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#A855F7;font-size:12px;margin-bottom:6px">Get Started</div>
-            <h3 style="font-family:'League Spartan',sans-serif;font-weight:900;font-size:26px;color:#fff;margin-bottom:6px">Request Your Free Quote</h3>
-            <p style="color:#A9A4AF;font-size:14px;line-height:1.5;margin-bottom:22px">Tell us about your vehicle and we'll get back with an honest price. Serving the tri-state area.</p>
-            <div style="display:flex;flex-direction:column;gap:14px">
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-                <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Name</label><input value="{{ name }}" onInput="{{ onName }}" placeholder="Your name" style="width:100%;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none" style-focus="border-color:#A855F7" /></div>
-                <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Phone</label><input value="{{ phone }}" onInput="{{ onPhone }}" placeholder="(215) 555-0123" style="width:100%;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none" style-focus="border-color:#A855F7" /></div>
+            <h3>Request Your Free Quote</h3>
+            <div class="stack">
+              <div class="f-row">
+                <div class="field"><label for="m-name">Name</label><input id="m-name" value="{{ name }}" onInput="{{ onName }}" autocomplete="name" placeholder="Your name" /></div>
+                <div class="field"><label for="m-phone">Phone</label><input id="m-phone" type="tel" value="{{ phone }}" onInput="{{ onPhone }}" autocomplete="tel" placeholder="(215) 555-0123" /></div>
               </div>
-              <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Email</label><input value="{{ email }}" onInput="{{ onEmail }}" placeholder="you@email.com" style="width:100%;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none" style-focus="border-color:#A855F7" /></div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-                <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Vehicle</label><input value="{{ vehicle }}" onInput="{{ onVehicle }}" placeholder="Year, make, model" style="width:100%;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none" style-focus="border-color:#A855F7" /></div>
-                <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Service</label><select value="{{ service }}" onChange="{{ onService }}" style="width:100%;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none" style-focus="border-color:#A855F7"><option>Express Shine</option><option>Signature Detail</option><option>Ministry Full Detail</option><option>Ceramic Coating</option><option>Membership</option><option>Not sure — help me choose</option></select></div>
+              <div class="field"><label for="m-email">Email</label><input id="m-email" type="email" value="{{ email }}" onInput="{{ onEmail }}" autocomplete="email" placeholder="you@email.com" /></div>
+              <div class="f-row">
+                <div class="field"><label for="m-vehicle">Vehicle</label><input id="m-vehicle" value="{{ vehicle }}" onInput="{{ onVehicle }}" placeholder="Year, make, model" /></div>
+                <div class="field"><label for="m-service">Service</label><select id="m-service" value="{{ service }}" onChange="{{ onService }}"><option>Express Shine</option><option>Signature Detail</option><option>Ministry Full Detail</option><option>Ceramic Coating</option><option>Membership</option><option>Not sure — help me choose</option></select></div>
               </div>
-              <div><label style="display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600">Details</label><textarea value="{{ message }}" onInput="{{ onMessage }}" placeholder="Vehicle condition, location, and what you need." rows="3" style="width:100%;background:#0E0D11;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-family:'Inter',sans-serif;font-size:14px;outline:none;resize:vertical" style-focus="border-color:#A855F7"></textarea></div>
-              <div style="color:#F97066;font-size:13px;font-weight:600;min-height:0">{{ quoteErr }}</div>
-              <button onClick="{{ submit }}" style="cursor:pointer;border:none;background:linear-gradient(135deg,#7028C9,#A855F7);color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:15px;padding:16px;border-radius:12px;box-shadow:0 10px 28px rgba(112,40,201,.5)">Request My Free Quote</button>
+              <div class="field"><label for="m-msg">Details</label><textarea id="m-msg" value="{{ message }}" onInput="{{ onMessage }}" placeholder="Condition, location, what you need" rows="3"></textarea></div>
+              <div class="q-err">{{ quoteErr }}</div>
+              <button type="button" class="btn btn-primary btn-lg" onClick="{{ submit }}">Request My Free Quote</button>
             </div>
           </div>
         </sc-if>
@@ -590,41 +577,142 @@
   </sc-if>
 
   <!-- FOOTER -->
-  <footer style="background:#08080B;border-top:1px solid #34303A">
-    <div style="max-width:1240px;margin:0 auto;padding:56px 32px 40px;display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:40px">
+  <footer class="ft">
+    <div class="wrap ft-grid">
       <div>
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px"><img src="assets/bld-logo-transparent.png" alt="Brotherly Love" style="height:56px;width:auto" /><span style="font-family:'League Spartan',sans-serif;font-weight:800;color:#fff;font-size:16px;line-height:1.1">BROTHERLY LOVE<br><span style="font-weight:500;font-size:10px;letter-spacing:3px;color:#A9A4AF">MINISTRY DETAILING</span></span></div>
-        <p style="color:#A9A4AF;font-size:14px;line-height:1.6;max-width:340px">Premium mobile detailing built on faith, integrity, and unmatched attention to detail. Proudly serving the tri-state area.</p>
-        <p style="font-family:'Great Vibes',cursive;font-size:24px;color:#A855F7;margin-top:14px">Clean Cars. Clear Minds. Christ First.</p>
+        <a href="#top" class="brand"><img src="assets/bld-logo-transparent.png" alt="Brotherly Love" /><span><b>BROTHERLY LOVE</b><small>MINISTRY DETAILING</small></span></a>
+        <p class="ft-motto">Clean Cars. Clear Minds. Christ First.</p>
       </div>
-      <div>
-        <div style="font-family:'League Spartan',sans-serif;font-weight:700;color:#fff;letter-spacing:1px;text-transform:uppercase;font-size:14px;margin-bottom:16px">Explore</div>
-        <div style="display:flex;flex-direction:column;gap:10px;font-size:14px"><a href="#services" style="color:#A9A4AF">Services</a><a href="#packages" style="color:#A9A4AF">Packages</a><a href="#gallery" style="color:#A9A4AF">Gallery</a><a href="#reviews" style="color:#A9A4AF">Reviews</a><a onClick="{{ openModal }}" style="cursor:pointer;color:#A9A4AF">Request a Quote</a></div>
+      <div class="ft-col">
+        <h3>Explore</h3>
+        <a href="#services">Services</a><a href="#packages">Packages</a><a href="#gallery">Gallery</a><a href="#reviews">Reviews</a><button type="button" onClick="{{ openModal }}">Request a Quote</button>
       </div>
-      <div>
-        <div style="font-family:'League Spartan',sans-serif;font-weight:700;color:#fff;letter-spacing:1px;text-transform:uppercase;font-size:14px;margin-bottom:16px">Contact</div>
-        <div style="display:flex;flex-direction:column;gap:10px;font-size:14px;color:#A9A4AF"><span>(215) 555-0123</span><span>hello@brotherlylovedetailing.com</span><span>PA · NJ · DE Tri-State</span></div>
+      <div class="ft-col">
+        <h3>Contact</h3>
+        <a href="tel:+12155550123">(215) 555-0123</a><a href="mailto:hello@brotherlylovedetailing.com">hello@brotherlylovedetailing.com</a><span>PA · NJ · DE Tri-State</span>
       </div>
     </div>
-    <div style="border-top:1px solid #34303A"><div style="max-width:1240px;margin:0 auto;padding:22px 32px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;color:#A9A4AF;font-size:13px"><span style="font-family:'League Spartan',sans-serif;letter-spacing:2px">BROTHERLY <span style="color:#A855F7">LOVE</span> MINISTRY DETAILING</span><span>© 2026 Brotherly Love Ministry Detailing. All rights reserved.</span></div></div>
+    <div class="wrap"><div class="ft-base">© 2026 Brotherly Love Ministry Detailing</div></div>
   </footer>
 
 </div>
 </x-dc>
+
+<!-- cart + checkout (visual only). Static markup outside <x-dc> so the template runtime never re-renders it. -->
+<button type="button" id="sv-fab" class="btn btn-secondary btn-lg" aria-label="Open cart"><svg class="i" aria-hidden="true"><use href="#i-cart"/></svg>Cart <span class="count" id="sv-fab-n" data-n="0"></span></button>
+<div id="sv-scrim"></div>
+<aside id="sv-cart" class="sv-panel" role="dialog" aria-modal="true" aria-label="Your cart">
+  <div class="sv-h"><span>Your cart</span><button type="button" class="btn btn-icon" data-close aria-label="Close cart"><svg class="i" aria-hidden="true"><use href="#i-close"/></svg></button></div>
+  <div class="sv-items" id="sv-items"></div>
+  <div class="sv-sum">
+    <div class="sv-row"><span>Estimated total</span><span id="sv-c-total">$0</span></div>
+    <div class="sv-row due"><span>Deposit due now (25%)</span><span id="sv-c-dep">$0</span></div>
+    <button type="button" class="btn btn-primary btn-lg" id="sv-checkout">Check out <svg class="i" aria-hidden="true"><use href="#i-arrow-right"/></svg></button>
+    <div class="sv-note">Only a deposit today. Pay the rest at the detail.</div>
+  </div>
+</aside>
+<div id="sv-co" class="sv-panel" role="dialog" aria-modal="true" aria-label="Checkout">
+  <div class="sv-h"><span>Checkout</span><button type="button" class="btn btn-icon" data-close aria-label="Close checkout"><svg class="i" aria-hidden="true"><use href="#i-close"/></svg></button></div>
+  <div class="sv-co-grid">
+    <div class="sv-form">
+      <div class="field"><label for="sv-name">Name</label><input id="sv-name" autocomplete="name" placeholder="Your name"></div>
+      <div class="field"><label for="sv-phone">Phone</label><input id="sv-phone" type="tel" autocomplete="tel" placeholder="(215) 555-0123"></div>
+      <div class="field full"><label for="sv-email">Email</label><input id="sv-email" type="email" autocomplete="email" placeholder="you@email.com"></div>
+      <fieldset class="full"><legend>Vehicle size</legend><div class="seg seg-wide" data-pick role="group" aria-label="Vehicle size"><button type="button" class="is-selected" aria-pressed="true">Sedan</button><button type="button" aria-pressed="false">SUV</button><button type="button" aria-pressed="false">Truck</button></div></fieldset>
+      <fieldset class="full"><legend>Window</legend><div class="chips" data-pick role="group" aria-label="Time window"><button type="button" class="chip is-selected" aria-pressed="true"><svg class="i" aria-hidden="true"><use href="#i-clock"/></svg> Morning</button><button type="button" class="chip" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-clock"/></svg> Afternoon</button></div></fieldset>
+      <div class="field"><label for="sv-date">Date</label><input type="date" id="sv-date"></div>
+      <div class="field"><label for="sv-zip">Zip</label><input id="sv-zip" inputmode="numeric" autocomplete="postal-code" placeholder="19104"></div>
+      <div class="field full"><label for="sv-addr">Address</label><input id="sv-addr" autocomplete="street-address" placeholder="Where should we come?"></div>
+    </div>
+    <div class="sv-aside">
+      <div id="sv-co-lines"></div>
+      <div class="sv-row"><span>Estimated total</span><span id="sv-o-total">$0</span></div>
+      <div class="sv-row"><span>Balance at the detail</span><span id="sv-o-bal">$0</span></div>
+      <div class="sv-row due"><span>Deposit today</span><span id="sv-o-dep">$0</span></div>
+      <button type="button" class="btn btn-primary btn-lg" id="sv-pay"><svg class="i" aria-hidden="true"><use href="#i-lock"/></svg>Pay deposit</button>
+      <div class="sv-note" id="sv-pay-note" aria-live="polite">Final price is confirmed by vehicle size. Card payment connects at launch.</div>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var DEPOSIT=0.25; // ponytail: hardcoded 25%; read catalog.config.depositPercent when payments are wired
+  var cart=[], lastFocus=null;
+  var $=function(s){return document.querySelector(s)};
+  var money=function(n){return '$'+(n%1?n.toFixed(2):n)};
+  var esc=function(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})};
+  var icon=function(id){return '<svg class="i" aria-hidden="true"><use href="#i-'+id+'"/></svg>'};
+  function priceOf(btn){var el=btn.closest('.sv-card').querySelector('.sv-amt');return el?parseFloat(el.textContent.replace(/[^0-9.]/g,''))||0:0}
+  function totals(){var t=0,n=0;cart.forEach(function(i){t+=i.price*i.qty;n+=i.qty});return{t:t,n:n,d:Math.round(t*DEPOSIT*100)/100}}
+  function render(){
+    var T=totals();
+    $('#sv-fab').style.display=T.n?'inline-flex':'none';
+    $('#sv-fab-n').setAttribute('data-n',T.n);
+    document.querySelectorAll('[data-sv-count]').forEach(function(c){c.setAttribute('data-n',T.n)});
+    $('#sv-items').innerHTML=cart.length?cart.map(function(i,k){
+      return '<div class="sv-it"><div><b>'+esc(i.name)+'</b><small>from '+money(i.price)+'</small>'+
+        '<div class="stepper" role="group" aria-label="Quantity for '+esc(i.name)+'">'+
+        '<button type="button" data-d="-1" data-k="'+k+'" aria-label="Decrease quantity">'+icon('minus')+'</button>'+
+        '<output>'+i.qty+'</output>'+
+        '<button type="button" data-d="1" data-k="'+k+'" aria-label="Increase quantity">'+icon('plus')+'</button></div></div>'+
+        '<b>'+money(i.price*i.qty)+'</b></div>';
+    }).join(''):'<div class="sv-empty">Your cart is empty.<br>Pick a service to start.</div>';
+    ['#sv-c-total','#sv-o-total'].forEach(function(s){$(s).textContent=money(T.t)});
+    ['#sv-c-dep','#sv-o-dep'].forEach(function(s){$(s).textContent=money(T.d)});
+    $('#sv-o-bal').textContent=money(T.t-T.d);
+    $('#sv-co-lines').innerHTML=cart.map(function(i){return '<div class="sv-row"><span>'+esc(i.name)+' x '+i.qty+'</span><span>'+money(i.price*i.qty)+'</span></div>'}).join('');
+    $('#sv-checkout').disabled=!T.n;
+  }
+  function show(id){
+    if(!lastFocus)lastFocus=document.activeElement;
+    $('#sv-scrim').style.display='block';$('#sv-cart').style.display='none';$('#sv-co').style.display='none';
+    $(id).style.display='flex';var x=$(id).querySelector('[data-close]');if(x)x.focus();
+  }
+  function closeAll(){
+    $('#sv-scrim').style.display='none';$('#sv-cart').style.display='none';$('#sv-co').style.display='none';
+    if(lastFocus&&lastFocus.focus)lastFocus.focus();lastFocus=null;
+  }
+  // Delegated on document: the service cards are rendered by the template runtime after
+  // this script runs, so direct listeners would bind to nodes that get replaced.
+  document.addEventListener('click',function(e){
+    var t=e.target;if(!t||!t.closest)return;
+    var b=t.closest('#services .sv-book');
+    if(b){
+      var name=b.getAttribute('data-name'),f=cart.filter(function(i){return i.name===name})[0];
+      if(f)f.qty++;else cart.push({name:name,price:priceOf(b),qty:1});
+      b.classList.add('is-added');
+      setTimeout(function(){b.classList.remove('is-added')},1400);
+      render();lastFocus=b;show('#sv-cart');return;
+    }
+    if(t.closest('[data-sv-open]')||t.closest('#sv-fab')){lastFocus=t.closest('button');show('#sv-cart');return;}
+    var q=t.closest('#sv-items [data-k]');
+    if(q){var k=+q.getAttribute('data-k');cart[k].qty+=parseInt(q.getAttribute('data-d'),10);if(cart[k].qty<1)cart.splice(k,1);render();return;}
+    if(t.closest('[data-close]')||t.id==='sv-scrim'){closeAll();return;}
+    if(t.closest('#sv-checkout')){if(cart.length)show('#sv-co');return;}
+    if(t.closest('#sv-pay')){$('#sv-pay-note').textContent='Visual preview only. Payment is not connected yet.';return;}
+  });
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&$('#sv-scrim').style.display==='block')closeAll()});
+  var d=$('#sv-date');if(d)d.min=new Date().toISOString().slice(0,10);
+  render();
+})();
+// Single-select button groups (.seg / .chip) marked data-pick.
+document.addEventListener('click',function(e){
+  var b=e.target&&e.target.closest?e.target.closest('[data-pick] button'):null;if(!b)return;
+  b.closest('[data-pick]').querySelectorAll('button').forEach(function(x){var on=x===b;x.classList.toggle('is-selected',on);x.setAttribute('aria-pressed',String(on))});
+});
+</script>
+
 <script type="text/x-dc" data-dc-script>
 class Component extends DCLogic {
   oneTime = [45, 120, 220];
   member = [36, 96, 176];
   META = [
-    { name:'Express Shine', tagline:'Quick maintenance wash to keep it fresh between details.', isPopular:false,
-      features:['Hand wash & dry','Wheels, tires & rims','Windows in & out','Tire shine finish','Quick interior wipe-down'],
-      badgeBg:'linear-gradient(135deg,#4c1d95,#7028C9)' },
-    { name:'Signature Detail', tagline:'Our most-loved inside-and-out transformation.', isPopular:true,
-      features:['Everything in Express','Deep interior vacuum & steam','Hand wax & paint sealant','Leather & vinyl conditioning','Dash, vents & console detail','Air freshener finish'],
-      badgeBg:'linear-gradient(135deg,#7028C9,#A855F7)' },
-    { name:'Ministry Full Detail', tagline:'The complete, showroom-level treatment.', isPopular:false,
-      features:['Everything in Signature','Clay bar & paint decontamination','Machine polish & gloss','Ceramic spray coating','Engine bay detail','Headlight restoration'],
-      badgeBg:'linear-gradient(135deg,#6d28d9,#A855F7)' },
+    { name:'Express Shine', tagline:'Quick maintenance wash.', isPopular:false,
+      features:['Hand wash & dry','Wheels, tires & rims','Windows in & out','Tire shine'] },
+    { name:'Signature Detail', tagline:'Inside-and-out transformation.', isPopular:true,
+      features:['Everything in Express','Interior vacuum & steam','Hand wax & sealant','Leather conditioning'] },
+    { name:'Ministry Full Detail', tagline:'Showroom-level treatment.', isPopular:false,
+      features:['Everything in Signature','Clay bar & machine polish','Ceramic spray coating','Engine bay & headlights'] },
   ];
   state = { name:'', phone:'', email:'', vehicle:'', service:'Express Wash', message:'', submitted:false, quoteErr:'', isMember:false, disp:[45,120,220], modalOpen:false };
   // Live prices from the catalog (the owner's dashboard): Express = Outside, Signature =
@@ -656,10 +744,12 @@ class Component extends DCLogic {
     });
     this.setState({ submitted:true, quoteErr:'' });
   }
+  reducedMotion(){ return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
   animateTo(targets){
+    cancelAnimationFrame(this._raf);
+    if (this.reducedMotion()) { this.setState({ disp: targets.slice() }); return; }
     const start = this.state.disp.slice();
     const t0 = performance.now(), dur = 650;
-    cancelAnimationFrame(this._raf);
     const step = (now) => {
       const k = Math.min(1,(now-t0)/dur);
       const e = 1-Math.pow(1-k,3);
@@ -668,8 +758,8 @@ class Component extends DCLogic {
     };
     this._raf = requestAnimationFrame(step);
   }
-  toggleBilling(){
-    const m = !this.state.isMember;
+  setBilling(m){
+    if (m === this.state.isMember) return;
     this.setState({ isMember:m });
     this.animateTo(m ? this.member : this.oneTime);
   }
@@ -680,27 +770,18 @@ class Component extends DCLogic {
     const plans = this.META.map((p,i)=> ({
       name:p.name, tagline:p.tagline, features:p.features, isPopular:p.isPopular,
       priceStr: String(s.disp[i]),
-      unitShort: s.isMember ? 'member' : 'each',
-      unitLabel: s.isMember ? 'per wash · Brotherhood member' : 'one-time detail',
-      badgeBg: p.badgeBg,
-      cardBg: p.isPopular ? 'linear-gradient(160deg,#1a1030,#141217)' : '#141217',
-      cardBorder: p.isPopular ? '1.5px solid #7028C9' : '1px solid #34303A',
-      cardShadow: p.isPopular ? '0 20px 50px rgba(112,40,201,.28)' : '0 10px 30px rgba(0,0,0,.35)',
-      cardShadowHover: p.isPopular ? '0 26px 60px rgba(112,40,201,.4)' : '0 20px 44px rgba(0,0,0,.5)',
-      ctaStyle: p.isPopular
-        ? 'background:linear-gradient(135deg,#7028C9,#A855F7);color:#fff;box-shadow:0 10px 24px rgba(112,40,201,.5)'
-        : 'border:1px solid #34303A;background:#0E0D11;color:#fff',
+      unitLabel: s.isMember ? 'per wash, member' : 'one-time',
+      cardCls: 'card pk-card' + (p.isPopular ? ' is-pop' : ''),
+      // One primary per pricing section: only the popular plan's button.
+      ctaCls: p.isPopular ? 'btn btn-primary btn-lg' : 'btn btn-secondary btn-lg',
     }));
-    const tiltMove = (e) => {
-      const el = e.currentTarget, r = el.getBoundingClientRect();
-      const px = (e.clientX - r.left)/r.width - .5, py = (e.clientY - r.top)/r.height - .5;
-      el.style.transform = 'perspective(900px) rotateX(' + (-py*7).toFixed(2) + 'deg) rotateY(' + (px*7).toFixed(2) + 'deg) translateY(-6px)';
-    };
-    const tiltLeave = (e) => { e.currentTarget.style.transform = 'perspective(900px) rotateX(0deg) rotateY(0deg) translateY(0)'; };
+    const reduced = this.reducedMotion();
     const videoRef = (el) => {
       if(!el) return;
       el.muted = true; el.defaultMuted = true; el.volume = 0;
-      el.loop = true; el.playsInline = true; el.autoplay = true;
+      el.loop = true; el.playsInline = true;
+      if (reduced) { el.autoplay = false; el.removeAttribute('autoplay'); el.pause(); return; }
+      el.autoplay = true;
       const go = () => { const p = el.play(); if(p && p.catch) p.catch(()=>{}); };
       go();
       el.addEventListener('canplay', go, { once:true });
@@ -710,7 +791,7 @@ class Component extends DCLogic {
     const closeModal = () => this.setState({ modalOpen:false });
     const stop = (e) => e.stopPropagation();
     const reelScrollerRef = (el) => { this._reel = el; };
-    const scrollReels = (dir) => { if(this._reel) this._reel.scrollBy({ left: dir*288, behavior:'smooth' }); };
+    const scrollReels = (dir) => { if(this._reel) this._reel.scrollBy({ left: dir*276, behavior: reduced ? 'auto' : 'smooth' }); };
     const scrollLeftReels = () => scrollReels(-1);
     const scrollRightReels = () => scrollReels(1);
     return {
@@ -724,12 +805,13 @@ class Component extends DCLogic {
       reset: () => this.setState({ name:'', phone:'', email:'', vehicle:'', service:'Express Wash', message:'', submitted:false, quoteErr:'' }),
       plans,
       isMember: s.isMember,
-      toggle: () => this.toggleBilling(),
-      knobX: s.isMember ? '30px' : '0px',
-      oneTimeColor: s.isMember ? '#A9A4AF' : '#fff',
-      memberColor: s.isMember ? '#fff' : '#A9A4AF',
-      saveOpacity: s.isMember ? '1' : '0',
-      tiltMove, tiltLeave, videoRef,
+      oneTimePressed: !s.isMember,
+      setOneTime: () => this.setBilling(false),
+      setMember: () => this.setBilling(true),
+      oneTimeCls: s.isMember ? '' : 'is-selected',
+      memberCls: s.isMember ? 'is-selected' : '',
+      saveCls: 'badge badge-ok pk-save' + (s.isMember ? '' : ' is-off'),
+      videoRef,
       modalOpen: s.modalOpen, openModal, closeModal, stop,
       reelScrollerRef, scrollLeftReels, scrollRightReels,
     };
@@ -772,7 +854,7 @@ class Component extends DCLogic {
     })
     .catch(function () { /* static fallbacks already rendered */ });
 
-  // Any lead from the page (quote modal or instant quote) → quote_leads → dashboard Leads.
+  // Any lead from the page (quote modal or instant quote) -> quote_leads -> dashboard Leads.
   window.__BLD_LEAD = function (body) {
     return fetch(SUPABASE_URL + '/rest/v1/quote_leads', {
       method: 'POST',
@@ -792,12 +874,15 @@ class Component extends DCLogic {
       if (n.nodeValue.indexOf('10%') !== -1) n.nodeValue = n.nodeValue.split('10%').join(off + '%');
     }
   }
+  var reduced = function(){ return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); };
 
   // --- Instant quote (live catalog prices, first-wash discount, lead capture) ---
   var IQ_FB = { services:{outside:45,inside:60,full:120}, extras:{ceramic:199}, sizeMultipliers:{sedan:1,suv:1.25,truck:1.5}, plans:{bronze:{price:79}} };
   function iqCfg(){ return window.__BLD_CFG || IQ_FB; }
   var IQ_SVC = { outside:'Exterior Wash & Wax', inside:'Interior Detail', full:'Full Detail', ceramic:'Ceramic Coating', membership:'Membership' };
   var IQ_SIZE = { sedan:'Sedan', suv:'SUV', truck:'Truck' };
+  // Service and size are button groups now; the selected button carries the value.
+  function iqPick(id){ var b = document.querySelector('#' + id + ' .is-selected'); return b ? b.getAttribute('data-v') : ''; }
   function iqPrice(svc, size){
     var c = iqCfg();
     if (svc === 'ceramic') return Math.round((c.extras && c.extras.ceramic) || IQ_FB.extras.ceramic);
@@ -809,24 +894,24 @@ class Component extends DCLogic {
     return null;
   }
   function iqInsert(accepted, p, d){
-    var svc = document.getElementById('iq-service').value;
+    var svc = iqPick('iq-service');
     var body = {
       name: document.getElementById('iq-name').value.trim() || null,
       phone: document.getElementById('iq-phone').value.trim() || null,
       email: document.getElementById('iq-email').value.trim() || null,
-      service: svc || null, size: document.getElementById('iq-size').value || null,
+      service: svc || null, size: iqPick('iq-size') || null,
       quoted_price: p, discounted_price: d, accepted: accepted
     };
     return window.__BLD_LEAD(body);
   }
+  var OK_MARK = '<span class="ok-mark"><svg class="i" aria-hidden="true"><use href="#i-check"/></svg></span>';
   // Event delegation on document — robust to the sc- runtime rendering the quote card
   // after this script runs (direct addEventListener at load would miss late nodes).
   var IQ_CUR = { p: null, d: null };
   document.addEventListener('click', function(ev){
     var t = ev.target;
-    var el = (t && t.id) ? t : (t && t.closest ? t.closest('#iq-go,#iq-accept,#iq-decline') : null);
+    var el = (t && t.closest) ? t.closest('#iq-go,#iq-accept,#iq-decline') : null;
     if (!el || !el.id) return;
-    if (el.id !== 'iq-go' && el.id !== 'iq-accept' && el.id !== 'iq-decline') return;
     var g = function(id){ return document.getElementById(id); };
     var errEl = g('iq-error'), resEl = g('iq-result'), priceEl = g('iq-price'), actEl = g('iq-actions'), doneEl = g('iq-done');
     if (!resEl) return;
@@ -834,23 +919,19 @@ class Component extends DCLogic {
 
     if (el.id === 'iq-go'){
       showErr(''); doneEl.style.display = 'none';
-      var svc = g('iq-service').value, size = g('iq-size').value;
+      var svc = iqPick('iq-service'), size = iqPick('iq-size') || 'sedan';
       if (!svc){ showErr('Pick a service to see your price.'); return; }
       if (svc === 'membership'){
         var mp = (iqCfg().plans && iqCfg().plans.bronze && iqCfg().plans.bronze.price) || 79;
-        priceEl.innerHTML = '<div style="font-family:\'League Spartan\',sans-serif;font-weight:800;font-size:20px;color:#fff">Memberships from $' + mp + '/mo</div>' +
-          '<p style="color:#A9A4AF;font-size:13px;margin-top:6px">2 details every month, priority booking, and rewards. See the plans below.</p>' +
-          '<a href="#packages" style="display:inline-block;margin-top:12px;color:#A855F7;font-weight:700;text-decoration:underline">View membership plans &rarr;</a>';
+        priceEl.innerHTML = '<div class="q-meta">Membership</div><div class="q-now" style="margin-top:6px">$' + mp + '<span class="pk-unit"> /mo and up</span></div>' +
+          '<a href="#packages" class="btn btn-ghost" style="margin-top:8px;padding-left:0">View plans <svg class="i" aria-hidden="true"><use href="#i-arrow-right"/></svg></a>';
         actEl.style.display = 'none'; resEl.style.display = 'block'; return;
       }
       var off = bldOff(); var p = iqPrice(svc, size); var d = Math.round(p * (1 - off / 100)); IQ_CUR = { p: p, d: d };
       priceEl.innerHTML =
-        '<div style="color:#A9A4AF;font-size:13px;text-transform:uppercase;letter-spacing:1px">' + IQ_SVC[svc] + ' · ' + IQ_SIZE[size] + '</div>' +
-        '<div style="margin-top:6px;display:flex;align-items:baseline;gap:10px">' +
-          '<span style="font-family:\'League Spartan\',sans-serif;font-weight:900;font-size:40px;color:#fff">$' + d + '</span>' +
-          '<span style="color:#A9A4AF;font-size:16px;text-decoration:line-through">$' + p + '</span>' +
-        '</div>' +
-        '<div style="color:#F5B942;font-weight:700;font-size:13px;margin-top:4px">' + off + '% off your first wash applied</div>';
+        '<div class="q-meta">' + IQ_SVC[svc] + ' · ' + IQ_SIZE[size] + '</div>' +
+        '<div style="margin-top:6px"><span class="q-now">$' + d + '</span><span class="q-was">$' + p + '</span></div>' +
+        '<div class="q-off">' + off + '% off your first wash applied</div>';
       actEl.style.display = 'flex'; resEl.style.display = 'block';
       return;
     }
@@ -860,17 +941,16 @@ class Component extends DCLogic {
       if (!name || !phone){ showErr('Add your name and phone so we can lock in your time.'); return; }
       showErr(''); iqInsert(true, IQ_CUR.p, IQ_CUR.d);
       resEl.style.display = 'none'; doneEl.style.display = 'block';
-      doneEl.innerHTML = '<div style="font-size:40px">🎉</div>' +
-        '<h3 style="font-family:\'League Spartan\',sans-serif;font-weight:800;font-size:22px;color:#fff;margin:6px 0 8px">You’re locked in!</h3>' +
-        '<p style="color:#A9A4AF;font-size:14px;line-height:1.6;max-width:340px;margin:0 auto">We’ll text you shortly to set your time. Want it done sooner? Finish booking in the <b style="color:#fff">BLD app</b> — your ' + bldOff() + '% first-wash price is saved.</p>';
+      doneEl.innerHTML = OK_MARK + '<h3>You’re locked in!</h3>' +
+        '<p>We’ll text you shortly to set your time. Your ' + bldOff() + '% first-wash price is saved.</p>';
       return;
     }
 
     if (el.id === 'iq-decline'){
       iqInsert(false, IQ_CUR.p, IQ_CUR.d);
       resEl.style.display = 'none'; doneEl.style.display = 'block';
-      doneEl.innerHTML = '<h3 style="font-family:\'League Spartan\',sans-serif;font-weight:800;font-size:20px;color:#fff;margin:0 0 8px">No worries.</h3>' +
-        '<p style="color:#A9A4AF;font-size:14px;line-height:1.6;max-width:340px;margin:0 auto">Your <b style="color:#F5B942">' + bldOff() + '% off</b> the first wash still stands whenever you’re ready. Text us at (215) 555-0123.</p>';
+      doneEl.innerHTML = '<h3>No worries.</h3>' +
+        '<p>Your ' + bldOff() + '% off the first wash still stands. Text us at (215) 555-0123.</p>';
       return;
     }
   });
@@ -883,15 +963,14 @@ class Component extends DCLogic {
   }, 15000);
   document.addEventListener('click', function(ev){
     var t = ev.target; if (!t) return;
-    var hit = (t.id === 'bld-promo-cta' || t.id === 'bld-promo-close') ? t
-            : (t.closest ? t.closest('#bld-promo-cta,#bld-promo-close') : null);
+    var hit = t.closest ? t.closest('#bld-promo-cta,#bld-promo-close') : null;
     if (!hit) return;
     var pop = document.getElementById('bld-promo-pop');
     if (pop) pop.style.display = 'none';
     try { sessionStorage.setItem('bld_promo_seen', '1'); } catch(e){}
     if (hit.id === 'bld-promo-cta'){
       var qs = document.getElementById('quote');
-      if (qs) qs.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (qs) qs.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'start' });
       try { location.hash = '#quote'; } catch(e){}
     }
   });
@@ -899,22 +978,18 @@ class Component extends DCLogic {
   // 10% ribbon on top of every pricing block — inserted post-render at stable anchors
   // (the template runtime re-parents source-injected nodes, so we add them from JS).
   function bldRibbon(){
-    return '<span style="display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#7028C9,#A855F7);color:#fff;font-family:\'League Spartan\',sans-serif;font-weight:800;letter-spacing:1px;text-transform:uppercase;font-size:14px;padding:11px 22px;border-radius:999px;box-shadow:0 8px 22px rgba(112,40,201,.45)">✨ New customers save ' + bldOff() + '% on your first wash</span>';
+    return '<span class="ribbon"><svg class="i" aria-hidden="true"><use href="#i-bolt"/></svg>New customers save ' + bldOff() + '% on the first wash</span>';
   }
   function bldAddRibbon(anchor, id){
     if (!anchor || !anchor.parentNode || document.getElementById(id)) return;
     var r = document.createElement('div');
-    r.id = id; r.style.cssText = 'text-align:center;margin:0 0 30px'; r.innerHTML = bldRibbon();
+    r.id = id; r.innerHTML = bldRibbon();
     anchor.parentNode.insertBefore(r, anchor);
   }
   function bldPlaceRibbons(){
     bldSyncPromo(); // the template may render after the catalog arrives
-    var pOut = document.getElementById('bld-price-outside');
-    var grid = pOut && pOut.closest ? pOut.closest('div[style*="grid-template-columns"]') : null;
-    bldAddRibbon(grid, 'bld-ribbon-services');
-    var pkg = document.getElementById('packages');
-    var inner = pkg ? pkg.querySelector('div') : null;
-    if (inner && inner.firstElementChild) bldAddRibbon(inner.firstElementChild, 'bld-ribbon-packages');
+    bldAddRibbon(document.querySelector('#services .sv-grid'), 'bld-ribbon-services');
+    bldAddRibbon(document.querySelector('#packages .pk-toggle'), 'bld-ribbon-packages');
   }
   window.addEventListener('load', function(){ setTimeout(bldPlaceRibbons, 300); setTimeout(bldPlaceRibbons, 1200); });
   setTimeout(bldPlaceRibbons, 1500);
