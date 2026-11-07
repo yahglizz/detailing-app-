@@ -160,22 +160,192 @@
     </div>
   </section>
 
-  <!-- SERVICES -->
-  <section id="services" style="max-width:1240px;margin:0 auto;padding:96px 32px">
-    <div style="text-align:center;margin-bottom:56px">
-      <div style="font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#A855F7;font-size:13px;margin-bottom:14px">What We Do</div>
-      <h2 style="font-family:'League Spartan',sans-serif;font-weight:800;font-size:46px;color:#fff;letter-spacing:-.5px;line-height:1">EVERYTHING YOUR RIDE NEEDS</h2>
-      <p style="color:#A9A4AF;font-size:17px;margin-top:14px">Full-service detailing at honest, beginner-friendly prices.</p>
+  <!-- SERVICES (visual build — cart + checkout are UI only until payments are wired) -->
+  <style>
+    #services{max-width:1240px;margin:0 auto;padding:96px 32px;font-family:'Inter',sans-serif}
+    #services .sv-eyebrow{display:inline-block;font-family:'League Spartan',sans-serif;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#A855F7;font-size:13px;border:1px solid #7028C9;border-radius:999px;padding:9px 22px;background:rgba(112,40,201,.10)}
+    #services .sv-top{position:relative;display:flex;align-items:center;min-height:380px;margin-bottom:28px}
+    #services .sv-copy{position:relative;z-index:2;max-width:560px}
+    #services h2{font-family:'League Spartan',sans-serif;font-weight:800;font-size:56px;color:#fff;letter-spacing:-.5px;line-height:.98;margin:22px 0 16px}
+    #services h2 em{font-style:normal;color:#A855F7;text-shadow:0 0 40px rgba(168,85,247,.55)}
+    #services .sv-sub{color:#A9A4AF;font-size:17px;border-left:3px solid #7028C9;padding-left:14px}
+    #services .sv-hero{position:absolute;right:-20px;top:0;bottom:0;width:62%;background:url(assets/services/svc-hero.jpg) center/cover no-repeat;border-radius:20px;-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 45%);mask-image:linear-gradient(90deg,transparent 0,#000 45%);opacity:.95}
+    #services .sv-promo{display:inline-flex;align-items:center;gap:14px;margin-bottom:28px;background:linear-gradient(90deg,rgba(112,40,201,.55),rgba(20,18,23,.9));border:1px solid #34303A;border-left:4px solid #A855F7;border-radius:14px;padding:14px 26px;min-width:min(100%,420px)}
+    #services .sv-promo b{display:block;font-family:'League Spartan',sans-serif;font-weight:800;letter-spacing:.5px;color:#fff;font-size:16px;text-transform:uppercase}
+    #services .sv-promo span{color:#A9A4AF;font-size:13px}
+    #services .sv-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
+    #services .sv-card{position:relative;display:grid;grid-template-columns:1.05fr .95fr;min-height:236px;overflow:hidden;border:1px solid #34303A;border-radius:18px;background:linear-gradient(135deg,#1a1424 0,#141217 55%,#0E0D11 100%);transition:transform .2s,border-color .2s,box-shadow .2s}
+    #services .sv-card:hover{transform:translateY(-3px);border-color:#7028C9;box-shadow:0 12px 40px rgba(112,40,201,.22)}
+    #services .sv-body{position:relative;z-index:2;padding:26px 8px 26px 26px;display:flex;flex-direction:column}
+    #services .sv-body h3{font-family:'League Spartan',sans-serif;font-weight:700;font-size:23px;color:#fff;margin:0 0 8px}
+    #services .sv-body p{color:#A9A4AF;font-size:14px;line-height:1.6;margin:0 0 auto}
+    #services .sv-price{margin:16px 0 12px;padding-top:10px;border-top:1px solid #34303A;font-family:'League Spartan',sans-serif;font-weight:700;color:#A9A4AF;font-size:15px}
+    #services .sv-price span{color:#fff;font-size:28px;margin-left:6px}
+    #services .sv-book{align-self:flex-start;cursor:pointer;border:none;color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:14px;letter-spacing:.4px;padding:11px 22px;border-radius:10px;background:linear-gradient(135deg,#7028C9,#A855F7);box-shadow:0 6px 20px rgba(112,40,201,.4);transition:transform .15s,box-shadow .15s}
+    #services .sv-book:hover{transform:translateY(-1px);box-shadow:0 8px 26px rgba(168,85,247,.55)}
+    #services .sv-book.sv-added{background:linear-gradient(135deg,#32D583,#12B76A);color:#04120B;box-shadow:0 6px 20px rgba(50,213,131,.3)}
+    #services .sv-img{background-size:cover;background-position:center;clip-path:polygon(16% 0,100% 0,100% 100%,0 100%)}
+    #services .sv-trust{display:grid;grid-template-columns:repeat(4,1fr);margin-top:28px;border:1px solid #34303A;border-radius:16px;background:#101014}
+    #services .sv-trust div{display:flex;align-items:center;gap:14px;padding:20px 22px;border-left:1px solid #34303A}
+    #services .sv-trust div:first-child{border-left:none}
+    #services .sv-trust b{display:block;color:#fff;font-family:'League Spartan',sans-serif;font-size:15px}
+    #services .sv-trust span{color:#A9A4AF;font-size:13px}
+    @media(max-width:900px){
+      #services{padding:64px 20px}
+      #services h2{font-size:38px}
+      #services .sv-top{min-height:0;flex-direction:column;align-items:stretch}
+      #services .sv-hero{position:relative;order:-1;width:100%;right:0;height:220px;margin-bottom:8px;-webkit-mask-image:linear-gradient(0deg,transparent 0,#000 40%);mask-image:linear-gradient(0deg,transparent 0,#000 40%)}
+      #services .sv-grid{grid-template-columns:1fr}
+      #services .sv-trust{grid-template-columns:1fr 1fr}
+      #services .sv-trust div:nth-child(3){border-left:none}
+      #services .sv-trust div:nth-child(n+3){border-top:1px solid #34303A}
+    }
+    @media(max-width:520px){#services .sv-card{grid-template-columns:1fr}#services .sv-img{order:-1;height:150px;clip-path:none}#services .sv-body{padding:20px}}
+
+    /* cart + checkout (visual only) */
+    #sv-fab{position:fixed;right:20px;bottom:24px;z-index:9998;display:none;align-items:center;gap:10px;cursor:pointer;border:none;color:#fff;font-family:'League Spartan',sans-serif;font-weight:700;font-size:15px;padding:14px 20px;border-radius:999px;background:linear-gradient(135deg,#7028C9,#A855F7);box-shadow:0 10px 30px rgba(112,40,201,.55)}
+    #sv-fab i{font-style:normal;background:#fff;color:#7028C9;border-radius:999px;min-width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:13px}
+    #sv-scrim{position:fixed;inset:0;z-index:10000;background:rgba(4,4,8,.7);backdrop-filter:blur(4px);display:none}
+    .sv-panel{position:fixed;z-index:10001;background:#0E0D11;border:1px solid #34303A;color:#fff;font-family:'Inter',sans-serif;display:none;flex-direction:column}
+    #sv-cart{top:0;right:0;bottom:0;width:min(420px,100%);border-width:0 0 0 1px}
+    #sv-co{top:50%;left:50%;transform:translate(-50%,-50%);width:min(880px,calc(100% - 24px));max-height:calc(100% - 24px);border-radius:20px;overflow:auto}
+    .sv-h{display:flex;justify-content:space-between;align-items:center;padding:20px 22px;border-bottom:1px solid #34303A;font-family:'League Spartan',sans-serif;font-weight:800;font-size:20px;letter-spacing:.5px}
+    .sv-x{cursor:pointer;background:none;border:none;color:#A9A4AF;font-size:26px;line-height:1}
+    .sv-items{flex:1;overflow:auto;padding:8px 22px}
+    .sv-it{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px 0;border-bottom:1px solid #26222c}
+    .sv-it b{font-family:'League Spartan',sans-serif;font-size:16px;display:block}
+    .sv-it small{color:#A9A4AF}
+    .sv-qty{display:inline-flex;align-items:center;gap:10px;margin-top:8px;border:1px solid #34303A;border-radius:8px;padding:2px 8px}
+    .sv-qty button{cursor:pointer;background:none;border:none;color:#A855F7;font-size:18px;width:20px}
+    .sv-sum{padding:18px 22px;border-top:1px solid #34303A;background:#101014}
+    .sv-row{display:flex;justify-content:space-between;margin:6px 0;color:#A9A4AF;font-size:14px}
+    .sv-row.due{color:#fff;font-family:'League Spartan',sans-serif;font-weight:800;font-size:19px;margin-top:12px;padding-top:12px;border-top:1px solid #34303A}
+    .sv-row.due span:last-child{color:#A855F7}
+    .sv-cta{width:100%;margin-top:14px;cursor:pointer;border:none;color:#fff;font-family:'League Spartan',sans-serif;font-weight:800;font-size:16px;letter-spacing:.5px;padding:15px;border-radius:12px;background:linear-gradient(135deg,#7028C9,#A855F7);box-shadow:0 8px 26px rgba(112,40,201,.45)}
+    .sv-empty{color:#A9A4AF;text-align:center;padding:60px 0}
+    .sv-co-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:0}
+    .sv-form{padding:22px;display:grid;grid-template-columns:1fr 1fr;gap:14px;align-content:start}
+    .sv-form .full{grid-column:1/-1}
+    .sv-form label{display:block;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#A9A4AF;margin-bottom:7px;font-weight:600}
+    .sv-form input,.sv-form select{width:100%;box-sizing:border-box;background:#141217;border:1px solid #34303A;border-radius:10px;padding:13px 14px;color:#fff;font-size:15px;font-family:inherit}
+    .sv-form input:focus,.sv-form select:focus{outline:none;border-color:#A855F7}
+    .sv-aside{padding:22px;background:#101014;border-left:1px solid #34303A;border-radius:0 0 20px 0}
+    .sv-note{font-size:12px;color:#A9A4AF;line-height:1.5;margin-top:12px;text-align:center}
+    @media(max-width:760px){.sv-co-grid{grid-template-columns:1fr}.sv-aside{border-left:none;border-top:1px solid #34303A}.sv-form{grid-template-columns:1fr}}
+  </style>
+
+  <section id="services">
+    <div class="sv-top">
+      <div class="sv-copy">
+        <span class="sv-eyebrow">What We Do</span>
+        <h2>EVERYTHING<br><em>YOUR RIDE</em> NEEDS</h2>
+        <p class="sv-sub">Full-service detailing at honest, beginner-friendly prices.</p>
+      </div>
+      <div class="sv-hero" role="img" aria-label="Detailed black sport sedan with purple lighting"></div>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px">
-      <div style="background:#141217;border:1px solid #34303A;border-radius:16px;padding:28px"><div style="width:48px;height:48px;border-radius:12px;background:rgba(112,40,201,.14);border:1px solid #34303A;display:flex;align-items:center;justify-content:center;margin-bottom:16px"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></svg></div><h3 style="font-family:'League Spartan',sans-serif;font-weight:700;font-size:21px;color:#fff;margin-bottom:8px">Exterior Wash &amp; Wax</h3><p style="color:#A9A4AF;font-size:14px;line-height:1.6;margin-bottom:14px">Hand wash, wheels, tires, and a protective wax for a deep, lasting shine.</p><div style="color:#A855F7;font-family:'League Spartan',sans-serif;font-weight:700">Starting at <span id="bld-price-outside" style="color:#fff;font-size:20px">$45</span></div></div>
-      <div style="background:#141217;border:1px solid #34303A;border-radius:16px;padding:28px"><div style="width:48px;height:48px;border-radius:12px;background:rgba(112,40,201,.14);border:1px solid #34303A;display:flex;align-items:center;justify-content:center;margin-bottom:16px"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 6.1L20 11l-6.1 1.9L12 19l-1.9-6.1L4 11l6.1-1.9z"/></svg></div><h3 style="font-family:'League Spartan',sans-serif;font-weight:700;font-size:21px;color:#fff;margin-bottom:8px">Interior Detail</h3><p style="color:#A9A4AF;font-size:14px;line-height:1.6;margin-bottom:14px">Vacuum, steam clean, wipe-down, and protect for a fresh, like-new cabin.</p><div style="color:#A855F7;font-family:'League Spartan',sans-serif;font-weight:700">Starting at <span id="bld-price-inside" style="color:#fff;font-size:20px">$60</span></div></div>
-      <div style="background:#141217;border:1px solid #34303A;border-radius:16px;padding:28px"><div style="width:48px;height:48px;border-radius:12px;background:rgba(112,40,201,.14);border:1px solid #34303A;display:flex;align-items:center;justify-content:center;margin-bottom:16px"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16l1.6-4.4A2 2 0 0 1 7.5 10h9a2 2 0 0 1 1.9 1.6L20 16M4 16h16v3a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H7v1a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><circle cx="7.5" cy="16.5" r="1"/><circle cx="16.5" cy="16.5" r="1"/></svg></div><h3 style="font-family:'League Spartan',sans-serif;font-weight:700;font-size:21px;color:#fff;margin-bottom:8px">Full Detail</h3><p style="color:#A9A4AF;font-size:14px;line-height:1.6;margin-bottom:14px">Inside and out — the complete top-to-bottom treatment for your vehicle.</p><div style="color:#A855F7;font-family:'League Spartan',sans-serif;font-weight:700">Starting at <span id="bld-price-full" style="color:#fff;font-size:20px">$120</span></div></div>
-      <div style="background:#141217;border:1px solid #34303A;border-radius:16px;padding:28px"><div style="width:48px;height:48px;border-radius:12px;background:rgba(112,40,201,.14);border:1px solid #34303A;display:flex;align-items:center;justify-content:center;margin-bottom:16px"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4-3 7-7 8-4-1-7-4-7-8V6z"/></svg></div><h3 style="font-family:'League Spartan',sans-serif;font-weight:700;font-size:21px;color:#fff;margin-bottom:8px">Ceramic Coating</h3><p style="color:#A9A4AF;font-size:14px;line-height:1.6;margin-bottom:14px">Long-term paint protection with a slick, glossy, easy-to-clean finish.</p><div style="color:#A855F7;font-family:'League Spartan',sans-serif;font-weight:700">Starting at <span id="bld-price-ceramic" style="color:#fff;font-size:20px">$199</span></div></div>
-      <div style="background:#141217;border:1px solid #34303A;border-radius:16px;padding:28px"><div style="width:48px;height:48px;border-radius:12px;background:rgba(112,40,201,.14);border:1px solid #34303A;display:flex;align-items:center;justify-content:center;margin-bottom:16px"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="11" r="4"/><path d="M12 3v1M12 18v3M4 11H3M21 11h-1M6 6l-.7-.7M18 6l.7-.7"/></svg></div><h3 style="font-family:'League Spartan',sans-serif;font-weight:700;font-size:21px;color:#fff;margin-bottom:8px">Headlight Restoration</h3><p style="color:#A9A4AF;font-size:14px;line-height:1.6;margin-bottom:14px">Cut the haze and restore clarity for brighter, safer night driving.</p><div style="color:#A855F7;font-family:'League Spartan',sans-serif;font-weight:700">Starting at <span style="color:#fff;font-size:20px">$40</span></div></div>
-      <div style="background:#141217;border:1px solid #34303A;border-radius:16px;padding:28px"><div style="width:48px;height:48px;border-radius:12px;background:rgba(112,40,201,.14);border:1px solid #34303A;display:flex;align-items:center;justify-content:center;margin-bottom:16px"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5a4 4 0 0 0-5.4 4.9L4 15.5 6.5 18l5.6-5.6A4 4 0 0 0 17 7l-2.3 2.3-1.8-1.8L15 5z"/></svg></div><h3 style="font-family:'League Spartan',sans-serif;font-weight:700;font-size:21px;color:#fff;margin-bottom:8px">Engine Bay &amp; Extras</h3><p style="color:#A9A4AF;font-size:14px;line-height:1.6;margin-bottom:14px">Engine bay cleaning, pet hair removal, odor treatment, and more add-ons.</p><div style="color:#A855F7;font-family:'League Spartan',sans-serif;font-weight:700">Starting at <span style="color:#fff;font-size:20px">$35</span></div></div>
+
+    <div class="sv-promo"><div><b>New customers save 10%</b><span>On your first wash</span></div></div>
+
+    <div class="sv-grid">
+      <div class="sv-card"><div class="sv-body"><h3>Exterior Wash &amp; Wax</h3><p>Hand wash, wheels, tires, and a protective wax for a deep, lasting shine.</p><div class="sv-price">Starting at <span id="bld-price-outside">$45</span></div><button type="button" class="sv-book" data-name="Exterior Wash &amp; Wax">Book Now →</button></div><div class="sv-img" style="background-image:url(assets/services/svc-exterior.jpg)"></div></div>
+      <div class="sv-card"><div class="sv-body"><h3>Interior Detail</h3><p>Vacuum, steam clean, wipe-down, and protect for a fresh, like-new cabin.</p><div class="sv-price">Starting at <span id="bld-price-inside">$60</span></div><button type="button" class="sv-book" data-name="Interior Detail">Book Now →</button></div><div class="sv-img" style="background-image:url(assets/services/svc-interior.jpg)"></div></div>
+      <div class="sv-card"><div class="sv-body"><h3>Full Detail</h3><p>Inside and out — the complete top-to-bottom treatment for your vehicle.</p><div class="sv-price">Starting at <span id="bld-price-full">$120</span></div><button type="button" class="sv-book" data-name="Full Detail">Book Now →</button></div><div class="sv-img" style="background-image:url(assets/services/svc-full.jpg)"></div></div>
+      <div class="sv-card"><div class="sv-body"><h3>Ceramic Coating</h3><p>Long-term paint protection with a slick, glossy, easy-to-clean finish.</p><div class="sv-price">Starting at <span id="bld-price-ceramic">$199</span></div><button type="button" class="sv-book" data-name="Ceramic Coating">Book Now →</button></div><div class="sv-img" style="background-image:url(assets/services/svc-ceramic.jpg)"></div></div>
+      <div class="sv-card"><div class="sv-body"><h3>Headlight Restoration</h3><p>Cut the haze and restore clarity for brighter, safer night driving.</p><div class="sv-price">Starting at <span>$40</span></div><button type="button" class="sv-book" data-name="Headlight Restoration">Book Now →</button></div><div class="sv-img" style="background-image:url(assets/services/svc-headlight.jpg)"></div></div>
+      <div class="sv-card"><div class="sv-body"><h3>Engine Bay &amp; Extras</h3><p>Engine bay cleaning, pet hair removal, odor treatment, and more add-ons.</p><div class="sv-price">Starting at <span>$35</span></div><button type="button" class="sv-book" data-name="Engine Bay &amp; Extras">Book Now →</button></div><div class="sv-img" style="background-image:url(assets/services/svc-engine.jpg)"></div></div>
+    </div>
+
+    <div class="sv-trust">
+      <div><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4-3 7-7 8-4-1-7-4-7-8V6z"/><path d="M9 12l2 2 4-4"/></svg><p style="margin:0"><b>Premium Quality</b><span>Detailing you can trust</span></p></div>
+      <div><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg><p style="margin:0"><b>Fast &amp; Reliable</b><span>Get back on the road</span></p></div>
+      <div><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16l1.6-4.4A2 2 0 0 1 7.5 10h9a2 2 0 0 1 1.9 1.6L20 16M4 16h16v3a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H7v1a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><circle cx="7.5" cy="16.5" r="1"/><circle cx="16.5" cy="16.5" r="1"/></svg><p style="margin:0"><b>Mobile Service</b><span>We come to you</span></p></div>
+      <div><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#A855F7" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg><p style="margin:0"><b>Satisfaction Guaranteed</b><span>Drive happy</span></p></div>
     </div>
   </section>
+
+  <!-- cart + checkout (visual only) -->
+  <button type="button" id="sv-fab" aria-label="Open cart">🛒 Cart <i id="sv-fab-n">0</i></button>
+  <div id="sv-scrim"></div>
+  <aside id="sv-cart" class="sv-panel" aria-label="Your cart">
+    <div class="sv-h"><span>YOUR CART</span><button type="button" class="sv-x" data-close aria-label="Close">×</button></div>
+    <div class="sv-items" id="sv-items"></div>
+    <div class="sv-sum">
+      <div class="sv-row"><span>Estimated total</span><span id="sv-c-total">$0</span></div>
+      <div class="sv-row due"><span>Deposit due now (25%)</span><span id="sv-c-dep">$0</span></div>
+      <button type="button" class="sv-cta" id="sv-checkout">CHECK OUT →</button>
+      <div class="sv-note">Only a deposit today. Pay the rest at the detail.</div>
+    </div>
+  </aside>
+  <div id="sv-co" class="sv-panel" role="dialog" aria-label="Checkout">
+    <div class="sv-h"><span>CHECKOUT</span><button type="button" class="sv-x" data-close aria-label="Close">×</button></div>
+    <div class="sv-co-grid">
+      <div class="sv-form">
+        <div><label>Name</label><input placeholder="Your name"></div>
+        <div><label>Phone</label><input type="tel" placeholder="(215) 555-0123"></div>
+        <div class="full"><label>Email</label><input type="email" placeholder="you@email.com"></div>
+        <div><label>Vehicle size</label><select><option>Sedan</option><option>SUV</option><option>Truck</option></select></div>
+        <div><label>Window</label><select><option>Morning</option><option>Afternoon</option></select></div>
+        <div><label>Date</label><input type="date" id="sv-date"></div>
+        <div><label>Zip</label><input placeholder="19104"></div>
+        <div class="full"><label>Address</label><input placeholder="Where should we come?"></div>
+      </div>
+      <div class="sv-aside">
+        <div id="sv-co-lines"></div>
+        <div class="sv-row"><span>Estimated total</span><span id="sv-o-total">$0</span></div>
+        <div class="sv-row"><span>Balance at the detail</span><span id="sv-o-bal">$0</span></div>
+        <div class="sv-row due"><span>Deposit today</span><span id="sv-o-dep">$0</span></div>
+        <button type="button" class="sv-cta" id="sv-pay">PAY DEPOSIT</button>
+        <div class="sv-note" id="sv-pay-note">Final price is confirmed by vehicle size. Card payment connects at launch.</div>
+      </div>
+    </div>
+  </div>
+  <script>
+  (function(){
+    var DEPOSIT=0.25; // ponytail: hardcoded 25%; read catalog.config.depositPercent when payments are wired
+    var cart=[];
+    var $=function(s){return document.querySelector(s)};
+    var money=function(n){return '$'+(n%1?n.toFixed(2):n)};
+    function priceOf(btn){var el=btn.closest('.sv-card').querySelector('.sv-price span');return parseFloat(el.textContent.replace(/[^0-9.]/g,''))||0}
+    function totals(){var t=0,n=0;cart.forEach(function(i){t+=i.price*i.qty;n+=i.qty});return{t:t,n:n,d:Math.round(t*DEPOSIT*100)/100}}
+    function render(){
+      var T=totals();
+      $('#sv-fab').style.display=T.n?'inline-flex':'none';
+      $('#sv-fab-n').textContent=T.n;
+      $('#sv-items').innerHTML=cart.length?cart.map(function(i,k){
+        return '<div class="sv-it"><div><b>'+i.name+'</b><small>from '+money(i.price)+'</small><div class="sv-qty"><button data-d="-1" data-k="'+k+'">−</button><span>'+i.qty+'</span><button data-d="1" data-k="'+k+'">+</button></div></div><b>'+money(i.price*i.qty)+'</b></div>';
+      }).join(''):'<div class="sv-empty">Your cart is empty.<br>Pick a service to start.</div>';
+      ['#sv-c-total','#sv-o-total'].forEach(function(s){$(s).textContent=money(T.t)});
+      ['#sv-c-dep','#sv-o-dep'].forEach(function(s){$(s).textContent=money(T.d)});
+      $('#sv-o-bal').textContent=money(T.t-T.d);
+      $('#sv-co-lines').innerHTML=cart.map(function(i){return '<div class="sv-row"><span>'+i.name+' × '+i.qty+'</span><span>'+money(i.price*i.qty)+'</span></div>'}).join('');
+      $('#sv-checkout').disabled=!T.n;
+    }
+    function open(id){$('#sv-scrim').style.display='block';$(id).style.display='flex'}
+    function closeAll(){$('#sv-scrim').style.display='none';$('#sv-cart').style.display='none';$('#sv-co').style.display='none'}
+    document.querySelectorAll('#services .sv-book').forEach(function(b){
+      b.addEventListener('click',function(){
+        var name=b.getAttribute('data-name'),f=cart.filter(function(i){return i.name===name})[0];
+        if(f)f.qty++;else cart.push({name:name,price:priceOf(b),qty:1});
+        b.classList.add('sv-added');b.textContent='Added ✓';
+        setTimeout(function(){b.classList.remove('sv-added');b.textContent='Book Now →'},1400);
+        render();open('#sv-cart');
+      });
+    });
+    $('#sv-items').addEventListener('click',function(e){
+      var k=e.target.getAttribute('data-k');if(k===null)return;
+      cart[k].qty+=parseInt(e.target.getAttribute('data-d'),10);
+      if(cart[k].qty<1)cart.splice(k,1);
+      render();
+    });
+    $('#sv-fab').addEventListener('click',function(){open('#sv-cart')});
+    $('#sv-scrim').addEventListener('click',closeAll);
+    document.querySelectorAll('[data-close]').forEach(function(x){x.addEventListener('click',closeAll)});
+    $('#sv-checkout').addEventListener('click',function(){if(!cart.length)return;$('#sv-cart').style.display='none';$('#sv-co').style.display='flex'});
+    $('#sv-pay').addEventListener('click',function(){$('#sv-pay-note').textContent='Visual preview only — payment is not connected yet.'});
+    var d=$('#sv-date');if(d)d.min=new Date().toISOString().slice(0,10);
+    render();
+  })();
+  </script>
 
   <!-- PACKAGES & MEMBERSHIP -->
   <section id="packages" style="background:radial-gradient(90% 70% at 50% 0,rgba(112,40,201,.16),transparent 60%),#0E0D11;border-top:1px solid #34303A;border-bottom:1px solid #34303A">
