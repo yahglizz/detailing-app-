@@ -207,19 +207,23 @@ const handlers: Record<string, (b: Obj, req: Request) => Promise<Response>> = {
     };
     if (b.day !== undefined) {
       if (!isoOk(b.day) || b.day < today || b.day > last) return bad('bad_day');
-      const [taken, states] = await Promise.all([
+      const [taken, held] = await Promise.all([
         db.rpc('booked_slots', { day: b.day }),
-        db.rpc('slot_states', { day: b.day }),
+        db.from('bookings').select('time_slot, rank, anchored, status')
+          .eq('preferred_day', b.day).not('time_slot', 'is', null).not('status', 'in', '(declined,refunded)'),
       ]);
       if (taken.error) throw taken.error;
-      if (states.error) throw states.error;
+      if (held.error) throw held.error;
       out.taken = taken.data ?? [];
-      // slot -> the holder's VIP rank (0 = guest), so the app can show which slots a member can take.
-      // ponytail: anchored and owner-confirmed holders show their rank too; reserve refuses them (slot_taken).
+      // slot -> holder's VIP rank, only for slots a member could bump: every holder there is
+      // unanchored and still pending_payment|requested.
       const holders: Record<string, number> = {};
-      for (const s of (states.data ?? []) as { slot: string; rank: number | null }[]) {
-        holders[s.slot] = Math.max(holders[s.slot] ?? 0, s.rank ?? 0);
+      const locked = new Set<string>();
+      for (const h of (held.data ?? []) as { time_slot: string; rank: number | null; anchored: boolean; status: string }[]) {
+        if (h.anchored || !['pending_payment', 'requested'].includes(h.status)) locked.add(h.time_slot);
+        holders[h.time_slot] = Math.max(holders[h.time_slot] ?? 0, h.rank ?? 0);
       }
+      for (const s of locked) delete holders[s];
       out.holders = holders;
       out.minSlot = minSlotFor(b.day);
     }
@@ -310,6 +314,8 @@ const handlers: Record<string, (b: Obj, req: Request) => Promise<Response>> = {
       return bad('booking_insert_failed', 500);
     }
 
+    if (res?.bumpedId) await notifyBumped(String(res.bumpedId), r.day, res.movedTo ?? null, r.name);
+
     const paidFromBalance = debit > 0;
     if (paidFromBalance) { // the deposit step is done: tell the owner now
       const saved = await loadRow(bookingId);
@@ -367,6 +373,30 @@ const handlers: Record<string, (b: Obj, req: Request) => Promise<Response>> = {
     return json({ ok: true, demo: true });
   },
 };
+
+const clock = (slot: string) => {
+  const [h, m] = slot.split(':').map(Number);
+  return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+};
+
+// A VIP took a held time: tell the bumped customer and the owner. The booking stands either way.
+async function notifyBumped(bumpedId: string, day: string, movedTo: string | null, vipName: string) {
+  try {
+    const row = await loadRow(bumpedId);
+    const to = movedTo ? clock(movedTo) : null;
+    const from = row?.detail?.bumpedFrom ? clock(String(row.detail.bumpedFrom)) : 'their old time';
+    const email = row?.customers?.email;
+    if (email) {
+      await sendEmail(email, 'Your detail time moved',
+        `<p>Hi ${esc(row.detail?.name)}, your detail on ${esc(day)} moved to ${to ? esc(to) : "a new time. We'll call to set it"}.</p>
+         <p>Questions? Just reply to this email.</p>`);
+    }
+    await sendEmail(ownerEmail(), 'VIP booking moved a customer',
+      `<p>VIP booking by ${esc(vipName)} moved ${esc(row?.detail?.name)} from ${esc(from)} to ${to ? esc(to) : 'no time yet'} on ${esc(day)}.</p>`);
+  } catch (e) {
+    console.error('bump notify failed', (e as Error).message);
+  }
+}
 
 // Only the owner is emailed here. The customer sees the on-screen confirmation, and gets an
 // email when the owner confirms a time (`confirm`). That keeps this public endpoint from

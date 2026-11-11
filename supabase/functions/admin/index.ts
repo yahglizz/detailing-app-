@@ -11,13 +11,15 @@
 // Deployed with verify_jwt=false: browsers send an OPTIONS preflight with no JWT, and the
 // staff code is the auth.
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { can, validateCatalog, type Role } from '../_shared/admin_rules.ts';
-import { DEFAULT_DETAIL_PRICING, invoiceTotals, validateDetailPricing } from '../_shared/detail_pricing.ts';
+import { can, cleanLines, validateCatalog, type Role } from '../_shared/admin_rules.ts';
+import {
+  DEFAULT_DETAIL_PRICING, invoiceTotalsLines, isVehicle, linePayable, validateDetailPricing, type InvoiceLine,
+} from '../_shared/detail_pricing.ts';
 import { clientIp, rateLimited, recordMiss } from '../_shared/codes.ts';
-import { confirmBooking, declineBooking, markDone, type ActionResult } from '../_shared/owner_actions.ts';
+import { awardStamps, confirmBooking, declineBooking, markDone, type ActionResult } from '../_shared/owner_actions.ts';
 import { provisionMember } from '../_shared/member_provision.ts';
 import { walletBalance } from '../_shared/wallet.ts';
-import type { MemberCatalog, Tier } from '../_shared/membership.ts';
+import { detailPricingOf, type MemberCatalog, type Tier } from '../_shared/membership.ts';
 import { stripeConnect, stripeStatus, syncPlanPrices } from '../_shared/stripe_admin.ts';
 
 const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
@@ -109,7 +111,7 @@ async function saveCatalog(config: Obj) {
 // ——— bookings, shaped for the dashboard ———
 const BOOKING_COLS = `id, preferred_day, time_slot, time_window, status, items, quote, address, notes,
   remainder_method, pay_mode, membership_id, scheduled_note, created_at, customer_id, flow, deposit_status,
-  detail->name, detail->phone,
+  detail->name, detail->phone, detail->test,
   customers(id, name, email, customer_reports(count)),
   payments(kind, amount_cents, provider, status, created_at)`;
 
@@ -131,7 +133,7 @@ function shape(b: Obj) {
     paidOnline: Number(q.paidOnline ?? q.deposit ?? 0), walletUsed: Number(q.walletUsed ?? 0),
     creditsUsed: Number(q.creditsUsed ?? 0), savings: Number(q.savings ?? 0),
     balanceDue, collected, owing: voided ? 0 : Math.max(0, balanceDue - collected),
-    tier: q.tier ?? null, member: !!b.membership_id, test: !!q.test,
+    tier: q.tier ?? null, member: !!b.membership_id, test: !!q.test || b.test === true, // detail_v2 flags detail.test
     payments: pays.map((p) => ({ kind: p.kind, amount: p.amount_cents / 100, provider: p.provider, at: p.created_at })),
   };
 }
@@ -143,7 +145,7 @@ const INVOICE_OPEN = ['requested', 'confirmed', 'done'];
 async function detailRow(id: unknown): Promise<Obj | Response> {
   if (!UUID.test(String(id))) return bad('bad_id');
   const { data, error } = await db.from('bookings')
-    .select('id, status, flow, deposit_status, quote, detail').eq('id', id).maybeSingle();
+    .select('id, status, flow, deposit_status, quote, detail, customer_id, membership_id').eq('id', id).maybeSingle();
   if (error) throw error;
   if (!data) return bad('not_found', 404);
   if (data.flow !== 'detail_v2') return bad('not_detail');
@@ -161,7 +163,7 @@ function cleanExtras(x: unknown): { name: string; price: number }[] | null {
   for (const e of x) {
     const name = String(e?.name ?? '').trim().slice(0, 60);
     if (!name) return null;
-    out.push({ name, price: Number(e?.price) }); // invoiceTotals validates the number
+    out.push({ name, price: Number(e?.price) }); // invoiceTotalsLines validates the number
   }
   return out;
 }
@@ -171,33 +173,64 @@ async function mirrorQuote(row: Obj, total: number, balance: number) {
   await db.from('bookings').update({ quote: { ...row.quote, total, balanceDue: balance, remainder: balance } }).eq('id', row.id);
 }
 
-// The invoice row, created from the starting price the first time it is needed.
-async function ensureInvoice(row: Obj) {
-  const have = await db.from('booking_invoices').select('booking_id').eq('booking_id', row.id).maybeSingle();
-  if (have.data) return;
-  const price = Number(row.quote?.startingPrice ?? row.quote?.total ?? 0);
-  const t = invoiceTotals({ servicePrice: price, extras: [], depositCredit: depositCreditOf(row) });
-  await db.from('booking_invoices').upsert(
-    { booking_id: row.id, service_price: price, extras: [], deposit_credit: t.credit, total: t.total, balance: t.balance },
-    { onConflict: 'booking_id', ignoreDuplicates: true },
-  );
+// The member % the booking was priced with (0 for guests). Server-written; the DB allows 0..50.
+const memberPercentOf = (row: Obj) => {
+  const p = Number(row.quote?.memberPercent ?? 0);
+  return Number.isInteger(p) && p >= 0 && p <= 50 ? p : 0;
+};
+// The 25%-off reward the booking used (0 or 25), applied at the job like the member %.
+const rewardPercentOf = (row: Obj) => {
+  const p = Number(row.quote?.rewardPercent ?? 0);
+  return Number.isInteger(p) && p >= 0 && p <= 100 ? p : 0;
+};
+
+// The draft before any edit, with the same totals detail_invoice_pay (migration 0017) gets when
+// no invoice exists: one line per car at its starting price with the quote's covered/credit, or
+// one line for an older quote. A covered car shows $0 here, as cleanLines stores it.
+function quoteInvoiceLines(row: Obj): InvoiceLine[] {
+  const q = row.quote ?? {};
+  if (!Array.isArray(q.lines) || !q.lines.length) {
+    return [{ price: Number(q.startingPrice ?? q.total ?? 0), covered: false }];
+  }
+  return q.lines.map((l: Obj) => {
+    const covered = l.covered === true;
+    const line: InvoiceLine = { price: covered ? 0 : Number(l.startingPrice ?? 0), covered };
+    if (Number.isInteger(l.credit)) line.credit = l.credit;
+    return line;
+  });
 }
 
 async function invoiceFor(row: Obj) {
   const { data } = await db.from('booking_invoices').select('*').eq('booking_id', row.id).maybeSingle();
   if (data) {
+    // an invoice saved before per-car lines existed: one uncovered line at service_price
+    const lines: InvoiceLine[] = Array.isArray(data.lines) && data.lines.length
+      ? data.lines : [{ price: data.service_price, covered: false }];
     return {
-      servicePrice: data.service_price, extras: data.extras, depositCredit: data.deposit_credit, total: data.total,
-      balance: data.balance, status: data.status,
+      lines, servicePrice: data.service_price, extras: data.extras, memberPercent: data.member_percent ?? 0,
+      rewardPercent: data.reward_percent ?? 0,
+      depositCredit: data.deposit_credit, total: data.total, balance: data.balance, status: data.status,
       paidAt: data.paid_at, paidMethod: data.paid_method, saved: true,
     };
   }
-  const price = Number(row.quote?.startingPrice ?? row.quote?.total ?? 0);
-  const t = invoiceTotals({ servicePrice: price, extras: [], depositCredit: depositCreditOf(row) });
+  const lines = quoteInvoiceLines(row);
+  const memberPercent = memberPercentOf(row);
+  const rewardPercent = rewardPercentOf(row);
+  const t = invoiceTotalsLines({ lines, extras: [], memberPercent, rewardPercent, depositCredit: depositCreditOf(row) });
   return {
-    servicePrice: price, extras: [], depositCredit: t.credit, total: t.total, balance: t.balance,
+    lines, servicePrice: lines.reduce((n, l) => n + linePayable(l), 0), extras: [], memberPercent, rewardPercent,
+    depositCredit: t.credit, total: t.total, balance: t.balance,
     status: 'draft', paidAt: null, paidMethod: null, saved: false,
   };
+}
+
+// The cars on a booking: detail.cars, or the one car an older booking stored flat.
+function carsOf(detail: Obj): Obj[] {
+  if (Array.isArray(detail.cars) && detail.cars.length) return detail.cars;
+  return [{
+    year: detail.vehicle?.year ?? '', make: detail.vehicle?.make ?? '', vehicleType: detail.vehicleType,
+    service: detail.service, condition: detail.condition, petHair: !!detail.petHair,
+  }];
 }
 
 // ——— actions ———
@@ -401,7 +434,7 @@ const handlers: Record<string, Handler> = {
   // ——— members (owner) ———
   members: async () => {
     const { data, error } = await db.from('memberships')
-      .select('id, code, tier, active, is_test, stripe_subscription_id, created_at, customers(id, name, email)')
+      .select('id, code, tier, vehicle_type, active, is_test, stripe_subscription_id, created_at, customers(id, name, email)')
       .order('created_at', { ascending: false });
     if (error) throw error;
     return json((data ?? []).map((m: Obj) => ({ ...m, billing: !!m.stripe_subscription_id, stripe_subscription_id: undefined })));
@@ -411,17 +444,36 @@ const handlers: Record<string, Handler> = {
     const name = String(b.name ?? '').trim().slice(0, 80);
     const email = String(b.email ?? '').trim().toLowerCase();
     const tier = String(b.tier ?? '') as Tier;
+    const vehicleType = b.vehicleType === undefined || b.vehicleType === '' ? 'sedan' : b.vehicleType;
     if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !TIERS.includes(tier)) return bad('bad_member');
+    if (!isVehicle(vehicleType)) return bad('bad_vehicle');
     const r = await provisionMember(db, { email, name, tier }); // same path the Stripe webhook uses
-    return r.ok ? json({ ok: true, code: r.code, credits: r.credits }) : bad(r.error, 409);
+    if (!r.ok) return bad(r.error, 409);
+    // ponytail: second write after provisioning (the column defaults to sedan); fold into
+    // provisionMember if the Stripe webhook ever needs to set a plan vehicle too.
+    if (vehicleType !== 'sedan') {
+      const { error } = await db.from('memberships').update({ vehicle_type: vehicleType }).eq('id', r.membershipId);
+      if (error) throw error;
+    }
+    return json({ ok: true, code: r.code, credits: r.credits });
+  },
+
+  member_vehicle: async (b) => {
+    if (!UUID.test(String(b.id))) return bad('bad_id');
+    if (!isVehicle(b.vehicleType)) return bad('bad_vehicle');
+    const { data, error } = await db.from('memberships').update({ vehicle_type: b.vehicleType }).eq('id', b.id).select('id');
+    if (error) throw error;
+    return data?.length ? json({ ok: true }) : bad('not_found', 404);
   },
 
   member_tier: async (b) => {
     const tier = String(b.tier ?? '') as Tier;
     if (!TIERS.includes(tier)) return bad('bad_tier');
-    const plan = (await catalog()).plans[tier];
+    // credits_per_period = the plan's total included visits (as provisionMember and test_tier write it)
+    const visits = Object.values(detailPricingOf(await catalog()).membership[tier].visits)
+      .reduce((s: number, n) => s + (n ?? 0), 0);
     const { data, error } = await db.from('memberships')
-      .update({ tier, plan: tier, credits_per_period: plan.credits }).eq('id', b.id).select('stripe_subscription_id');
+      .update({ tier, plan: tier, credits_per_period: visits }).eq('id', b.id).select('stripe_subscription_id');
     if (error) throw error;
     return json({
       ok: true,
@@ -464,8 +516,14 @@ const handlers: Record<string, Handler> = {
   detail_get: async (b) => {
     const row = await detailRow(b.id);
     if (row instanceof Response) return row;
-    const inv = await invoiceFor(row);
     const { payKey: _k, ipHash: _i, ...detail } = (row.detail ?? {}) as Obj;
+    const [inv, wallet, mem] = await Promise.all([
+      invoiceFor(row),
+      row.customer_id ? walletBalance(db, row.customer_id) : 0,
+      row.membership_id
+        ? db.from('memberships').select('tier, is_test').eq('id', row.membership_id).maybeSingle().then((r: Obj) => r.data)
+        : null,
+    ]);
     const photos: string[] = [];
     for (const path of (detail.photos ?? []) as string[]) {
       const { data } = await db.storage.from(PHOTOS).createSignedUrl(path, 300);
@@ -474,28 +532,40 @@ const handlers: Record<string, Handler> = {
     return json({
       detail: { ...detail, photos: undefined }, photos, depositStatus: row.deposit_status,
       depositCreditable: depositCreditOf(row), startingPrice: Number(row.quote?.startingPrice ?? 0), invoice: inv,
+      cars: carsOf(detail), wallet,
+      member: mem ? { tier: mem.tier, test: !!mem.is_test || detail.test === true } : null,
+      bump: detail.bumpedFrom ? { from: detail.bumpedFrom, at: detail.bumpedAt ?? null } : null,
     });
   },
 
+  // {id, lines:[{price}], extras}: one price per car in the booking's order. Covered/credit come
+  // from the stored quote (cleanLines), never the client. Old body {id, servicePrice, extras} = one line.
   invoice_save: async (b) => {
     const row = await detailRow(b.id);
     if (row instanceof Response) return row;
     if (!INVOICE_OPEN.includes(row.status)) return bad('not_open', 409);
     const extras = cleanExtras(b.extras);
     if (!extras) return bad('bad_invoice');
+    const lines = cleanLines(b.lines !== undefined ? b.lines : [{ price: b.servicePrice }], row.quote?.lines);
+    if (!lines) return bad('bad_invoice');
+    const memberPercent = memberPercentOf(row);
+    const rewardPercent = rewardPercentOf(row);
+    const carsPart = lines.reduce((n, l) => n + linePayable(l), 0); // service_price: the cars before the % off
     let t;
     try {
-      t = invoiceTotals({ servicePrice: Number(b.servicePrice), extras, depositCredit: depositCreditOf(row) });
+      if (carsPart > 10000) throw new Error('bad_invoice'); // service_price column limit
+      t = invoiceTotalsLines({ lines, extras, memberPercent, rewardPercent, depositCredit: depositCreditOf(row) });
     } catch {
       return bad('bad_invoice');
     }
     const prev = (await db.from('booking_invoices').select('*').eq('booking_id', row.id).maybeSingle()).data;
     if (prev?.status === 'paid') return bad('already_paid', 409);
-    const same = prev && prev.service_price === Number(b.servicePrice) && JSON.stringify(prev.extras) === JSON.stringify(extras);
+    const same = prev && JSON.stringify(prev.lines) === JSON.stringify(lines) && prev.member_percent === memberPercent
+      && (prev.reward_percent ?? 0) === rewardPercent && JSON.stringify(prev.extras) === JSON.stringify(extras);
     if (!same) {
       const { error } = await db.from('booking_invoices').upsert({
-        booking_id: row.id, service_price: Number(b.servicePrice), extras, deposit_credit: t.credit, total: t.total,
-        balance: t.balance, status: 'draft',
+        booking_id: row.id, service_price: carsPart, lines, member_percent: memberPercent, reward_percent: rewardPercent, extras,
+        deposit_credit: t.credit, total: t.total, balance: t.balance, status: 'draft',
       });
       if (error) {
         if (String(error.message).includes('already_paid')) return bad('already_paid', 409); // paid-lock trigger
@@ -510,16 +580,27 @@ const handlers: Record<string, Handler> = {
     const row = await detailRow(b.id);
     if (row instanceof Response) return row;
     const method = String(b.method ?? '');
-    if (method !== 'cash' && method !== 'card') return bad('bad_method');
-    // One transaction in the database (see detail_invoice_pay in migration 0015).
+    if (!['cash', 'card', 'balance'].includes(method)) return bad('bad_method');
+    // One transaction in the database (detail_invoice_pay, migration 0017): invoice lines, member
+    // %, and for 'balance' the wallet debit; a short balance raises insufficient_balance.
     const { data, error } = await db.rpc('detail_invoice_pay', { p_booking: row.id, p_method: method });
     if (error) {
-      for (const code of ['already_paid', 'not_open', 'not_found', 'bad_method']) {
+      for (const code of ['insufficient_balance', 'already_paid', 'not_open', 'not_found', 'bad_method']) {
         if (String(error.message).includes(code)) return bad(code, code === 'not_found' ? 404 : code === 'bad_method' ? 400 : 409);
       }
       throw error;
     }
-    return json({ ok: true, ...(data as Obj) });
+    // Paid = job done, so a member earns stamps now. The money is already recorded: a stamp
+    // failure is logged, not reported as a failed payment (the owner can add stamps by hand).
+    let stamps = 0;
+    if (row.membership_id) {
+      try {
+        stamps = await awardStamps(db, row.id);
+      } catch (e) {
+        console.error('stamps after invoice_pay failed', row.id, (e as Error)?.message ?? e);
+      }
+    }
+    return json({ ok: true, ...(data as Obj), stamps });
   },
 
   detail_pricing_get: async () => {

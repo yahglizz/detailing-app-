@@ -16,10 +16,10 @@ const PER_IP = 10;
 const ALL_IPS = 300;
 
 export function clientIp(req: Request): string {
-  return req.headers.get('cf-connecting-ip')
-    ?? req.headers.get('x-forwarded-for')?.split(',')[0].trim()
-    ?? req.headers.get('x-real-ip')
-    ?? 'unknown';
+  // Only Cloudflare's header: the platform sets it and overwrites any client value.
+  // x-forwarded-for / x-real-ip can be forged to dodge the code-guessing rate limit, so a
+  // request without cf-connecting-ip shares one strict 'unknown' bucket instead.
+  return req.headers.get('cf-connecting-ip') ?? 'unknown';
 }
 
 export interface Account {

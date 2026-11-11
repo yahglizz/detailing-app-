@@ -122,7 +122,7 @@ Deno.serve(async (req) => {
   const [{ data: cust }, wallet, { data: history }] = await Promise.all([
     db.from('customers').select('name, email, address, cars').eq('id', acct.customerId).single(),
     walletBalance(db, acct.customerId),
-    db.from('bookings').select('id, preferred_day, time_slot, status, quote, paid_with_credit, membership_id')
+    db.from('bookings').select('id, preferred_day, time_slot, status, quote, paid_with_credit, membership_id, created_at')
       .eq('customer_id', acct.customerId).order('created_at', { ascending: false }).limit(20),
   ]);
 
@@ -149,8 +149,8 @@ Deno.serve(async (req) => {
     const bookingSavings = (history ?? [])
       .filter((b) => b.membership_id === m.id && !['declined', 'refunded', 'pending_payment'].includes(b.status))
       .reduce((s, b) => {
-        const q = b.quote as { total: number; payable?: number };
-        return s + (q.total - (q.payable ?? q.total));
+        const q = b.quote as { total: number; subtotal?: number; payable?: number };
+        return s + ((q.subtotal ?? q.total) - (q.payable ?? q.total));
       }, 0);
     const rewardsRetail = (applied ?? []).reduce((s, r) => s + r.retail_value, 0);
     const months = monthsActive(String(m.period_start), new Date().toISOString().slice(0, 10));
@@ -165,10 +165,14 @@ Deno.serve(async (req) => {
     const { data: used } = await db.from('bookings').select('quote')
       .eq('membership_id', m.id).in('status', ['pending_payment', 'requested', 'confirmed', 'done'])
       .gte('created_at', monthStart);
-    const usedN = (used ?? []).reduce((s: number, b: { quote: { visitsUsed?: number } | null }) => s + (b.quote?.visitsUsed ?? 0), 0);
-    const visits = totalVisits(def.visits);
-    const visitsLeft = Math.max(0, visits - usedN);
-    credits = visitsLeft;
+    const left: Record<string, number> = {};
+    for (const [svc, n] of Object.entries(def.visits)) {
+      const usedN = (used ?? []).reduce((t: number, b: { quote: { visitsUsed?: Record<string, number> } | null }) =>
+        t + (b.quote?.visitsUsed?.[svc] ?? 0), 0);
+      left[svc] = Math.max(0, (n as number) - usedN);
+    }
+    const visitsLeft = left;
+    credits = Object.values(left).reduce((t, n) => t + n, 0);
     plan = {
       tier: m.tier, vehicleType, monthlyPrice, discountPercent: def.discountPercent,
       stampsPerCar: def.stampsPerCar, topupBonusPercent: def.topupBonusPercent,

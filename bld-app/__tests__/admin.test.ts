@@ -1,6 +1,6 @@
 import { DEFAULT_CATALOG } from '../../supabase/functions/_shared/pricing';
 import { MemberCatalog } from '../../supabase/functions/_shared/membership';
-import { ACTIONS, can, validateCatalog } from '../../supabase/functions/_shared/admin_rules';
+import { ACTIONS, can, cleanLines, validateCatalog } from '../../supabase/functions/_shared/admin_rules';
 
 const saved = {
   ...DEFAULT_CATALOG,
@@ -20,7 +20,7 @@ const saved = {
 } as MemberCatalog & Record<string, unknown>;
 
 describe('can()', () => {
-  const ownerOnly = ['decline', 'members', 'member_add', 'member_tier', 'member_active', 'member_stamp',
+  const ownerOnly = ['decline', 'members', 'member_add', 'member_tier', 'member_active', 'member_stamp', 'member_vehicle',
     'pricing_get', 'pricing_save', 'detail_pricing_get', 'detail_pricing_save', 'staff_list', 'staff_add', 'staff_remove', 'staff_reset',
     'stripe_status', 'stripe_connect'];
 
@@ -42,6 +42,10 @@ describe('can()', () => {
     const r = validateCatalog({ services: { outside: 50 } }, prev);
     expect(r.ok).toBe(true);
     if (r.ok) expect((r.config as any).detailPricing).toEqual({ marker: 1 });
+  });
+  it('member_vehicle is owner only', () => {
+    expect(can('owner', 'member_vehicle')).toBe(true);
+    expect(can('manager', 'member_vehicle')).toBe(false);
   });
   it('unknown actions are refused for everyone', () => {
     expect(can('owner', 'drop_tables')).toBe(false);
@@ -98,5 +102,46 @@ describe('validateCatalog()', () => {
 
   it('rejects a non-object', () => {
     expect(validateCatalog(null, saved)).toEqual({ ok: false, error: 'bad_config' });
+  });
+});
+
+describe('cleanLines()', () => {
+  // as the detail function stores them in bookings.quote.lines
+  const quote = [
+    { service: 'full', vehicleType: 'sedan', startingPrice: 175, deposit: 25, covered: true, payable: 0 },
+    { service: 'full', vehicleType: 'large', startingPrice: 235, deposit: 45, covered: false, payable: 48, credit: 175 },
+    { service: 'exterior', vehicleType: 'suv', startingPrice: 50, deposit: 35, covered: false, payable: 40 },
+  ];
+
+  it('cleanLines forces covered lines to 0', () => {
+    const r = cleanLines([{ price: 500 }, { price: 235 }, { price: 50 }], quote);
+    expect(r?.[0]).toEqual({ price: 0, covered: true });
+  });
+
+  it('cleanLines keeps credit from the quote', () => {
+    // the client can only send prices: a covered flag or credit it sends is ignored
+    const r = cleanLines([{ price: 0, covered: false }, { price: 260, credit: 999 }, { price: 55, covered: true, credit: 50 }], quote);
+    expect(r).toEqual([
+      { price: 0, covered: true },
+      { price: 260, covered: false, credit: 175 },
+      { price: 55, covered: false },
+    ]);
+  });
+
+  it('cleanLines rejects wrong count / non-integer', () => {
+    expect(cleanLines([{ price: 175 }, { price: 235 }], quote)).toBeNull();
+    expect(cleanLines([{ price: 175 }, { price: 235 }, { price: 50 }, { price: 1 }], quote)).toBeNull();
+    expect(cleanLines([{ price: 175 }, { price: 235.5 }, { price: 50 }], quote)).toBeNull();
+    expect(cleanLines([{ price: 175 }, { price: '235' }, { price: 50 }], quote)).toBeNull();
+    expect(cleanLines([{ price: 175 }, { price: -1 }, { price: 50 }], quote)).toBeNull();
+    expect(cleanLines([{ price: 175 }, { price: 10001 }, { price: 50 }], quote)).toBeNull();
+    expect(cleanLines([{ price: 175 }, null, { price: 50 }], quote)).toBeNull();
+    expect(cleanLines('nope', quote)).toBeNull();
+  });
+
+  it('an old single-car quote (no lines) takes one uncovered line', () => {
+    expect(cleanLines([{ price: 190 }], undefined)).toEqual([{ price: 190, covered: false }]);
+    expect(cleanLines([{ price: 190 }], [])).toEqual([{ price: 190, covered: false }]);
+    expect(cleanLines([{ price: 190 }, { price: 1 }], undefined)).toBeNull();
   });
 });

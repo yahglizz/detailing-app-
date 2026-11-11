@@ -65,6 +65,8 @@ const ERR = {
   upload_failed: 'A photo didn’t upload. Check your connection and try again.',
   already_paid: 'This invoice is already paid.',
   bad_invoice: 'Check the price and extras. Whole dollars only, and every extra needs a name.',
+  insufficient_balance: 'Their balance no longer covers this. Take cash or card.',
+  bad_vehicle: 'Pick a vehicle type.',
   not_detail: 'This booking has no inspection invoice.',
   too_many: 'Too many requests. Try again later.',
   server_error: 'Something went wrong on our side. Try again.',
@@ -466,16 +468,20 @@ function BookingRow({ b }) {
 const YESNO = (v) => (v ? 'Yes' : 'No');
 const dayBtn = (iso) => { const d = utc(iso); return `${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getUTCDay()]} ${MONTH[d.getUTCMonth()].slice(0, 3)} ${d.getUTCDate()}`; };
 const nextDays = (n) => Array.from({ length: n }, (_, i) => { const d = new Date(); d.setDate(d.getDate() + i); return localISO(d); });
+const carName = (c, i) => [c?.year, c?.make].filter(Boolean).join(' ') || `Car ${i + 1}`;
+const carSpec = (c = {}) => [DETAIL_VEHICLE[c.vehicleType] || c.vehicleType, DETAIL_SERVICE[c.service] || c.service,
+  c.condition, c.petHair && 'pet hair'].filter(Boolean).join(' · ');
+const PAID_BY = { cash: 'Cash', card: 'Card', balance: 'Balance' };
 function DetailJob({ b, me, onChanged, onCancel }) {
   const [d, setD] = useState(null);
-  const [price, setPrice] = useState('');
+  const [prices, setPrices] = useState([]); // one per car, in the booking's car order
   const [extras, setExtras] = useState([]);
   const [editing, setEditing] = useState(false);
   const [changing, setChanging] = useState(false);
   const [day, setDay] = useState(b.day);
   const [slot, setSlot] = useState(b.slot || '');
   const load = useCallback(() => api('detail_get', { id: b.id }).then((x) => {
-    setD(x); setPrice(String(x.invoice.servicePrice)); setExtras(x.invoice.extras || []);
+    setD(x); setPrices(x.invoice.lines.map((l) => String(l.price))); setExtras(x.invoice.extras || []);
   }).catch(toastErr), [b.id]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setDay(b.day); setSlot(b.slot || ''); }, [b.day, b.slot]);
@@ -487,22 +493,36 @@ function DetailJob({ b, me, onChanged, onCancel }) {
   const asked = b.status === 'requested';
   const confirmed = b.status === 'confirmed';
   const cleaned = extras.filter((e) => String(e.name || '').trim()).map((e) => ({ name: String(e.name).trim(), price: Number(e.price) || 0 }));
-  const dirty = Number(price) !== inv.servicePrice || JSON.stringify(cleaned) !== JSON.stringify(inv.extras || []);
-  // Display arithmetic only: the server recomputes and is the authority.
-  const total = (Number(price) || 0) + cleaned.reduce((s, e) => s + e.price, 0);
+  // A covered car (included visit) stays $0 whatever is typed; the server enforces it too.
+  const lines = inv.lines.map((l, i) => ({ ...l, price: l.covered ? 0 : Number(prices[i]) || 0 }));
+  const dirty = lines.some((l, i) => l.price !== inv.lines[i].price) || JSON.stringify(cleaned) !== JSON.stringify(inv.extras || []);
+  // Display arithmetic only (= invoiceTotalsLines): the server recomputes and is the authority.
+  const pct = inv.memberPercent || 0;
+  const rpct = inv.rewardPercent || 0;
+  const gross = lines.reduce((s, l) => s + (l.covered ? 0 : Math.max(0, l.price - (l.credit || 0))), 0)
+    + cleaned.reduce((s, e) => s + e.price, 0);
+  const total = Math.round((gross * (100 - rpct) * (100 - pct)) / 10000);
   const credit = Math.min(d.depositCreditable, total);
   const refund = d.depositCreditable - credit;
   const due = total - credit;
+  const canBalance = due > 0 && d.wallet >= due;
+  // the drawer header already shows b.test and b.tier when the booking list has them
+  const isTest = (d.member?.test || info.test === true) && !b.test;
+  const tier = !b.tier && d.member?.tier;
   const setExtra = (i, k, v) => setExtras(extras.map((e, n) => (n === i ? { ...e, [k]: v } : e)));
+  const setPrice = (i, v) => setPrices(prices.map((p, n) => (n === i ? v : p)));
   const refresh = () => Promise.all([load(), onChanged()]);
 
   const confirmTime = () => api('confirm', { id: b.id, day, slot: slot || null })
     .then((r) => { toast(`Confirmed for ${r.when}. Customer emailed.`); setChanging(false); return refresh(); });
-  // One tap: save the price if it changed, take the payment, the job is done.
+  // One tap: save the prices if they changed, take the payment, the job is done.
   const pay = async (method) => {
-    if (dirty) await api('invoice_save', { id: b.id, servicePrice: Number(price), extras: cleaned });
-    const r = await api('invoice_pay', { id: b.id, method });
-    toast(`${money(r.balance)} ${method === 'cash' ? 'cash' : 'card'} received. Job done.`);
+    if (dirty) await api('invoice_save', { id: b.id, lines: lines.map((l) => ({ price: l.price })), extras: cleaned });
+    const r = await api('invoice_pay', { id: b.id, method }).catch((e) => {
+      if (e.code === 'insufficient_balance') load(); // show the balance as it is now
+      throw e;
+    });
+    toast(`${money(r.balance)} ${method === 'balance' ? 'taken from their balance' : `${method} received`}. Job done.${r.stamps ? ` +${plural(r.stamps, 'stamp')}.` : ''}`);
     return refresh();
   };
 
@@ -510,6 +530,8 @@ function DetailJob({ b, me, onChanged, onCancel }) {
     <div class="section"><h4>Appointment</h4>
       <div class="when-card"><div><div class="when-big">${fmtLongDay(b.day)}</div><div class="when-sub">${timeOf(b)}</div></div>
         <span class=${'pill ' + b.status}>${asked ? 'Requested' : confirmed ? 'Confirmed' : STATUS[b.status] || b.status}</span></div>
+      ${(tier || isTest) && html`<div class="chips" style="margin-top:10px">${tier && html`<${Tier} tier=${tier} />`} ${isTest && html`<span class="tag">TEST</span>`}</div>`}
+      ${d.bump && html`<div class="banner info" style="margin-top:10px"><${Icon} name="alert" /><div>Moved from ${fmtSlot(d.bump.from)} by a VIP booking.</div></div>`}
       ${asked && !changing && html`<div class="stack" style="gap:8px;margin-top:12px">
         <${ActionButton} class="btn primary block big" run=${confirmTime}><${Icon} name="check" size=${20} /> Confirm this time<//>
         <button type="button" class="btn block" onClick=${() => setChanging(true)}>Pick another time</button></div>`}
@@ -523,14 +545,18 @@ function DetailJob({ b, me, onChanged, onCancel }) {
 
     <div class="section"><h4>Payment</h4>
       ${paid
-        ? html`<div class="paid-card"><div><b>${money(inv.balance)}</b><div class="when-sub">${inv.paidMethod === 'card' ? 'Card' : 'Cash'} received${inv.paidAt ? ' · ' + new Date(inv.paidAt).toLocaleString() : ''}</div></div>
+        ? html`<div class="paid-card"><div><b>${money(inv.balance)}</b><div class="when-sub">${PAID_BY[inv.paidMethod] || 'Cash'} received${inv.paidAt ? ' · ' + new Date(inv.paidAt).toLocaleString() : ''}</div></div>
             <span class="pill done">Job done</span></div>`
-        : html`<div class="total-card"><div><div class="when-sub">${credit > 0 ? `Total ${money(total)} − deposit ${money(credit)}` : `Quoted ${money(d.startingPrice || inv.servicePrice)}`}</div><b>${money(due)}</b></div>
+        : html`<div class="total-card"><div>${rpct > 0 && html`<div class="when-sub">Reward −${rpct}%</div>`}${pct > 0 && html`<div class="when-sub">Member −${pct}%</div>`}
+              <div class="when-sub">${credit > 0 ? `Total ${money(total)} − deposit ${money(credit)}` : `Total ${money(total)}`}</div><b>${money(due)}</b></div>
             ${confirmed && html`<button type="button" class="btn sm" onClick=${() => setEditing(!editing)}>${editing ? 'Done' : 'Change price'}</button>`}</div>
           ${refund > 0 && html`<div class="banner" style="margin-top:10px"><${Icon} name="alert" /><div>Refund <b>${money(refund)}</b> of the deposit to the customer.</div></div>`}
           ${confirmed && editing && html`<div class="stack" style="gap:12px;margin-top:12px">
-            <label class="field"><span>Final price</span><div class="money-wrap"><input class="input money" inputmode="numeric" value=${price}
-              onInput=${(e) => setPrice(e.target.value.replace(/[^\d]/g, ''))} /></div></label>
+            ${inv.lines.map((l, i) => (l.covered
+              ? html`<div class="field"><span>${carName(d.cars[i], i)}</span><div><span class="tag">Included visit</span></div></div>`
+              : html`<label class="field"><span>${carName(d.cars[i], i)} · final price</span><div class="money-wrap"><input class="input money" inputmode="numeric" value=${prices[i]}
+                  onInput=${(e) => setPrice(i, e.target.value.replace(/[^\d]/g, ''))} /></div>
+                  ${l.credit > 0 && html`<small class="muted">member credit −${money(l.credit)}</small>`}</label>`))}
             ${extras.map((e, i) => html`<div class="inv-extra">
               <label class="field"><span>Extra</span><input class="input" value=${e.name} placeholder="Name" onInput=${(ev) => setExtra(i, 'name', ev.target.value)} /></label>
               <label class="field"><span>Price</span><div class="money-wrap"><input class="input money" inputmode="numeric" value=${e.price}
@@ -541,7 +567,8 @@ function DetailJob({ b, me, onChanged, onCancel }) {
           ${confirmed
             ? html`<div class="pay-split" style="margin-top:12px">
                 <${ActionButton} class="btn primary big" confirmText=${`Cash received: ${money(due)}?`} run=${() => pay('cash')}>Cash · ${money(due)}<//>
-                <${ActionButton} class="btn big" confirmText=${`Card payment received: ${money(due)}?`} run=${() => pay('card')}>Card · ${money(due)}<//></div>`
+                <${ActionButton} class="btn big" confirmText=${`Card payment received: ${money(due)}?`} run=${() => pay('card')}>Card · ${money(due)}<//>
+                ${canBalance && html`<${ActionButton} class="btn big" confirmText=${`Take ${money(due)} from their balance (${money(d.wallet)})?`} run=${() => pay('balance')}>Balance · ${money(due)}<//>`}</div>`
             : html`<p class="muted small" style="margin:10px 0 0">${asked ? 'Confirm the time to take payment.' : ''}</p>`}`}
     </div>
 
@@ -549,11 +576,14 @@ function DetailJob({ b, me, onChanged, onCancel }) {
       <dl class="kv">
         <dt>Address</dt><dd><a href=${`https://maps.google.com/?q=${encodeURIComponent(b.address)}`} target="_blank" rel="noopener">${b.address}</a></dd>
         <dt>Phone</dt><dd><a href=${`tel:${info.phone}`}>${info.phone}</a></dd>
-        <dt>Package</dt><dd>${carLine(b.items[0])}</dd>
-        <dt>Vehicle</dt><dd>${[info.vehicle?.year, info.vehicle?.make].filter(Boolean).join(' ')}</dd>
-        <dt>Interior</dt><dd style="text-transform:capitalize">${info.condition}${info.petHair ? ' · pet hair' : ''}</dd>
         ${b.notes && html`<dt>Notes</dt><dd style="white-space:pre-wrap">${b.notes}</dd>`}
       </dl>
+      <div class="cars" style="margin-top:12px">${d.cars.map((c, i) => {
+        const l = lines[i];
+        return html`<div class="car"><div><b>${carName(c, i)}</b><small>${carSpec(c)}</small></div>
+          <div style="text-align:right">${!l ? null : l.covered ? html`<span class="tag">Included visit</span>`
+            : html`<b>${money(l.price)}</b>${l.credit > 0 && html`<small>member credit −${money(l.credit)}</small>`}`}</div></div>`;
+      })}</div>
       ${d.photos.length > 0 && html`<div class="photo-grid" style="margin-top:12px">${d.photos.map((u) => html`
         <a href=${u} target="_blank" rel="noopener"><img src=${u} alt="Customer vehicle photo" loading="lazy" /></a>`)}</div>`}
     </div>
@@ -965,12 +995,13 @@ function Leads({ onChange }) {
 // ═══════════════════════════ members (owner) ═══════════════════════════
 function Members() {
   const [list, setList] = useState(null);
-  const [form, setForm] = useState({ name: '', email: '', tier: 'bronze' });
+  const blank = { name: '', email: '', tier: 'bronze', vehicleType: 'sedan' };
+  const [form, setForm] = useState(blank);
   const [made, setMade] = useState(null);
   const load = useCallback(() => api('members').then(setList).catch(toastErr), []);
   useEffect(() => { load(); }, []);
   const add = () => api('member_add', form).then((r) => {
-    setMade({ ...r, name: form.name }); setForm({ name: '', email: '', tier: 'bronze' }); load();
+    setMade({ ...r, name: form.name }); setForm(blank); load();
   });
   const act = (fn) => fn.then((r) => { if (r?.warning) pushToast(r.warning, true); else toast('Saved.'); load(); }).catch(toastErr);
   return html`
@@ -982,20 +1013,24 @@ function Members() {
         <label class="field"><span>Email</span><input class="input" type="email" value=${form.email} onInput=${(e) => setForm({ ...form, email: e.target.value })} /></label>
         <label class="field" style="flex:0 1 150px"><span>Tier</span><select class="input" value=${form.tier} onChange=${(e) => setForm({ ...form, tier: e.target.value })}>
           ${TIERS.map((t) => html`<option value=${t}>${t[0].toUpperCase() + t.slice(1)}</option>`)}</select></label>
+        <label class="field" style="flex:0 1 190px"><span>Plan vehicle</span><select class="input" value=${form.vehicleType} onChange=${(e) => setForm({ ...form, vehicleType: e.target.value })}>
+          ${D_VEHICLES.map((v) => html`<option value=${v}>${DETAIL_VEHICLE[v]}</option>`)}</select></label>
         <${ActionButton} class="btn primary" run=${add}><${Icon} name="plus" size=${18} /> Add & email code<//>
       </div>
-      ${made && html`<div class="reveal" style="margin-top:16px"><div><b>${made.name}</b> is in, with ${plural(made.credits, 'credit')}. Their code was emailed:</div>
+      ${made && html`<div class="reveal" style="margin-top:16px"><div><b>${made.name}</b> is in, with ${plural(made.credits, 'included visit')} a month. Their code was emailed:</div>
         <code>${made.code}</code><button class="btn sm" onClick=${() => copy(made.code)}>Copy</button></div>`}
     </section>
     <section class="card rise" style="--i:2">
       ${!list ? html`<${Loading} />` : list.length ? html`<table class="table">
-        <thead><tr><th>Member</th><th>Code</th><th>Tier</th><th>Billing</th><th>Active</th><th></th></tr></thead>
+        <thead><tr><th>Member</th><th>Code</th><th>Tier</th><th>Vehicle</th><th>Billing</th><th>Active</th><th></th></tr></thead>
         <tbody>${list.map((m) => html`<tr key=${m.id} style="cursor:default">
           <td class="span"><div class="who"><div class="avatar">${initials(m.customers?.name || m.customers?.email)}</div><div style="min-width:0">
             <b><a href=${`#/customers/${m.customers?.id}`} style="text-decoration:none">${m.customers?.name || m.customers?.email}</a> ${m.is_test && html`<span class="tag">TEST</span>`}</b><small>${m.customers?.email}</small></div></div></td>
           <td class="mono hide-sm">${m.code}</td>
           <td><select class="input" style="min-height:36px;padding:6px 10px;width:auto" value=${m.tier} onChange=${(e) => act(api('member_tier', { id: m.id, tier: e.target.value }))} aria-label="Tier">
             ${TIERS.map((t) => html`<option value=${t}>${t[0].toUpperCase() + t.slice(1)}</option>`)}</select></td>
+          <td><select class="input" style="min-height:36px;padding:6px 10px;width:auto" value=${m.vehicle_type || 'sedan'} onChange=${(e) => act(api('member_vehicle', { id: m.id, vehicleType: e.target.value }))} aria-label="Plan vehicle">
+            ${D_VEHICLES.map((v) => html`<option value=${v}>${DETAIL_VEHICLE[v]}</option>`)}</select></td>
           <td class="hide-sm">${m.billing ? html`<span class="tag">STRIPE</span>` : html`<span class="tag">BY HAND</span>`}</td>
           <td><label class="switch"><input type="checkbox" checked=${m.active} aria-label="Active" onChange=${(e) => act(api('member_active', { id: m.id, active: e.target.checked }))} /></label></td>
           <td class="hide-sm"><${ActionButton} class="btn sm" run=${() => api('member_stamp', { id: m.id }).then(() => toast('+1 stamp.'))}>+1 stamp<//></td>
@@ -1072,6 +1107,8 @@ function DetailPricing() {
             </div>
             <div class="price-grid">${D_SERVICES.map((k) => html`<label class="field"><span>${DETAIL_SERVICE[k]} per month</span><input class="input" inputmode="numeric"
               value=${d.membership[t].visits[k] ?? 0} onInput=${(e) => set(['membership', t, 'visits', k], Number(e.target.value.replace(/[^\d]/g, '')) || 0)} /></label>`)}</div>
+            <div class="price-grid">${[['discountPercent', '% off other services'], ['topupBonusPercent', '% bonus on top-ups'], ['stampsPerCar', 'Reward stamps per car'], ['rank', 'Booking priority (1 low, 3 high)']].map(([k, label]) => html`<label class="field"><span>${label}</span><input class="input" inputmode="numeric"
+              value=${d.membership[t][k] ?? ''} onInput=${(e) => set(['membership', t, k], e.target.value === '' ? '' : Number(e.target.value.replace(/[^\d]/g, '')))} /></label>`)}</div>
             <label class="field"><span>Perks (one per line)</span><textarea class="input" rows="4" value=${d.membership[t].perks.join('\n')}
               onInput=${(e) => set(['membership', t, 'perks'], e.target.value.split('\n'))}></textarea></label>
           </div></div>`)}</div></div>
@@ -1088,7 +1125,6 @@ function Pricing() {
   if (!draft) return html`<${Head} eyebrow="Pricing" title="What a shine costs." /><${Loading} />`;
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(orig);
-  const planMoved = TIERS.filter((t) => draft.plans?.[t]?.price !== orig.plans?.[t]?.price);
   // A plain render helper, not a component: a component defined here would remount (and
   // drop focus) on every keystroke.
   const num = (path, label, kind = 'money') => {
@@ -1115,36 +1151,11 @@ function Pricing() {
     <${Head} eyebrow="Pricing" title="What a shine costs." lede="Change a number here and the app, the website and checkout all use it right away. No app update needed." />
     <div class="stack" style="gap:20px">
       <${DetailPricing} />
-      <section class="card rise" style="--i:1"><h3 class="sub">Details (per car, sedan price) · app and members</h3>
-        <div class="price-grid">${Object.keys(draft.services ?? {}).map((k) => html`${num(['services', k], SERVICE[k] || k)}`)}</div></section>
-      <section class="card rise" style="--i:2"><h3 class="sub">Extras</h3>
-        <div class="price-grid">${Object.keys(draft.extras ?? {}).map((k) => html`${num(['extras', k], EXTRA[k] || k)}`)}</div></section>
-      <section class="card rise" style="--i:3"><h3 class="sub">Vehicle size</h3>
-        <p class="muted small" style="margin:-6px 0 14px">The detail price is multiplied by this. Sedan is usually 1.</p>
-        <div class="price-grid">${Object.keys(draft.sizeMultipliers ?? {}).map((k) => html`${num(['sizeMultipliers', k], SIZE[k] || k, 'x')}`)}</div></section>
-      <section class="card rise" style="--i:4"><h3 class="sub">Checkout & website</h3>
+      <section class="card rise" style="--i:1"><h3 class="sub">Balance top-ups (app)</h3>
         <div class="price-grid">
-          ${num(['depositPercent'], 'Deposit', 'pct')}
-          ${num(['anchorPrice'], 'Lock-my-slot fee')}
-          ${num(['firstWashDiscountPercent'], 'First-wash discount', 'pct')}
-          ${num(['packages', 'ministry'], 'Ministry package')}
           ${num(['topup', 'min'], 'Smallest top-up')}
           ${num(['topup', 'max'], 'Largest top-up')}
         </div></section>
-      <section class="card rise" style="--i:5"><h3 class="sub">Membership plans</h3>
-        ${planMoved.length > 0 && html`<div class="banner info"><${Icon} name="info" /><div>New members pay the new price and the join buttons update themselves.
-          Current members keep the price they signed up at.</div></div>`}
-        <div style="overflow-x:auto"><table class="plan-table">
-          <thead><tr><th>Tier</th><th>Monthly</th><th>Details / mo</th><th>Member discount</th><th>Top-up bonus</th><th>Stamps per car</th></tr></thead>
-          <tbody>${TIERS.filter((t) => draft.plans?.[t]).map((t) => html`<tr>
-            <td><${Tier} tier=${t} /></td>
-            <td style="min-width:110px">${num(['plans', t, 'price'], '')}</td>
-            <td style="min-width:90px">${num(['plans', t, 'credits'], '', 'n')}</td>
-            <td style="min-width:100px">${num(['plans', t, 'discountPercent'], '', 'pct')}</td>
-            <td style="min-width:100px">${num(['plans', t, 'topupBonusPercent'], '', 'pct')}</td>
-            <td style="min-width:90px">${num(['plans', t, 'stampsPerCar'], '', 'n')}</td>
-          </tr>`)}</tbody></table></div>
-      </section>
     </div>
     ${dirty && html`<div class="savebar"><span>Unsaved price changes</span><div class="row">
       <button class="btn sm" onClick=${() => setDraft(orig)}>Undo</button>

@@ -1,6 +1,7 @@
 // Dashboard rules, kept pure so Jest covers them: who may do what, and what a price
 // edit is allowed to change.
 import type { MemberCatalog, Tier } from './membership.ts';
+import type { InvoiceLine } from './detail_pricing.ts';
 
 export type Role = 'owner' | 'manager';
 
@@ -14,7 +15,7 @@ const EVERYONE = [
 
 const OWNER_ONLY = [
   'decline',
-  'members', 'member_add', 'member_tier', 'member_active', 'member_stamp',
+  'members', 'member_add', 'member_tier', 'member_active', 'member_stamp', 'member_vehicle',
   'pricing_get', 'pricing_save', 'detail_pricing_get', 'detail_pricing_save',
   'staff_list', 'staff_add', 'staff_remove', 'staff_reset',
   'stripe_status', 'stripe_connect',
@@ -29,6 +30,27 @@ const known = new Set<string>(ACTIONS);
 export function can(role: Role, action: string): boolean {
   if (!known.has(action)) return false;
   return role === 'owner' || !owner.has(action);
+}
+
+// ——— per-car invoice edits ———
+// The dashboard sends one {price} per car, in the booking's car order. Only the price comes
+// from the client: whether a car is covered by an included visit, and a partly covered car's
+// credit, come from the quote the server stored at booking. A covered car is stored at $0.
+// An old single-car quote (no lines) takes exactly one uncovered line. null = refuse.
+export function cleanLines(input: unknown, quoteLines: unknown): InvoiceLine[] | null {
+  const q: Obj[] = Array.isArray(quoteLines) && quoteLines.length ? quoteLines : [{}];
+  if (!Array.isArray(input) || input.length !== q.length) return null;
+  const out: InvoiceLine[] = [];
+  for (let i = 0; i < q.length; i++) {
+    const price = (input[i] as Obj | null)?.price;
+    if (typeof price !== 'number' || !Number.isInteger(price) || price < 0 || price > 10000) return null;
+    const covered = q[i]?.covered === true;
+    const credit = q[i]?.credit;
+    const line: InvoiceLine = { price: covered ? 0 : price, covered };
+    if (!covered && Number.isInteger(credit) && credit >= 0 && credit <= 10000) line.credit = credit;
+    out.push(line);
+  }
+  return out;
 }
 
 // ——— price edits ———
