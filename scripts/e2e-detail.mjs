@@ -55,7 +55,16 @@ const owner = (action, payload = {}) => post('admin', { 'x-staff-code': OWNER },
 const setup = (action, payload = {}) => post('e2e-setup', {}, { token: OWNER, action, ...payload });
 
 const stamp = Date.now();
-const runStart = new Date(stamp).toISOString(); // member-reset only touches rows made after this
+// member-reset only touches rows made after this. Server clock (HTTP Date, whole seconds, so
+// floor and back off 1s), not this machine's: ledger timestamps come from the database.
+const runStart = await (async () => {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/detail`, {
+    method: 'POST', headers: { apikey: ANON, Authorization: `Bearer ${ANON}`, 'Content-Type': 'application/json' }, body: '{"action":"config"}',
+  });
+  const t = Date.parse(res.headers.get('date') ?? '');
+  if (Number.isNaN(t)) { console.error('no server Date header; cannot scope cleanup safely'); process.exit(1); }
+  return new Date(t - 1000).toISOString();
+})();
 // test_balance top-ups this run made; member-reset removes exactly this many. ponytail: a top-up
 // whose response is lost is not counted and stays behind; tag top-ups with a run id if that bites.
 // The single is_test member is not meant for concurrent runs.
@@ -556,6 +565,7 @@ let failed = false;
 try {
   // E2E_PART=core|app runs one half: a full run makes more bookings than the 10/hour IP cap allows.
   const part = process.env.E2E_PART || '';
+  if (part === 'core' && ONLY.length) throw new Error('E2E_ONLY picks app-sync steps; it cannot be combined with E2E_PART=core');
   if (part !== 'app' && !ONLY.length) await main(); // E2E_ONLY picks app-sync steps, so it skips the core half
   if (part !== 'core') await extra();
   if (failedSteps) failed = true;
