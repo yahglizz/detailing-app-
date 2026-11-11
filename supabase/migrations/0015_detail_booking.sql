@@ -75,6 +75,53 @@ drop trigger if exists bookings_detail_capacity on bookings;
 create trigger bookings_detail_capacity before insert on bookings
   for each row execute function enforce_detail_capacity();
 
+-- ——— a paid invoice is final: nothing can edit it, even a racing request ———
+create or replace function booking_invoices_lock_paid() returns trigger language plpgsql as $$
+begin
+  if old.status = 'paid' then raise exception 'already_paid'; end if;
+  return new;
+end $$;
+drop trigger if exists booking_invoices_paid_lock on booking_invoices;
+create trigger booking_invoices_paid_lock before update on booking_invoices
+  for each row execute function booking_invoices_lock_paid();
+
+-- ——— mark an invoice paid: one transaction, row-locked. The invoice, the payment record
+-- and the booking status can't disagree, and a decline or an edit racing it can't slip in.
+-- The deposit counts as credit ONLY when it was really paid (deposit_status = 'paid'); a
+-- demo deposit took no money, so the full total is collected. Service role only. ———
+create or replace function detail_invoice_pay(p_booking uuid, p_method text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare b bookings%rowtype; inv booking_invoices%rowtype;
+  v_extras int; v_total int; v_deposit int; v_credit int; v_balance int;
+begin
+  if p_method not in ('cash', 'card') then raise exception 'bad_method'; end if;
+  select * into b from bookings where id = p_booking and flow = 'detail_v2' for update;
+  if not found then raise exception 'not_found'; end if;
+  if b.status = 'paid' then raise exception 'already_paid'; end if;
+  if b.status not in ('confirmed', 'done') then raise exception 'not_open'; end if;
+  select * into inv from booking_invoices where booking_id = p_booking for update;
+  if not found or inv.status <> 'approved' then raise exception 'not_approved'; end if;
+
+  select coalesce(sum((e->>'price')::int), 0) into v_extras from jsonb_array_elements(inv.extras) e;
+  v_total := inv.service_price + v_extras;
+  v_deposit := case when b.deposit_status = 'paid' then coalesce((b.quote->>'deposit')::int, 0) else 0 end;
+  v_credit := least(v_deposit, v_total);
+  v_balance := v_total - v_credit;
+
+  update booking_invoices set status = 'paid', paid_at = now(), paid_method = p_method,
+    deposit_credit = v_credit, total = v_total, balance = v_balance where booking_id = p_booking;
+  if v_balance > 0 then
+    insert into payments (booking_id, kind, amount_cents, status, provider)
+    values (p_booking, 'remainder', v_balance * 100, 'succeeded', case when p_method = 'cash' then 'cash' else 'card_in_person' end);
+  end if;
+  update bookings set status = 'paid', remainder_method = p_method,
+    quote = b.quote || jsonb_build_object('total', v_total, 'balanceDue', v_balance, 'remainder', v_balance)
+    where id = p_booking;
+  return jsonb_build_object('total', v_total, 'credit', v_credit, 'balance', v_balance, 'refundDue', v_deposit - v_credit);
+end $$;
+revoke all on function detail_invoice_pay(uuid, text) from public, anon, authenticated;
+grant execute on function detail_invoice_pay(uuid, text) to service_role;
+
 -- ——— customer vehicle photos: private; customers upload through signed URLs the
 -- detail function issues, the owner views through short-lived signed URLs ———
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)

@@ -106,13 +106,16 @@ describe('invoiceTotals', () => {
   test('service + extras, deposit credited', () => {
     expect(
       invoiceTotals({ servicePrice: 200, extras: [{ name: 'Pet hair', price: 30 }], depositCredit: 25 }),
-    ).toEqual({ total: 230, credit: 25, balance: 205 });
+    ).toEqual({ total: 230, credit: 25, balance: 205, refundDue: 0 });
   });
-  test('credit is capped at the total, balance never negative', () => {
-    expect(invoiceTotals({ servicePrice: 20, extras: [], depositCredit: 500 })).toEqual({ total: 20, credit: 20, balance: 0 });
+  test('no deposit taken (demo): nothing credited, full total due', () => {
+    expect(invoiceTotals({ servicePrice: 175, extras: [], depositCredit: 0 })).toEqual({ total: 175, credit: 0, balance: 175, refundDue: 0 });
+  });
+  test('credit is capped at the total, balance never negative, the excess is refundDue', () => {
+    expect(invoiceTotals({ servicePrice: 20, extras: [], depositCredit: 500 })).toEqual({ total: 20, credit: 20, balance: 0, refundDue: 480 });
   });
   test('zero service price is allowed (waived job)', () => {
-    expect(invoiceTotals({ servicePrice: 0, extras: [], depositCredit: 25 })).toEqual({ total: 0, credit: 0, balance: 0 });
+    expect(invoiceTotals({ servicePrice: 0, extras: [], depositCredit: 25 })).toEqual({ total: 0, credit: 0, balance: 0, refundDue: 25 });
   });
   test.each([
     [{ servicePrice: 100, extras: [{ name: 'x', price: -5 }], depositCredit: 0 }],

@@ -56,7 +56,7 @@
     step: 0, service: '', vehicleType: '', year: '', make: '', model: '', condition: '', petHair: null,
     name: '', phone: '', email: '', street: '', zip: '', water: null, power: null, notes: '', files: [],
     day: '', slot: '', days: null, slots: [], taken: null, loadingDays: false, loadingSlots: false,
-    quote: null, quoteFor: '', quoting: false, quoteErr: '', booking: null, busy: false, err: '', errs: {}, warn: '',
+    minSlot: '00:00', quote: null, quoteFor: '', quoting: false, quoteErr: '', booking: null, busy: false, err: '', errs: {}, warn: '',
   });
 
   // ——— pricing cards on the page (static markup, patched from the catalog) ———
@@ -88,10 +88,10 @@
     const key = keyOf();
     S.quoting = true; S.quoteErr = ''; paintSummary();
     return call('quote', { service: S.service, vehicleType: S.vehicleType }).then((q) => {
-      if (keyOf() !== key) return;
+      if (!S || keyOf() !== key) return;
       S.quote = q; S.quoteFor = key; S.quoting = false; paintSummary();
     }).catch((e) => {
-      if (keyOf() !== key) return;
+      if (!S || keyOf() !== key) return;
       S.quoting = false; S.quote = null; S.quoteFor = ''; S.quoteErr = errText(e); paintSummary();
     });
   }
@@ -101,14 +101,14 @@
   function loadDays() {
     if (S.days) return Promise.resolve();
     S.loadingDays = true; renderStep();
-    return call('availability', {}).then((r) => { S.days = r.days; S.slots = r.slots; }).catch((e) => { S.err = errText(e); S.days = null; })
-      .then(() => { S.loadingDays = false; renderStep(); });
+    return call('availability', {}).then((r) => { if (S) { S.days = r.days; S.slots = r.slots; } }).catch((e) => { if (S) { S.err = errText(e); S.days = null; } })
+      .then(() => { if (S) { S.loadingDays = false; renderStep(); } });
   }
   function pickDay(day) {
     S.day = day; S.slot = ''; S.taken = null; S.loadingSlots = true; delete S.errs.day; renderStep();
-    call('availability', { day: day }).then((r) => { if (S.day === day) { S.taken = r.taken || []; S.slots = r.slots; } })
-      .catch((e) => { if (S.day === day) { S.err = errText(e); S.taken = []; } })
-      .then(() => { if (S.day === day) { S.loadingSlots = false; renderStep(); } });
+    call('availability', { day: day }).then((r) => { if (S && S.day === day) { S.taken = r.taken || []; S.slots = r.slots; S.minSlot = r.minSlot || '00:00'; } })
+      .catch((e) => { if (S && S.day === day) { S.err = errText(e); S.taken = []; } })
+      .then(() => { if (S && S.day === day) { S.loadingSlots = false; renderStep(); } });
   }
 
   // ——— rendering ———
@@ -190,8 +190,8 @@
       if (S.day) {
         h += '<div class="bk-group"><label style="display:block;font:600 12px/1 \'Hanken Grotesk\',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Start time on ' + esc(fmtDay(S.day)) + '</label>';
         h += S.loadingSlots ? '<p>Checking times…</p>' : '<div class="bk-slots" role="group" aria-label="Start time">' + S.slots.map((t) => {
-          const off = (S.taken || []).indexOf(t) !== -1;
-          return '<button type="button" class="bk-opt" data-slot="' + t + '" aria-pressed="' + (S.slot === t) + '"' + (off ? ' disabled aria-label="' + fmtSlot(t) + ', taken"' : '') + '>' + fmtSlot(t) + '</button>';
+          const off = (S.taken || []).indexOf(t) !== -1 || t < (S.minSlot || '00:00');
+          return '<button type="button" class="bk-opt" data-slot="' + t + '" aria-pressed="' + (S.slot === t) + '"' + (off ? ' disabled aria-label="' + fmtSlot(t) + ', unavailable"' : '') + '>' + fmtSlot(t) + '</button>';
         }).join('') + '</div>' + groupErr('slot');
         h += '</div>';
       }
@@ -201,7 +201,7 @@
     if (st === 5) {
       const q = S.booking.quote;
       return '<span class="bk-demo">' + icon('lock') + 'Demo payment · no card is charged</span>' +
-        '<p class="bk-sub">Your time is held for 45 minutes. In the live version you’ll pay your booking deposit here. For now this step is a demo, so no money is taken.</p>' +
+        '<p class="bk-sub">Your time is held for 45 minutes (closing this releases it). In the live version you’ll pay your booking deposit here. For now this step is a demo, so no money is taken.</p>' +
         '<div class="bk-price"><div class="r big"><span>Deposit due today</span><b>' + money(q.deposit) + '</b></div>' +
         '<div class="r"><span>Starting price</span><b>' + money(q.startingPrice) + '</b></div>' +
         '<div class="r"><span>Estimated balance after deposit</span><b>' + money(q.balance) + '</b></div></div>' +
@@ -359,8 +359,10 @@
     if (!quoteReady()) { S.quoteErr = S.quoteErr || 'We’re still confirming your price. Try again in a moment.'; renderStep(); refreshQuote(); return; }
     S.busy = true; S.err = ''; renderStep();
     call('reserve', payload()).then((r) => {
+      if (!S) { release(r); return; } // closed while we were reserving: give the hold back
       S.booking = r; S.quote = r.quote; S.quoteFor = keyOf(); S.busy = false; S.step = 5; render();
     }).catch((e) => {
+      if (!S) return;
       S.busy = false; S.err = errText(e);
       if (['slot_taken', 'day_full', 'day_closed', 'bad_day', 'bad_slot'].indexOf(e.code) !== -1) { S.step = 3; S.slot = ''; S.taken = null; S.days = null; render(); loadDays(); if (S.day) pickDay(S.day); }
       else if (e.code === 'bad_email' || e.code === 'bad_phone' || e.code === 'bad_zip') { S.err = 'Please check your contact details.'; S.step = 2; render(); }
@@ -372,10 +374,11 @@
     const uploads = (S.booking.uploads || []);
     const sends = S.files.map((f, i) => (uploads[i] ? fetch(uploads[i].signedUrl, { method: 'PUT', headers: { 'content-type': MIME[extOf(f.name)] || 'image/jpeg' }, body: f }).then((r) => r.ok, () => false) : Promise.resolve(false)));
     Promise.all(sends).then((oks) => {
+      if (!S) return Promise.reject({ code: 'closed' });
       if (oks.some((x) => !x)) S.warn = 'One or more photos didn’t upload. Your request still goes through. You can show us the photos at the inspection.';
       return call('pay-demo', { bookingId: S.booking.bookingId, payKey: S.booking.payKey });
-    }).then(() => { S.busy = false; S.step = 6; render(); })
-      .catch((e) => { S.busy = false; S.err = errText(e); renderStep(); });
+    }).then(() => { if (S) { S.busy = false; S.step = 6; render(); } })
+      .catch((e) => { if (!S || (e && e.code === 'closed')) return; S.busy = false; S.err = errText(e); renderStep(); });
   }
   function addFiles(list) {
     S.errs.files = '';
@@ -400,7 +403,12 @@
     if (S.service) refreshQuote();
     if (!cfg) loadConfig();
   }
+  // Free an unpaid hold (best effort; the sweep also releases it after 45 minutes).
+  function release(b) {
+    if (b && b.bookingId && b.payKey) call('release', { bookingId: b.bookingId, payKey: b.payKey }).catch(() => { /* swept later */ });
+  }
   function close() {
+    if (S && S.booking && S.step === 5) release(S.booking);
     $('#bk').hidden = true; $('#bk-scrim').hidden = true;
     document.body.style.overflow = '';
     S = null;

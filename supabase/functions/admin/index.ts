@@ -150,9 +150,9 @@ async function detailRow(id: unknown): Promise<Obj | Response> {
   return data;
 }
 
-// The deposit only counts as credit once it is paid, or demo (labelled demo everywhere).
-const depositCreditOf = (row: Obj) =>
-  ['paid', 'demo'].includes(row.deposit_status) ? Number(row.quote?.deposit ?? 0) : 0;
+// The deposit counts as credit only when it was really paid. A demo deposit took no money,
+// so nothing is credited and the owner collects the full total.
+const depositCreditOf = (row: Obj) => (row.deposit_status === 'paid' ? Number(row.quote?.deposit ?? 0) : 0);
 
 function cleanExtras(x: unknown): { name: string; price: number }[] | null {
   if (x === undefined || x === null) return [];
@@ -251,7 +251,7 @@ const handlers: Record<string, Handler> = {
     const [days, overrides, jobs, cfg] = await Promise.all([
       db.rpc('day_states', { from_day: from, to_day: to }),
       db.from('day_overrides').select('day, closed, capacity, note').gte('day', from).lte('day', to),
-      db.from('bookings').select('id, preferred_day, time_slot, time_window, status, items, quote, customers(name, email)')
+      db.from('bookings').select('id, preferred_day, time_slot, time_window, status, items, quote, detail->name, customers(name, email)')
         .gte('preferred_day', from).lte('preferred_day', to).not('status', 'in', '("declined","refunded")')
         .order('time_slot', { nullsFirst: false }),
       catalog(),
@@ -262,7 +262,7 @@ const handlers: Record<string, Handler> = {
       days: days.data, overrides: overrides.data ?? [],
       jobs: (jobs.data ?? []).map((j: Obj) => ({
         id: j.id, day: j.preferred_day, slot: j.time_slot, window: j.time_window, status: j.status,
-        name: j.customers?.name || j.customers?.email || '', cars: (j.items ?? []).length, test: !!j.quote?.test,
+        name: j.name || j.customers?.name || j.customers?.email || '', cars: (j.items ?? []).length, test: !!j.quote?.test,
       })),
     });
   },
@@ -491,6 +491,7 @@ const handlers: Record<string, Handler> = {
       return bad('bad_invoice');
     }
     const prev = (await db.from('booking_invoices').select('*').eq('booking_id', row.id).maybeSingle()).data;
+    if (prev?.status === 'paid') return bad('already_paid', 409);
     const same = prev && prev.service_price === Number(b.servicePrice) && JSON.stringify(prev.extras) === JSON.stringify(extras);
     if (!same) {
       // changed numbers void any earlier approval: the customer approved something else
@@ -498,7 +499,10 @@ const handlers: Record<string, Handler> = {
         booking_id: row.id, service_price: Number(b.servicePrice), extras, deposit_credit: t.credit, total: t.total,
         balance: t.balance, status: 'draft', customer_approved_at: null, approved_note: null,
       });
-      if (error) throw error;
+      if (error) {
+        if (String(error.message).includes('already_paid')) return bad('already_paid', 409); // paid-lock trigger
+        throw error;
+      }
       await mirrorQuote(row, t.total, t.balance);
     }
     return json(await invoiceFor(await detailRow(row.id) as Obj));
@@ -525,32 +529,15 @@ const handlers: Record<string, Handler> = {
     if (row instanceof Response) return row;
     const method = String(b.method ?? '');
     if (method !== 'cash' && method !== 'card') return bad('bad_method');
-    if (row.status === 'paid') return bad('already_paid', 409);
-    if (row.status !== 'confirmed' && row.status !== 'done') return bad('not_open', 409);
-    const inv = (await db.from('booking_invoices').select('*').eq('booking_id', row.id).maybeSingle()).data;
-    if (!inv || inv.status !== 'approved') return bad('not_approved', 409);
-    let t;
-    try {
-      t = invoiceTotals({ servicePrice: inv.service_price, extras: inv.extras, depositCredit: depositCreditOf(row) });
-    } catch {
-      return bad('bad_invoice');
+    // One transaction in the database (see detail_invoice_pay in migration 0015).
+    const { data, error } = await db.rpc('detail_invoice_pay', { p_booking: row.id, p_method: method });
+    if (error) {
+      for (const code of ['already_paid', 'not_open', 'not_approved', 'not_found', 'bad_method']) {
+        if (String(error.message).includes(code)) return bad(code, code === 'not_found' ? 404 : code === 'bad_method' ? 400 : 409);
+      }
+      throw error;
     }
-    // one winner: only an approved invoice can become paid
-    const { data: won, error } = await db.from('booking_invoices')
-      .update({ status: 'paid', paid_at: new Date().toISOString(), paid_method: method,
-        deposit_credit: t.credit, total: t.total, balance: t.balance })
-      .eq('booking_id', row.id).eq('status', 'approved').select('booking_id');
-    if (error) throw error;
-    if (!won?.length) return bad('not_approved', 409);
-    if (t.balance > 0) {
-      await db.from('payments').insert({
-        booking_id: row.id, kind: 'remainder', amount_cents: t.balance * 100, status: 'succeeded',
-        provider: method === 'cash' ? 'cash' : 'card_in_person',
-      });
-    }
-    await mirrorQuote(row, t.total, t.balance);
-    await db.from('bookings').update({ status: 'paid', remainder_method: method }).eq('id', row.id);
-    return json({ ok: true, ...t });
+    return json({ ok: true, ...(data as Obj) });
   },
 
   detail_pricing_get: async () => {

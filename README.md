@@ -53,8 +53,9 @@ Design: [`docs/superpowers/specs/2026-11-10-bld-starting-prices-design.md`](docs
   Real Stripe deposits for this flow are a separate, later task.
 - **After the inspection (dashboard, booking drawer):** review the customer's choices and photos,
   set the final service price, add approved extras, record the customer's approval (with a note),
-  and mark the invoice paid (cash or card in person). The deposit is applied as a credit,
-  the balance is calculated, changing the numbers voids the approval, and **Mark paid stays
+  and mark the invoice paid (cash or card in person). The deposit is applied as a credit **only if it
+  was really paid** (a demo deposit took no money, so the full total is collected), the balance is
+  calculated, any deposit above the final total is shown as a refund due, changing the numbers voids the approval, and **Mark paid stays
   locked until approval is recorded**.
 - **Not built (owner decision, 2026-11-10):** travel fees / distance lookup, the $100 Exterior Wash
   minimum, and any first-wash discount in the website quote. The Expo app and memberships still
@@ -64,6 +65,10 @@ Design: [`docs/superpowers/specs/2026-11-10-bld-starting-prices-design.md`](docs
 - **Test it:** `cd bld-app && npx jest` (price cells, deposits, invoice maths, validation) and
   `BLD_OWNER_TOKEN=<owner key> node scripts/e2e-detail.mjs` (live: all 15 price cells, tampered
   price ignored, slot/closed/full refusals, demo-only deposit, invoice rules).
+- **Before this booking flow is public:** while payments are in demo mode anyone can create requests
+  (and an owner email each) without paying, so a bot could fill the calendar. The abuse caps only
+  slow that down. Add Turnstile/captcha or email verification on `reserve`, switch on real deposits,
+  or keep the flow off the public site until then.
 - **Still to configure:** the real business phone number on the site (it is a placeholder),
   confirm the drafted package inclusions and durations in the dashboard, and flip on real
   payments when a Stripe deposit path exists.

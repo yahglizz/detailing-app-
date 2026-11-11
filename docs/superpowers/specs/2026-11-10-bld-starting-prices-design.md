@@ -119,8 +119,8 @@ New function `detail` (the app's `book` and `price` are not changed):
 
 The `admin` function gains actions: `detail_booking_get` (booking + signed photo URLs + invoice),
 `invoice_save` (service price, extras), `invoice_approve` (records customer approval, note and
-time), `invoice_pay` (requires approval; sets total, applies `deposit_credit` only when
-`deposit_status` is `paid` or `demo`, computes balance, marks paid with method). The Pricing
+time), `invoice_pay` (requires approval; one database transaction, `detail_invoice_pay` in migration 0015; sets total, applies
+`deposit_credit` only when `deposit_status` is `paid`, computes balance, marks paid with method). The Pricing
 tab saves `detailPricing` with validation (whole numbers, positive, every cell present).
 
 Double booking: the slot check plus a unique partial index on
@@ -220,6 +220,29 @@ An automated review of the first `detail` function flagged three issues; all fix
 - Capacity is enforced atomically by a `bookings` insert trigger (advisory lock per day) in
   migration 0015, behind the function's friendlier pre-checks. App bookings (`book`) don't take
   that lock, so an app booking racing a website booking for the last opening is still possible.
+
+## Independent review changes (2026-11-11)
+
+A fresh Opus review of the whole branch found no blockers in the SQL. Fixed before any deploy:
+
+- **A demo deposit is not credited.** No money was taken, so the owner collects the full total;
+  crediting it would under-collect $25-$45 on every booking made in demo mode. The deposit is
+  credited only when `deposit_status = 'paid'` (reversible: one line in `detail_invoice_pay` and
+  `depositCreditOf`). If a deposit ever exceeds the final total the dashboard shows `refundDue`.
+- **Paying an invoice is atomic.** `detail_invoice_pay` locks the booking and invoice rows, writes the
+  invoice, payment and booking status in one transaction, and a trigger makes a paid invoice read-only.
+- **App members can't bump website bookings.** Detail rows are inserted `anchored = true`, which the
+  existing bump rules already treat as unbumpable (no change to `book`).
+- **No booking a time that has passed:** today's start times need a 2-hour lead (Eastern).
+- Photo upload URLs stay aligned with the files; closing the dialog on the deposit step releases the
+  hold (`release` action); the IP in the abuse-cap hash is keyed (HMAC); the calendar shows the name
+  typed on the booking.
+
+**Known limit, must be solved before the site is public in demo mode:** a bot can fill the calendar.
+The per-email and per-IP caps slow it, but random emails and a few IPs can still hold most slots, and
+`pay-demo` needs no real payment (it also emails the owner each time). Real Stripe deposits fix this
+by construction; until then add Turnstile/captcha or email verification on `reserve`, or keep the
+booking flow off the public site.
 
 ## Calls made without the owner (check these)
 

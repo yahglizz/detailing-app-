@@ -152,7 +152,7 @@ export function validateDetailPricing(next: unknown): PricingResult {
 export interface InvoiceExtra { name: string; price: number }
 
 // Final price + approved extras, then the deposit is credited (never more than the total,
-// so the balance can't go negative). Throws 'bad_invoice' on any number that isn't a
+// so the balance can't go negative; any excess is reported as refundDue). Throws 'bad_invoice' on any number that isn't a
 // whole, non-negative dollar amount within range.
 export function invoiceTotals(i: { servicePrice: number; extras: InvoiceExtra[]; depositCredit: number }) {
   if (!whole(i.servicePrice, 0, 10000) || !whole(i.depositCredit, 0, 10000) || !Array.isArray(i.extras)) {
@@ -164,5 +164,6 @@ export function invoiceTotals(i: { servicePrice: number; extras: InvoiceExtra[];
     total += e.price;
   }
   const credit = Math.min(i.depositCredit, total);
-  return { total, credit, balance: total - credit };
+  // refundDue: deposit that was taken but isn't needed because the final total is below it
+  return { total, credit, balance: total - credit, refundDue: i.depositCredit - credit };
 }

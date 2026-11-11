@@ -76,6 +76,19 @@ test('slot, zip and photos', () => {
   expect(code({ photoExts: [] })).toBe('ok');
 });
 
+test('today: a start time that has passed or is inside the lead time is refused', () => {
+  const at = (slot: string) => validateReserve({ ...good(), day: TODAY, slot }, CFG, TODAY, { minSlot: '13:00' });
+  expect(at('12:00').ok).toBe(false);
+  expect((at('12:00') as any).error).toBe('bad_slot');
+  expect(at('13:00').ok).toBe(true);
+  expect(at('17:00').ok).toBe(true);
+  // other days ignore the minimum, and no minimum means no restriction
+  expect(validateReserve({ ...good(), day: '2026-11-14', slot: '09:00' }, CFG, TODAY, { minSlot: '24:00' }).ok).toBe(true);
+  expect(validateReserve({ ...good(), day: TODAY, slot: '09:00' }, CFG, TODAY).ok).toBe(true);
+  // nothing left today
+  expect(validateReserve({ ...good(), day: TODAY, slot: '17:00' }, CFG, TODAY, { minSlot: '24:00' }).ok).toBe(false);
+});
+
 test('booleans must be real booleans, not strings', () => {
   const r = validateReserve({ ...good(), water: 'yes' }, CFG, TODAY);
   expect(r.ok).toBe(false);

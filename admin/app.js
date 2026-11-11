@@ -484,6 +484,7 @@ function DetailPanel({ b, onChanged }) {
   // Display arithmetic only: the server recomputes and is the authority.
   const total = (Number(price) || 0) + cleaned.reduce((s, e) => s + e.price, 0);
   const credit = Math.min(d.depositCreditable, total);
+  const refund = d.depositCreditable - credit;
   const locked = inv.status === 'paid' || !['requested', 'confirmed', 'done'].includes(b.status);
   const canPay = inv.status === 'approved' && !dirty && (b.status === 'confirmed' || b.status === 'done');
   const setExtra = (i, k, v) => setExtras(extras.map((e, n) => (n === i ? { ...e, [k]: v } : e)));
@@ -528,9 +529,12 @@ function DetailPanel({ b, onChanged }) {
       </div>
       <dl class="kv" style="margin-top:14px">
         <dt>Total</dt><dd>${money(total)}</dd>
-        <dt>Deposit credit${d.depositStatus === 'demo' ? ' (demo)' : ''}</dt><dd>−${money(credit)}</dd>
+        <dt>Deposit credit</dt><dd>−${money(credit)}</dd>
+        ${refund > 0 && html`<dt>Deposit to refund</dt><dd>${money(refund)}</dd>`}
         <dt>Balance to collect</dt><dd class="big">${money(total - credit)}</dd>
       </dl>
+      ${d.depositStatus === 'demo' && html`<p class="muted small" style="margin:8px 0 0">Demo deposit: no money was taken, so nothing is credited. Collect the full total.</p>`}
+      ${refund > 0 && html`<div class="banner" style="margin-top:10px"><${Icon} name="alert" /><div>The deposit is more than the final total. Refund <b>${money(refund)}</b> to the customer.</div></div>`}
       ${!locked && html`<div style="margin-top:12px"><${ActionButton} class="btn block" disabled=${!dirty} run=${save}><${Icon} name="check" size=${18} /> Save price<//></div>`}
     </div>
 

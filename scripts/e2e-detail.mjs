@@ -165,11 +165,11 @@ async function main() {
     const dg = await owner('detail_get', { id: id1 });
     assert(dg.status === 200 && dg.body.photos.length === 1, `detail_get photos: ${JSON.stringify(dg.body).slice(0, 200)}`);
     assert(!JSON.stringify(dg.body).includes(r1.body.payKey), 'payKey must not reach the dashboard');
-    assert(dg.body.invoice.servicePrice === 175 && dg.body.invoice.depositCredit === 25 && dg.body.invoice.balance === 150, `draft invoice: ${JSON.stringify(dg.body.invoice)}`);
+    assert(dg.body.invoice.servicePrice === 175 && dg.body.invoice.depositCredit === 0 && dg.body.invoice.balance === 175, `draft invoice (demo deposit = no credit): ${JSON.stringify(dg.body.invoice)}`);
     const img = await fetch(dg.body.photos[0]);
     assert(img.ok, `photo signed url: ${img.status}`);
   }
-  pass('9. dashboard: deposit_status is demo (never paid), photo viewable, payKey hidden, draft invoice = 175 / credit 25 / balance 150');
+  pass('9. dashboard: deposit_status is demo (never paid), photo viewable, payKey hidden, draft invoice = 175 with no credit (no money was taken)');
 
   // 10. invoice rules
   {
@@ -185,7 +185,7 @@ async function main() {
       assert(bad.status === 400 && bad.body.error === 'bad_invoice', `bad extras ${JSON.stringify(extras)}: ${JSON.stringify(bad.body)}`);
     }
     const save = await owner('invoice_save', { id: id1, servicePrice: 200, extras: [{ name: 'Pet hair removal', price: 30 }] });
-    assert(save.status === 200 && save.body.total === 230 && save.body.depositCredit === 25 && save.body.balance === 205 && save.body.status === 'draft',
+    assert(save.status === 200 && save.body.total === 230 && save.body.depositCredit === 0 && save.body.balance === 230 && save.body.status === 'draft',
       `invoice_save: ${JSON.stringify(save.body)}`);
     const noNote = await owner('invoice_approve', { id: id1, note: '' });
     assert(noNote.status === 400 && noNote.body.error === 'note_required', `approve without note: ${JSON.stringify(noNote.body)}`);
@@ -198,9 +198,9 @@ async function main() {
     assert(blocked.status === 409 && blocked.body.error === 'not_approved', 'cannot pay after approval was voided');
     await owner('invoice_approve', { id: id1, note: 'Approved again at 240' });
     const bk = await owner('booking', { id: id1 });
-    assert(bk.body.total === 240 && bk.body.owing === 215, `dashboard follows the invoice: ${JSON.stringify({ t: bk.body.total, o: bk.body.owing })}`);
+    assert(bk.body.total === 240 && bk.body.owing === 240, `dashboard follows the invoice: ${JSON.stringify({ t: bk.body.total, o: bk.body.owing })}`);
     const paid = await owner('invoice_pay', { id: id1, method: 'cash' });
-    assert(paid.status === 200 && paid.body.total === 240 && paid.body.credit === 25 && paid.body.balance === 215, `pay: ${JSON.stringify(paid.body)}`);
+    assert(paid.status === 200 && paid.body.total === 240 && paid.body.credit === 0 && paid.body.balance === 240 && paid.body.refundDue === 0, `pay: ${JSON.stringify(paid.body)}`);
     const twice = await owner('invoice_pay', { id: id1, method: 'cash' });
     assert(twice.status === 409 && twice.body.error === 'already_paid', `pay twice: ${JSON.stringify(twice.body)}`);
     const after = await owner('invoice_save', { id: id1, servicePrice: 1, extras: [] });
@@ -208,21 +208,42 @@ async function main() {
     const fin = await owner('booking', { id: id1 });
     assert(fin.body.status === 'paid' && fin.body.owing === 0 && fin.body.depositStatus === 'demo', `final state: ${JSON.stringify(fin.body)}`);
   }
-  pass('10. invoice: no pay before approval; bad extras refused; changes void approval; deposit credited (240 - 25 = 215); pay once; locked after paid; deposit stays demo');
+  pass('10. invoice: no pay before approval; bad extras refused; changes void approval; demo deposit gives no credit so the full 240 is collected; pay once; locked after paid; deposit stays demo');
 
-  // 11. deposit credit capped at the total
+  // 11. demo deposit: no credit, even on a tiny invoice
   {
     const r = await detail('reserve', body({ email: emailOf('cap'), service: 'exterior', day: dayC, slot: slot2 }));
     assert(r.status === 200 && r.body.quote.startingPrice === 40 && r.body.quote.deposit === 25, `exterior sedan: ${JSON.stringify(r.body.quote)}`);
     await detail('pay-demo', { bookingId: r.body.bookingId, payKey: r.body.payKey });
     await owner('confirm', { id: r.body.bookingId, day: dayC, slot: slot2 });
-    const s = await owner('invoice_save', { id: r.body.bookingId, servicePrice: 20, extras: [] });
-    assert(s.body.total === 20 && s.body.depositCredit === 20 && s.body.balance === 0, `cap: ${JSON.stringify(s.body)}`);
+    const s2 = await owner('invoice_save', { id: r.body.bookingId, servicePrice: 20, extras: [] });
+    assert(s2.body.total === 20 && s2.body.depositCredit === 0 && s2.body.balance === 20, `no credit: ${JSON.stringify(s2.body)}`);
     await owner('invoice_approve', { id: r.body.bookingId, note: 'Waived to 20' });
     const p = await owner('invoice_pay', { id: r.body.bookingId, method: 'card' });
-    assert(p.status === 200 && p.body.balance === 0, `zero-balance pay: ${JSON.stringify(p.body)}`);
+    assert(p.status === 200 && p.body.balance === 20, `pay: ${JSON.stringify(p.body)}`);
+    // a paid invoice is locked even against a direct edit
+    const edit = await owner('invoice_save', { id: r.body.bookingId, servicePrice: 5, extras: [] });
+    assert(edit.status === 409 && edit.body.error === 'already_paid', `paid invoice must be locked: ${JSON.stringify(edit.body)}`);
   }
-  pass('11. deposit credit is capped at the total; zero-balance invoice pays cleanly');
+  pass('11. demo deposit gives no credit (a $20 invoice owes $20); a paid invoice cannot be edited');
+
+  // 11b. closing the dialog releases the held time
+  {
+    const day = dayB; // free again: step 7 cleared its override
+    const first = await detail('reserve', body({ email: emailOf('rel1'), day, slot: slot1 }));
+    assert(first.status === 200, `reserve before release: ${JSON.stringify(first.body)}`);
+    const bad = await detail('release', { bookingId: first.body.bookingId, payKey: 'wrong' });
+    assert(bad.status === 404, `release with a wrong key must be refused, got ${bad.status}`);
+    const blocked = await detail('reserve', body({ email: emailOf('rel2'), day, slot: slot1 }));
+    assert(blocked.status === 409 && blocked.body.error === 'slot_taken', 'held slot is blocked');
+    const rel = await detail('release', { bookingId: first.body.bookingId, payKey: first.body.payKey });
+    assert(rel.status === 200, `release: ${rel.status}`);
+    const again = await detail('reserve', body({ email: emailOf('rel2'), day, slot: slot1 }));
+    assert(again.status === 200, `slot should be free after release: ${JSON.stringify(again.body)}`);
+    const late = await detail('pay-demo', { bookingId: first.body.bookingId, payKey: first.body.payKey });
+    assert(late.status === 409 && late.body.error === 'not_pending', `a released hold can't be paid: ${JSON.stringify(late.body)}`);
+  }
+  pass('11b. release frees the held slot (wrong key refused); a released hold cannot be paid');
 
   // 12. pricing editor round trip (restored afterwards)
   {

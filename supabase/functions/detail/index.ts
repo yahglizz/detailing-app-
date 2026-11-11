@@ -6,6 +6,7 @@
 //   availability { day }           -> same, plus { taken: ["10:00", ...] }
 //   reserve { ...request }         -> { bookingId, payKey, quote, uploads }
 //   pay-demo { bookingId, payKey } -> { ok, demo: true }
+//   release { bookingId, payKey }  -> { ok }   (frees an unpaid hold)
 //
 // Every number is computed here from catalog.config.detailPricing; anything price-shaped in a
 // request body is ignored. Payments are demo-only: pay-demo works only while
@@ -35,9 +36,13 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const BUCKET = 'booking-photos';
 // Abuse caps (5 per email, 10 per IP per hour, every status) live in the bookings insert
 // trigger in migration 0015, where they are atomic. ponytail: no captcha / email verification yet.
-const sha256 = async (t: string) =>
-  [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)))]
-    .map((b) => b.toString(16).padStart(2, '0')).join('');
+// Keyed hash of the caller's IP, so stored values can't be brute-forced back to addresses.
+const ipHashOf = async (ip: string) => {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(ip));
+  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('');
+};
 
 // The business runs on Eastern time; "today" is its day, not UTC's.
 const todayISO = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
@@ -47,6 +52,15 @@ const addDays = (iso: string, n: number) => {
   return d.toISOString().slice(0, 10);
 };
 const money = (n: number) => `$${n}`;
+// Earliest start time bookable today: the next whole hour at least LEAD_HOURS away (Eastern).
+// '24:00' means nothing is left today. Any other day: '00:00'.
+const LEAD_HOURS = 2;
+function minSlotFor(day: string): string {
+  if (day !== todayISO()) return '00:00';
+  const h = Number(new Date().toLocaleTimeString('en-GB', { timeZone: 'America/New_York', hour: '2-digit', hour12: false }).slice(0, 2));
+  const next = h + LEAD_HOURS + 1;
+  return next > 17 ? '24:00' : `${String(Math.max(next, 9)).padStart(2, '0')}:00`;
+}
 
 async function pricing(): Promise<DetailPricing> {
   const { data, error } = await db.from('catalog').select('config').eq('id', 1).single();
@@ -75,12 +89,17 @@ const handlers: Record<string, (b: Obj, req: Request) => Promise<Response>> = {
     const to = isoOk(b.to) && b.to < last ? b.to : last;
     const { data: days, error } = await db.rpc('day_states', { from_day: from, to_day: to < from ? from : to });
     if (error) throw error;
-    const out: Obj = { days, slots: ALL_SLOTS, today, windowDays: cfg.bookingWindowDays };
+    const noneToday = minSlotFor(today) === '24:00';
+    const out: Obj = {
+      days: (days as Obj[]).map((x) => (x.day === today && noneToday ? { ...x, closed: true } : x)),
+      slots: ALL_SLOTS, today, windowDays: cfg.bookingWindowDays,
+    };
     if (b.day !== undefined) {
       if (!isoOk(b.day) || b.day < today || b.day > last) return bad('bad_day');
       const { data: taken, error: tErr } = await db.rpc('booked_slots', { day: b.day });
       if (tErr) throw tErr;
       out.taken = taken ?? [];
+      out.minSlot = minSlotFor(b.day);
     }
     return json(out);
   },
@@ -88,7 +107,7 @@ const handlers: Record<string, (b: Obj, req: Request) => Promise<Response>> = {
   reserve: async (b, req) => {
     const cfg = await pricing();
     const today = todayISO();
-    const v = validateReserve(b, cfg, today);
+    const v = validateReserve(b, cfg, today, { minSlot: minSlotFor(today) });
     if (!v.ok) return bad(v.error);
     const r = v.value;
     const q = quoteDetail(cfg, r.service, r.vehicleType); // server price, never the client's
@@ -107,7 +126,7 @@ const handlers: Record<string, (b: Obj, req: Request) => Promise<Response>> = {
     // Only Cloudflare's header is trusted for the IP (the platform overwrites it); without it
     // the per-IP cap is skipped and the per-email cap still applies.
     const cfIp = req.headers.get('cf-connecting-ip');
-    const ipHash = cfIp ? await sha256(cfIp) : null;
+    const ipHash = cfIp ? await ipHashOf(cfIp) : null;
 
     // customer row keyed by email, same as `book`. An existing row is never renamed: anyone
     // can type any email here, so the name they give lives on this booking (detail.name) only.
@@ -122,6 +141,7 @@ const handlers: Record<string, (b: Obj, req: Request) => Promise<Response>> = {
       id: bookingId,
       customer_id: cust.id,
       flow: 'detail_v2',
+      anchored: true, // the app's priority-bump rules must never move a website booking
       status: 'pending_payment',
       deposit_status: 'pending',
       items: [{ service: r.service, vehicle: r.vehicleType }],
@@ -149,12 +169,21 @@ const handlers: Record<string, (b: Obj, req: Request) => Promise<Response>> = {
       return bad('booking_insert_failed', 500);
     }
 
-    const uploads: { path: string; signedUrl: string }[] = [];
-    for (const path of photos) {
+    // Same order and length as the request's photoExts (null where signing failed), so the
+    // browser pairs each file with its own URL.
+    const uploads = await Promise.all(photos.map(async (path) => {
       const { data, error } = await db.storage.from(BUCKET).createSignedUploadUrl(path);
-      if (!error && data) uploads.push({ path, signedUrl: data.signedUrl });
-    }
+      return !error && data ? { path, signedUrl: data.signedUrl } : null;
+    }));
     return json({ bookingId, payKey, quote: q, uploads });
+  },
+
+  // The customer closed the dialog on the deposit step: free their held time right away.
+  release: async (b) => {
+    if (!UUID.test(String(b.bookingId)) || typeof b.payKey !== 'string' || !b.payKey) return bad('not_found', 404);
+    await db.from('bookings').update({ status: 'declined' })
+      .eq('id', b.bookingId).eq('flow', 'detail_v2').eq('status', 'pending_payment').eq('detail->>payKey', b.payKey);
+    return json({ ok: true });
   },
 
   'pay-demo': async (b) => {
