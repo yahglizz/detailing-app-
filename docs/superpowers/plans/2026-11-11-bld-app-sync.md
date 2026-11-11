@@ -370,7 +370,7 @@
 - [ ] **Step 2 (owner yes):** Apply 0017 via `apply_migration` to `fiaadogbkvjcddehnymj`. Then:
   - `list_migrations` shows 0017.
   - `get_advisors` shows no new security errors.
-- [ ] **Step 3 (owner yes):** Deploy `detail`, `admin`, `member`, `topup`, `book` (file-content deploy via MCP with the `_shared` files).
+- [ ] **Step 3 (owner yes):** Deploy `detail`, `admin`, `member`, `topup`, `book`, `sweep` (file-content deploy via MCP with the `_shared` files).
   - Probe: POST `detail` `{action:'config'}` returns `membership.gold.rank === 3`.
   - Run the live E2E: all steps PASS.
   - Read function logs: no errors.

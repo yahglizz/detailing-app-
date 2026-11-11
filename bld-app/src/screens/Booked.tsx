@@ -26,13 +26,14 @@ export default function Booked({ navigation, route }: Props) {
     const cals = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
     const cal = cals.find((c) => c.allowsModifications);
     if (!cal) return;
-    const hour = Number((slot || '09:00').slice(0, 2));
-    const start = new Date(y, m - 1, d, hour);
+    // No confirmed time yet: an all-day event, never an invented hour.
+    const start = slot ? new Date(y, m - 1, d, Number(slot.slice(0, 2))) : new Date(y, m - 1, d);
     await Calendar.createEventAsync(cal.id, {
       title: 'Brotherly Love Detailing',
       location: address,
       startDate: start,
-      endDate: new Date(start.getTime() + 2 * 3600e3),
+      endDate: slot ? new Date(start.getTime() + 2 * 3600e3) : new Date(y, m - 1, d + 1),
+      allDay: !slot,
       notes: `Booking ${bookingRef(bookingId)}.${slot ? '' : ' Exact time to be confirmed.'}`,
     });
     Alert.alert('Added', 'Your detail is on your calendar.');

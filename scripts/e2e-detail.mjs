@@ -499,9 +499,16 @@ async function extra() {
     assert(paidBooking, 'needs step 18 booking');
     const c = await owner('confirm', { id: paidBooking.id, day: paidBooking.day, slot: paidBooking.slot });
     assert(c.status === 200, `confirm: ${c.status} ${JSON.stringify(c.body)}`);
-    const dg = await owner('detail_get', { id: paidBooking.id });
+    let dg = await owner('detail_get', { id: paidBooking.id });
     const owing = dg.body.invoice.balance;
-    const method = dg.body.wallet >= owing ? 'balance' : 'card';
+    // fund the test wallet (+$50 a call, test accounts only) until it covers the bill, so this
+    // step always proves a real balance payment; the main thread restores the wallet afterwards
+    for (let i = 0; i < 12 && dg.body.wallet < owing; i++) {
+      await post('member', {}, { code: MC, action: 'test_balance' });
+      dg = await owner('detail_get', { id: paidBooking.id });
+    }
+    assert(dg.body.wallet >= owing, `could not fund test wallet: ${dg.body.wallet} < ${owing}`);
+    const method = 'balance';
     stampsBefore = (await profile()).stamps;
     const w0 = (await profile()).wallet;
     const pay = await owner('invoice_pay', { id: paidBooking.id, method });
