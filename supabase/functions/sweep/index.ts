@@ -2,7 +2,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getProvider } from '../_shared/payments/provider.ts';
 import { sendEmail, ownerEmail, adminLink, button } from '../_shared/notify.ts';
 import { restoreMemberBalances } from '../_shared/member_refund.ts';
-import { refundBooking, settleBooking } from '../_shared/booking_payment.ts';
+import { declinePending, refundBooking, settleBooking } from '../_shared/booking_payment.ts';
 import { settleTopup } from '../_shared/wallet.ts';
 
 Deno.serve(async () => {
@@ -17,7 +17,9 @@ Deno.serve(async () => {
   // fulfilled, never paid → slot freed). Balance top-ups the same way.
   const stale45 = new Date(Date.now() - 45 * 60e3).toISOString();
   const [{ data: pending }, { data: pendingTopups }] = await Promise.all([
-    db.from('bookings').select('id, status, stripe_session_id, pay_mode').eq('status', 'pending_payment').lt('created_at', stale45),
+    // Starting-price bookings (flow 'detail_v2') have no Stripe session; they expire below.
+    db.from('bookings').select('id, status, stripe_session_id, pay_mode').eq('status', 'pending_payment').lt('created_at', stale45)
+      .or('flow.is.null,flow.neq.detail_v2'),
     db.from('topups').select('id, status, stripe_session_id').eq('status', 'pending').lt('created_at', stale45),
   ]);
   if (pending?.length || pendingTopups?.length) {
@@ -38,12 +40,26 @@ Deno.serve(async () => {
     }
   }
 
+  // Starting-price bookings nobody paid the (demo) deposit for: free the slot after 45 minutes.
+  const { data: abandoned } = await db.from('bookings').select('id')
+    .eq('flow', 'detail_v2').eq('status', 'pending_payment').lt('created_at', stale45);
+  for (const b of abandoned ?? []) {
+    try {
+      await declinePending(db, b.id);
+      settled++;
+    } catch (e) {
+      console.error('sweep detail expiry failed', b.id, (e as Error).message);
+    }
+  }
+
   // Wrong-code records only matter for 15 minutes (codes.ts).
   await db.from('code_attempts').delete().lt('created_at', dayAgo);
 
   const { data: stale } = await db.from('bookings')
     .select('id, created_at, quote, reminder_sent_at, membership_id, customers(email)')
-    .eq('status', 'requested').lt('created_at', dayAgo);
+    .eq('status', 'requested').lt('created_at', dayAgo)
+    // Detail bookings are confirmed by hand and a demo deposit has nothing to refund.
+    .or('flow.is.null,flow.neq.detail_v2');
 
   for (const b of stale ?? []) {
     if (b.created_at < twoDaysAgo) {
