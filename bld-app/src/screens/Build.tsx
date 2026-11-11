@@ -64,7 +64,9 @@ export default function Build({ navigation }: Props) {
   const [error, setError] = useState('');
   // A reserved-but-unpaid booking holds its time slot; leaving this screen frees it.
   const hold = useRef<{ bookingId: string; payKey: string } | null>(null);
-  useEffect(() => () => { if (hold.current) void detail({ action: 'release', ...hold.current }); }, []);
+  const mounted = useRef(true);
+  useEffect(() => () => { mounted.current = false; if (hold.current) void detail({ action: 'release', ...hold.current }); }, []);
+  const quoteReq = useRef(0);
 
   const set = (field: 'street' | 'zip' | 'day' | 'slot' | 'notes' | 'name' | 'phone' | 'email') => (value: string) =>
     dispatch({ type: 'SET_FIELD', field, value });
@@ -92,9 +94,11 @@ export default function Build({ navigation }: Props) {
   // Server quote whenever the cars or the member change (300 ms debounce).
   const quoteKey = JSON.stringify([state.cars.map((c) => [c.service, c.vehicleType]), code, plan?.tier, profile?.credits, profile?.issuedRewards.length]);
   const fetchQuote = async () => {
+    const id = ++quoteReq.current;
     const { data } = await detail<Quote>({
       action: 'quote', cars: state.cars.map((c) => ({ service: c.service, vehicleType: c.vehicleType })), memberCode: code ?? undefined,
     });
+    if (id !== quoteReq.current || !mounted.current) return data; // a newer quote is in flight
     setQuoteFailed(!data);
     if (data) setQuote(data);
     return data;
@@ -204,22 +208,31 @@ export default function Build({ navigation }: Props) {
         photoExts: state.photos.map((p) => p.ext),
         memberCode: code ?? undefined, useBalance: payWithBalance, expectedTotal: total,
       });
+      if (!mounted.current) {
+        // Left the screen mid-request: free the hold; a balance booking is already real and paid.
+        if (data && !data.paidFromBalance) void detail({ action: 'release', bookingId: data.bookingId, payKey: data.payKey });
+        return;
+      }
       if (!data) { setError(await explain(err ?? 'network')); return; }
       hold.current = data.paidFromBalance ? null : { bookingId: data.bookingId, payKey: data.payKey };
 
       // Photos go straight to storage; a failed upload never blocks the booking (same as the website).
+      let photosFailed = 0;
       await Promise.all(state.photos.map(async (p, i) => {
         const up = data.uploads?.[i];
-        if (!up) return;
+        if (!up) { photosFailed++; return; }
         try {
           const blob = await (await fetch(p.uri)).blob();
-          await fetch(up.signedUrl, { method: 'PUT', headers: { 'content-type': MIME[p.ext] ?? 'image/jpeg' }, body: blob });
-        } catch { /* best effort */ }
+          const res = await fetch(up.signedUrl, { method: 'PUT', headers: { 'content-type': MIME[p.ext] ?? 'image/jpeg' }, body: blob });
+          if (!res.ok) photosFailed++;
+        } catch { photosFailed++; }
       }));
+      if (!mounted.current) return; // unmount cleanup already released the hold
 
       // The deposit step moves the hold to a request (also for $0 member bookings).
       if (!data.paidFromBalance) {
         const paid = await detail({ action: 'pay-demo', bookingId: data.bookingId, payKey: data.payKey });
+        if (!mounted.current) return; // cleanup released the hold; booking not confirmed here
         if (!paid.data) {
           // start clean next tap: free this hold, then explain (price_changed re-quotes)
           void detail({ action: 'release', ...hold.current! });
@@ -230,13 +243,14 @@ export default function Build({ navigation }: Props) {
       }
       hold.current = null;
       if (profile) await refresh();
+      if (!mounted.current) return;
       navigation.reset({ index: 0, routes: [{ name: 'Booked', params: {
-        bookingId: data.bookingId, escalated: !!data.escalated,
+        bookingId: data.bookingId, escalated: !!data.escalated, photosFailed,
         paid: data.paidFromBalance ? 'balance' : deposit === 0 ? 'membership' : 'demo',
         stamps: plan ? state.cars.length * plan.stampsPerCar : 0, saved: savings,
       } }] });
     } finally {
-      setBusy(false);
+      if (mounted.current) setBusy(false);
     }
   };
 
@@ -276,7 +290,7 @@ export default function Build({ navigation }: Props) {
       <LinearGradient colors={t.bg} style={StyleSheet.absoluteFill} />
       <ScrollView contentContainerStyle={u.content} keyboardShouldPersistTaps="handled">
         <View style={u.topbar}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => navigation.goBack()} style={u.topButton}><Text style={u.topButtonText}>‹</Text></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Back" disabled={busy} onPress={() => navigation.goBack()} style={u.topButton}><Text style={u.topButtonText}>‹</Text></Pressable>
           <View style={{ alignItems: 'center' }}><Text style={u.topTitle}>BOOK YOUR DETAIL</Text><Text style={u.topSub}>Everything in one place</Text></View>
           <Image source={require('../../assets/bld-logo.png')} style={u.logo} resizeMode="contain" />
         </View>

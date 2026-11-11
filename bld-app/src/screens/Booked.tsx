@@ -16,7 +16,7 @@ export const bookingRef = (id: string) => `BLD-${id.replace(/-/g, '').slice(0, 6
 
 export default function Booked({ navigation, route }: Props) {
   const { state, dispatch } = useOrder();
-  const { bookingId, escalated, paid = 'demo', stamps = 0, saved = 0 } = route.params;
+  const { bookingId, escalated, paid = 'demo', stamps = 0, saved = 0, photosFailed = 0 } = route.params;
   const [y, m, d] = state.day.split('-').map(Number);
   const dayText = state.day ? `${MONTHS[m - 1]} ${d}` : '';
   const address = `${state.street}, ${state.zip}`;
@@ -54,6 +54,7 @@ export default function Booked({ navigation, route }: Props) {
         : `${dayText} at ${fmtSlot(state.slot)}.`}</Text>
       <Text style={s.addr}>{address}</Text>
       <Text style={s.paid}>{PAID[paid]}</Text>
+      {photosFailed > 0 && <Text style={s.warn}>{photosFailed} {photosFailed === 1 ? 'photo' : 'photos'} didn't upload. You can show us at the appointment.</Text>}
       {saved > 0 && <Text style={s.saved}>You saved ${saved} with your membership.</Text>}
       {stamps > 0 && <Text style={s.stamp}>✓ You'll earn {stamps === 1 ? 'a stamp' : `${stamps} stamps`} when this detail is done.</Text>}
       <Pressable accessibilityRole="button" style={s.ghost} onPress={addToCalendar}>
@@ -74,6 +75,7 @@ const s = StyleSheet.create({
   sub: { color: colors.textSecondary, fontSize: 16, textAlign: 'center', marginTop: spacing(3), lineHeight: 23 },
   addr: { color: colors.textMuted, fontSize: 14, marginTop: spacing(2), textAlign: 'center' },
   paid: { color: colors.textMuted, fontSize: 13, marginTop: spacing(3), textAlign: 'center' },
+  warn: { color: '#F5B942', fontSize: 13, textAlign: 'center', marginTop: spacing(3) },
   stamp: { color: colors.success, fontSize: 14, textAlign: 'center', marginTop: spacing(2) },
   saved: { color: '#F5B942', fontFamily: fonts.heading, fontSize: 15, textAlign: 'center', marginTop: spacing(4) },
   ghost: { marginTop: spacing(8), borderWidth: 1, borderColor: colors.border, borderRadius: radius.button, paddingVertical: spacing(3.5), paddingHorizontal: spacing(8), minHeight: 48, justifyContent: 'center' },

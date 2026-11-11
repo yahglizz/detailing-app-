@@ -19,7 +19,7 @@ import TopUp from './src/screens/TopUp';
 export type RootStackParamList = {
   Home: undefined;
   Build: undefined;
-  Booked: { bookingId: string; escalated?: boolean; paid?: 'demo' | 'balance' | 'membership'; stamps?: number; saved?: number };
+  Booked: { bookingId: string; escalated?: boolean; paid?: 'demo' | 'balance' | 'membership'; stamps?: number; saved?: number; photosFailed?: number };
   MemberCode: undefined;
   MemberDashboard: undefined;
   MemberSettings: undefined;
