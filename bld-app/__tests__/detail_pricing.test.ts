@@ -184,22 +184,17 @@ describe('invoiceTotals', () => {
 });
 
 describe('migration seed matches the code default', () => {
-  test('JSON between the markers equals DEFAULT_DETAIL_PRICING', () => {
-    const sql = fs.readFileSync(
-      path.join(__dirname, '../../supabase/migrations/0015_detail_booking.sql'),
-      'utf8',
-    );
-    const region = sql.match(/-- detailPricing:begin\n([\s\S]*?)\n-- detailPricing:end/);
+  test('JSON between the markers of the newest migration that has them equals DEFAULT_DETAIL_PRICING', () => {
+    const dir = path.join(__dirname, '../../supabase/migrations');
+    const newest = (fs.readdirSync(dir) as string[]).filter((f) => f.endsWith('.sql')).sort().reverse()
+      .map((f) => ({ f, sql: fs.readFileSync(path.join(dir, f), 'utf8') as string }))
+      .find((m) => m.sql.includes('-- detailPricing:begin'));
+    expect(newest?.f).toBe('0017_app_sync.sql');
+    const region = newest!.sql.match(/-- detailPricing:begin\n([\s\S]*?)\n-- detailPricing:end/);
     expect(region).not.toBeNull();
     const lit = region![1].match(/^\$json\$([\s\S]*)\$json\$::jsonb$/);
     expect(lit).not.toBeNull();
-    // 0015 predates the four plan fields added for the app sync; compare only the keys it had.
-    // Task 3 points this at the newest migration
-    const legacy: any = clone();
-    for (const t of ['bronze', 'silver', 'gold'] as const) {
-      for (const k of ['rank', 'stampsPerCar', 'topupBonusPercent', 'discountPercent']) delete legacy.membership[t][k];
-    }
-    expect(JSON.parse(lit![1])).toEqual(legacy);
+    expect(JSON.parse(lit![1])).toEqual(CFG);
   });
 });
 
@@ -297,7 +292,7 @@ describe('memberQuote', () => {
   test('memberQuote covers most expensive first', () => {
     const q = memberQuote(CFG, [sedanFull, { service: 'full', vehicleType: 'suv' }], gold({ full: 1 }));
     // the suv (205) is the more expensive car: the visit covers it up to the sedan plan price, it pays the 30 difference
-    expect(q.lines[1]).toMatchObject({ covered: true, payable: 30 - Math.round(30 * 0.2) });
+    expect(q.lines[1]).toMatchObject({ covered: false, credit: 175, payable: 30 - Math.round(30 * 0.2) });
     expect(q.lines[0]).toMatchObject({ covered: false, payable: 140 });
     expect(q.visitsUsed).toEqual({ full: 1 });
   });
@@ -309,7 +304,8 @@ describe('memberQuote', () => {
   });
   test('memberQuote bigger car pays difference', () => {
     const q = memberQuote(CFG, [{ service: 'full', vehicleType: 'large' }], gold({ full: 1 }));
-    expect(q.lines[0]).toMatchObject({ covered: true, payable: 48 });
+    // partly covered: not `covered`, carries the plan-size price as credit
+    expect(q.lines[0]).toMatchObject({ covered: false, credit: 175, payable: 48 });
     expect(q).toMatchObject({ payable: 48, memberDiscount: 12, savings: 235 - 48, deposit: 45 });
   });
   test('a smaller car than the plan is fully covered', () => {
@@ -331,15 +327,21 @@ describe('memberQuote', () => {
   });
   test('memberQuote freeWash frees cheapest uncovered car', () => {
     const q = memberQuote(CFG, [{ service: 'premium', vehicleType: 'sedan' }, { service: 'exterior', vehicleType: 'suv' }], gold({}, 'freeWash'));
-    expect(q.lines[1]).toMatchObject({ covered: false, payable: 0 });
-    expect(q.lines[0].payable).toBe(260 - 52);
+    expect(q.lines[1]).toMatchObject({ covered: true, payable: 0 });
+    expect(q.lines[1].credit).toBeUndefined();
+    expect(q.lines[0]).toMatchObject({ covered: false, payable: 260 - 52 });
     expect(q).toMatchObject({ payable: 208, rewardUsed: true, deposit: 25 });
   });
   test('freeWash skips covered cars', () => {
     const q = memberQuote(CFG, [{ service: 'exterior', vehicleType: 'sedan' }, sedanFull], gold({ exterior: 1 }, 'freeWash'));
     expect(q.lines[0]).toMatchObject({ covered: true, payable: 0 });
-    expect(q.lines[1]).toMatchObject({ covered: false, payable: 0 });
+    expect(q.lines[1]).toMatchObject({ covered: true, payable: 0 });
     expect(q).toMatchObject({ payable: 0, rewardUsed: true, deposit: 0 });
+  });
+  test('freeWash skips a partly covered bigger car', () => {
+    const q = memberQuote(CFG, [{ service: 'full', vehicleType: 'large' }, { service: 'deep', vehicleType: 'sedan' }], gold({ full: 1 }, 'freeWash'));
+    expect(q.lines[0]).toMatchObject({ covered: false, credit: 175, payable: 48 });
+    expect(q.lines[1]).toMatchObject({ covered: true, payable: 0 });
   });
   test('tire shine / mini-spray change no price but are used by the booking', () => {
     const q = memberQuote(CFG, [sedanFull], gold({}, 'tireShine'));
@@ -357,7 +359,29 @@ describe('memberQuote', () => {
   });
   test('discount follows the tier config', () => {
     const q = memberQuote(CFG, [sedanFull], { tier: 'bronze', planVehicle: 'sedan', visitsLeft: {}, reward: null });
-    expect(q).toMatchObject({ payable: 175 - 18, memberDiscount: 18 });
+    // 175 x 90% = 157.5, rounded once half up = 158 (same as the invoice)
+    expect(q).toMatchObject({ payable: 158, memberDiscount: 17, memberPercent: 10, rewardPercent: 0 });
+  });
+  test('percent25 is reported as rewardPercent for the invoice', () => {
+    expect(memberQuote(CFG, [sedanFull], gold({}, 'percent25'))).toMatchObject({ rewardPercent: 25, memberPercent: 20 });
+    expect(memberQuote(CFG, [sedanFull], gold({}, 'freeWash'))).toMatchObject({ rewardPercent: 0 });
+    // all covered: the reward is kept, so no reward %
+    expect(memberQuote(CFG, [sedanFull], gold({ full: 1 }, 'percent25'))).toMatchObject({ rewardPercent: 0, rewardUsed: false });
+  });
+  test('2 cars x $42 at 20%: one rounding, quote = invoice = 67, car lines add up', () => {
+    const c = clone();
+    c.services.exterior.prices.sedan = 42;
+    const car = { service: 'exterior' as const, vehicleType: 'sedan' as const };
+    const q = memberQuote(c, [car, car], gold({}));
+    expect(q).toMatchObject({ payable: 67, memberDiscount: 17, savings: 17 });
+    expect(q.lines.map((l) => l.payable)).toEqual([34, 33]);
+    expect(invoiceTotalsLines({ lines: q.lines.map((l) => ({ price: l.startingPrice, covered: l.covered })), extras: [], memberPercent: q.memberPercent, rewardPercent: q.rewardPercent, depositCredit: 0 }).total).toBe(67);
+  });
+  test('car lines always add up to payable, covered cars stay 0', () => {
+    const q = memberQuote(CFG, [{ service: 'exterior', vehicleType: 'suv' }, sedanFull, { service: 'refresh', vehicleType: 'large' }, { service: 'full', vehicleType: 'large' }],
+      { tier: 'silver', planVehicle: 'sedan', visitsLeft: { full: 1 }, reward: 'percent25' });
+    expect(q.lines.reduce((n, l) => n + l.payable, 0)).toBe(q.payable);
+    expect(q.lines.filter((l) => l.covered).every((l) => l.payable === 0)).toBe(true);
   });
   test('bad member context throws', () => {
     expect(() => memberQuote(CFG, [sedanFull], { ...gold({}), tier: 'platinum' as any })).toThrow('bad_member');
@@ -404,6 +428,37 @@ describe('invoiceTotalsLines', () => {
   test('rounds the total once, half up', () => {
     expect(invoiceTotalsLines({ lines: [{ price: 10, covered: false }], extras: [], memberPercent: 15, depositCredit: 0 }).total).toBe(9);
   });
+  test('partly covered car pays price - credit, then the % off', () => {
+    expect(invoiceTotalsLines({ lines: [{ price: 235, covered: false, credit: 175 }], extras: [], memberPercent: 20, depositCredit: 0 }).total).toBe(48);
+  });
+  test('owner raises a partly covered car: member pays the new price - credit', () => {
+    expect(invoiceTotalsLines({ lines: [{ price: 260, covered: false, credit: 175 }], extras: [], memberPercent: 20, depositCredit: 0 }).total).toBe(68);
+  });
+  test('owner lowers a partly covered car below its credit: that car is $0, never negative', () => {
+    expect(invoiceTotalsLines({ lines: [{ price: 150, covered: false, credit: 175 }, { price: 100, covered: false }], extras: [], memberPercent: 0, depositCredit: 0 }).total).toBe(100);
+  });
+  test('covered ignores any credit and any price', () => {
+    expect(invoiceTotalsLines({ lines: [{ price: 999, covered: true, credit: 5 }], extras: [{ name: 'x', price: 10 }], memberPercent: 20, depositCredit: 0 }).total).toBe(8);
+  });
+  test('memberQuote lines feed the invoice and give the same total (no reward)', () => {
+    const q = memberQuote(CFG, [{ service: 'full', vehicleType: 'sedan' }, { service: 'full', vehicleType: 'suv' }, { service: 'exterior', vehicleType: 'large' }],
+      { tier: 'gold', planVehicle: 'sedan', visitsLeft: { full: 1, exterior: 1 }, reward: 'freeWash' });
+    const lines = q.lines.map((l) => ({ price: l.startingPrice, covered: l.covered, ...(l.credit === undefined ? {} : { credit: l.credit }) }));
+    expect(invoiceTotalsLines({ lines, extras: [], memberPercent: 20, depositCredit: 0 }).total).toBe(q.payable);
+  });
+  test('percent25 survives at the invoice: 175 -> 25% -> 20% = 105', () => {
+    expect(invoiceTotalsLines({ lines: [{ price: 175, covered: false }], extras: [], memberPercent: 20, rewardPercent: 25, depositCredit: 0 }).total).toBe(105);
+  });
+  test('quote with percent25 = invoice, odd amounts', () => {
+    const c = clone();
+    c.services.exterior.prices.sedan = 42;
+    const cars = [{ service: 'exterior' as const, vehicleType: 'sedan' as const }, { service: 'exterior' as const, vehicleType: 'sedan' as const }, { service: 'full' as const, vehicleType: 'large' as const }];
+    const q = memberQuote(c, cars, { tier: 'bronze', planVehicle: 'sedan', visitsLeft: { exterior: 1 }, reward: 'percent25' });
+    const lines = q.lines.map((l) => ({ price: l.startingPrice, covered: l.covered, ...(l.credit === undefined ? {} : { credit: l.credit }) }));
+    expect(q.rewardPercent).toBe(25);
+    expect(invoiceTotalsLines({ lines, extras: [], memberPercent: q.memberPercent, rewardPercent: q.rewardPercent, depositCredit: 0 }).total).toBe(q.payable);
+    expect(q.lines.reduce((n, l) => n + l.payable, 0)).toBe(q.payable);
+  });
   test('deposit credit capped, excess is refundDue', () => {
     expect(invoiceTotalsLines({ lines: [{ price: 300, covered: true }], extras: [], memberPercent: 20, depositCredit: 45 }))
       .toEqual({ total: 0, credit: 0, balance: 0, refundDue: 45 });
@@ -417,6 +472,11 @@ describe('invoiceTotalsLines', () => {
     [{ lines: [{ price: 10, covered: false }], extras: [], memberPercent: 101, depositCredit: 0 }],
     [{ lines: [{ price: 10, covered: false }], extras: [], memberPercent: 0, depositCredit: -1 }],
     [{ lines: null, extras: [], memberPercent: 0, depositCredit: 0 }],
+    [{ lines: [{ price: 10, covered: false, credit: -1 }], extras: [], memberPercent: 0, depositCredit: 0 }],
+    [{ lines: [{ price: 10, covered: false, credit: 2.5 }], extras: [], memberPercent: 0, depositCredit: 0 }],
+    [{ lines: [{ price: 10, covered: false, credit: '5' }], extras: [], memberPercent: 0, depositCredit: 0 }],
+    [{ lines: [{ price: 10, covered: false }], extras: [], memberPercent: 0, rewardPercent: 101, depositCredit: 0 }],
+    [{ lines: [{ price: 10, covered: false }], extras: [], memberPercent: 0, rewardPercent: 2.5, depositCredit: 0 }],
   ])('bad numbers throw bad_invoice (%#)', (i) => {
     expect(() => invoiceTotalsLines(i as any)).toThrow('bad_invoice');
   });

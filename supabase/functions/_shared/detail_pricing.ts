@@ -187,13 +187,22 @@ export type MemberCtx = {
 //    difference to the plan-size price. More cars than visits: the most expensive is covered first.
 // 2. percent25 = 25% off; freeWash = the cheapest uncovered car free; tireShine/miniSpray are done
 //    at the job (no price change). A reward is never spent on a booking that is already free.
-// 3. Tier discountPercent off each car's remaining price.
-// Discounts are applied per car (Math.round each step) so the car lines add up to `payable`.
+// 3. Tier discountPercent off what is still payable.
+// The two % offs are applied ONCE on the sum, rounded half up, exactly as invoiceTotalsLines (and
+// detail_invoice_pay in SQL) does, so the quote and the job invoice can't drift by a dollar.
+// Per-car `payable` is that total shared out (largest remainder), for display; it sums to `payable`.
+// Line flags (stored in the booking quote, read by detail_invoice_pay in SQL):
+//   covered: true  = the car is free whatever the owner later sets (a full visit, or the freeWash reward)
+//   credit         = a bigger car partly covered by a visit: the plan-size price it doesn't pay
+//                    (covered stays false, so if the owner raises the price the member pays price - credit)
+export type MemberLine = {
+  service: DetailService; vehicleType: VehicleType; startingPrice: number; deposit: number;
+  covered: boolean; payable: number; credit?: number;
+};
 export function memberQuote(cfg: DetailPricing, cars: CarLine[], m: MemberCtx) {
   if (!m || !isTier(m.tier) || !isVehicle(m.planVehicle)) throw new Error('bad_member');
   const q = quoteCars(cfg, cars);
-  const lines = q.lines.map((l) => ({ ...l, covered: false, payable: l.startingPrice }));
-  const off = (n: number, pct: number) => n - Math.round((n * pct) / 100);
+  const lines: MemberLine[] = q.lines.map((l) => ({ ...l, covered: false, payable: l.startingPrice }));
 
   const visitsUsed: Partial<Record<DetailService, number>> = {};
   for (const s of SERVICES) {
@@ -204,10 +213,13 @@ export function memberQuote(cfg: DetailPricing, cars: CarLine[], m: MemberCtx) {
       .slice(0, left as number);
     for (const i of idx) {
       const l = lines[i];
-      l.covered = true;
-      l.payable = vehicleRank(l.vehicleType) <= vehicleRank(m.planVehicle)
-        ? 0
-        : Math.max(0, l.startingPrice - startingPrice(cfg, s, m.planVehicle));
+      if (vehicleRank(l.vehicleType) <= vehicleRank(m.planVehicle)) {
+        l.covered = true;
+        l.payable = 0;
+      } else {
+        l.credit = startingPrice(cfg, s, m.planVehicle);
+        l.payable = Math.max(0, l.startingPrice - l.credit);
+      }
     }
     if (idx.length) visitsUsed[s] = idx.length;
   }
@@ -216,29 +228,43 @@ export function memberQuote(cfg: DetailPricing, cars: CarLine[], m: MemberCtx) {
   let rewardUsed = false;
   if (m.reward && sum() > 0) {
     if (m.reward === 'percent25') {
-      for (const l of lines) l.payable = off(l.payable, 25);
       rewardUsed = true;
     } else if (m.reward === 'freeWash') {
-      const free = lines.filter((l) => !l.covered && l.payable > 0)
+      // never a car a visit already touched (covered or partly covered)
+      const free = lines.filter((l) => !l.covered && l.credit === undefined && l.payable > 0)
         .sort((a, b) => a.payable - b.payable)[0];
-      if (free) { free.payable = 0; rewardUsed = true; }
+      if (free) { free.payable = 0; free.covered = true; rewardUsed = true; }
     } else if (m.reward === 'tireShine' || m.reward === 'miniSpray') {
       rewardUsed = true;
     }
   }
 
-  const pct = cfg.membership[m.tier].discountPercent;
-  let memberDiscount = 0;
-  for (const l of lines) {
-    const after = off(l.payable, pct);
-    memberDiscount += l.payable - after;
-    l.payable = after;
+  const rewardPercent = rewardUsed && m.reward === 'percent25' ? 25 : 0;
+  const memberPercent = cfg.membership[m.tier].discountPercent;
+  const base = sum();
+  const payable = pctOff(base, rewardPercent, memberPercent);
+  const memberDiscount = pctOff(base, rewardPercent, 0) - payable;
+  // share `payable` over the cars: floor each car's exact share, then hand the leftover dollars
+  // to the biggest fractions (ties: the earlier car). A $0 car has no fraction, so it stays $0.
+  const k = (100 - rewardPercent) * (100 - memberPercent);
+  const share = lines.map((l, i) => ({ i, n: l.payable * k }));
+  for (const x of share) lines[x.i].payable = Math.floor(x.n / 10000);
+  let left = payable - sum();
+  for (const x of [...share].sort((a, b) => (b.n % 10000) - (a.n % 10000) || a.i - b.i)) {
+    if (left-- <= 0) break;
+    lines[x.i].payable++;
   }
 
-  const payable = sum();
   const deposit = Math.min(payable, lines.reduce((n, l) => n + (l.payable > 0 ? l.deposit : 0), 0));
-  return { lines, subtotal: q.subtotal, payable, deposit, visitsUsed, rewardUsed, memberDiscount, savings: q.subtotal - payable };
+  return {
+    lines, subtotal: q.subtotal, payable, deposit, visitsUsed, rewardUsed, rewardPercent, memberPercent,
+    memberDiscount, savings: q.subtotal - payable,
+  };
 }
+
+// base x (100 - a)% x (100 - b)%, rounded once, half up, in whole-number maths (no float drift).
+// detail_invoice_pay (migration 0017) does the same: round(base * (100-a) * (100-b) / 10000).
+const pctOff = (base: number, a: number, b: number) => Math.floor((base * (100 - a) * (100 - b) + 5000) / 10000);
 
 // The start (ISO day) of the member's current billing month: the monthly anniversary of
 // period_start, clamped to the month's last day (Jan 31 -> Feb 28). Visits reset on this day.
@@ -396,25 +422,32 @@ export function invoiceTotals(i: { servicePrice: number; extras: InvoiceExtra[];
   return { total, credit, balance: total - credit, refundDue: i.depositCredit - credit };
 }
 
-// Per-car invoice. A car covered by an included visit stays $0 whatever its price; every other
-// car plus the extras (extras on covered cars too) get the member % off, rounded once on the total.
-// Then the deposit is credited as in invoiceTotals. Throws 'bad_invoice' on any bad number.
+// Per-car invoice. A covered car (full visit or freeWash) stays $0 whatever its price; a partly
+// covered car pays max(0, price - credit); those plus the extras (extras on covered cars too) get
+// the reward % (percent25, from the quote) and the member % off, rounded once on the total. Then the deposit is credited as in invoiceTotals.
+// Throws 'bad_invoice' on any bad number. detail_invoice_pay (migration 0017) is the SQL twin.
+export type InvoiceLine = { price: number; covered: boolean; credit?: number };
+export const linePayable = (l: InvoiceLine) => (l.covered ? 0 : Math.max(0, l.price - (l.credit ?? 0)));
 export function invoiceTotalsLines(i: {
-  lines: { price: number; covered: boolean }[]; extras: InvoiceExtra[]; memberPercent: number; depositCredit: number;
+  lines: InvoiceLine[]; extras: InvoiceExtra[]; memberPercent: number; depositCredit: number; rewardPercent?: number;
 }) {
+  const rewardPercent = i?.rewardPercent ?? 0;
   if (!i || !Array.isArray(i.lines) || i.lines.length < 1 || i.lines.length > MAX_CARS || !Array.isArray(i.extras)
-    || !whole(i.memberPercent, 0, 100) || !whole(i.depositCredit, 0, 10000)) throw new Error('bad_invoice');
+    || !whole(i.memberPercent, 0, 100) || !whole(rewardPercent, 0, 100) || !whole(i.depositCredit, 0, 10000)) {
+    throw new Error('bad_invoice');
+  }
   let gross = 0;
   for (const l of i.lines) {
     if (!l || !whole(l.price, 0, 10000) || typeof l.covered !== 'boolean') throw new Error('bad_invoice');
-    if (!l.covered) gross += l.price;
+    if (l.credit !== undefined && !whole(l.credit, 0, 10000)) throw new Error('bad_invoice');
+    gross += linePayable(l);
   }
   for (const e of i.extras) {
     if (!e || !whole(e.price, 0, 10000)) throw new Error('bad_invoice');
     gross += e.price;
   }
-  // integer maths: gross*(100-p) is exact, so x.5 always rounds up
-  const total = Math.round((gross * (100 - i.memberPercent)) / 100);
+  // the reward % (percent25) then the member %, rounded once, half up — same as memberQuote
+  const total = pctOff(gross, rewardPercent, i.memberPercent);
   const credit = Math.min(i.depositCredit, total);
   return { total, credit, balance: total - credit, refundDue: i.depositCredit - credit };
 }
