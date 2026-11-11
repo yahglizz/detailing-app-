@@ -112,12 +112,17 @@ export default function Build({ navigation }: Props) {
 
   // The 14-day window with each day's room, and the chosen day's taken times.
   const loadDays = () => detail<{ days: Day[] }>({ action: 'availability' }).then(({ data }) => { if (data) setDays(data.days ?? []); });
-  const loadDay = (day: string) => {
+  const loadDay = (day: string, alive: () => boolean = () => true) => {
     setDayInfo(null);
-    return detail<DayInfo>({ action: 'availability', day }).then(({ data }) => setDayInfo(data ?? { taken: [] }));
+    // Ignore a late answer for a day the customer has already moved off.
+    return detail<DayInfo>({ action: 'availability', day }).then(({ data }) => { if (alive()) setDayInfo(data ?? { taken: [] }); });
   };
   useEffect(() => { void loadDays(); }, []);
-  useEffect(() => { if (state.day) void loadDay(state.day); }, [state.day]);
+  useEffect(() => {
+    let alive = true;
+    if (state.day) void loadDay(state.day, () => alive);
+    return () => { alive = false; };
+  }, [state.day]);
 
   const pickDay = (iso: string) => { set('day')(iso); set('slot')(''); };
   const useMyLocation = async () => {

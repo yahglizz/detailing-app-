@@ -137,7 +137,7 @@ Deno.serve(async (req) => {
       // (book picks .order('created_at').limit(1)) — keeps the app's shown
       // discount matching the server's charge.
       db.from('redemptions').select('id, reward').eq('membership_id', m.id).eq('status', 'issued').order('created_at'),
-      db.from('redemptions').select('retail_value').eq('membership_id', m.id),
+      db.from('redemptions').select('retail_value').eq('membership_id', m.id).eq('status', 'applied').in('reward', ['tireShine', 'miniSpray']),
       db.from('memberships').select('stripe_customer_id, vehicle_type').eq('id', m.id).single(),
     ]);
     hasBilling = !!own?.stripe_customer_id;
