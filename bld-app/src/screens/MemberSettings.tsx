@@ -5,18 +5,18 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../App';
-import type { Size } from '../../../supabase/functions/_shared/pricing';
 import type { SavedCar } from '../../../supabase/functions/_shared/membership';
-import { SIZE_NAMES } from '../../../supabase/functions/_shared/payments/checkout';
 import { useMember } from '../state/member';
 import { useAppearance } from '../state/appearance';
 import { fonts, themes, type Mode, type Theme } from '../theme';
 import { ui } from '../ui';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MemberSettings'>;
-const SIZES: { key: Size; label: string }[] = [
-  { key: 'sedan', label: 'SEDAN' }, { key: 'suv', label: 'SUV' }, { key: 'truck', label: 'TRUCK / VAN' },
-];
+type Size = SavedCar['size'];
+// Same vehicle types as booking. Old saved cars marked 'truck' read as SUV / Truck.
+const SIZE_NAMES: Record<Size, string> = { sedan: 'Sedan', suv: 'SUV / Truck', large: 'Large SUV' };
+const SIZES = (Object.keys(SIZE_NAMES) as Size[]).map((key) => ({ key, label: SIZE_NAMES[key].toUpperCase() }));
+const sizeName = (size: string) => SIZE_NAMES[(size === 'truck' ? 'suv' : size) as Size] ?? size;
 const MAX_CARS = 6;
 
 export default function MemberSettings({ navigation }: Props) {
@@ -28,6 +28,8 @@ export default function MemberSettings({ navigation }: Props) {
   const [address, setAddress] = useState(p?.member.address ?? '');
   const [carName, setCarName] = useState('');
   const [carSize, setCarSize] = useState<Size>('sedan');
+  const [carYear, setCarYear] = useState('');
+  const [carMake, setCarMake] = useState('');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState({ text: '', ok: false });
   if (!p) return null;
@@ -57,7 +59,11 @@ export default function MemberSettings({ navigation }: Props) {
   };
   const addCar = async () => {
     if (!carName.trim()) return setNote({ text: 'Give this car a name, like “Black Tahoe”.', ok: false });
-    if (await saveCars([...cars, { name: carName.trim(), size: carSize }])) { setCarName(''); setCarSize('sedan'); }
+    if (carYear && !/^(19|20)\d{2}$/.test(carYear)) return setNote({ text: 'Enter the year like 2019, or leave it blank.', ok: false });
+    const car: SavedCar = { name: carName.trim(), size: carSize };
+    if (carYear) car.year = carYear;
+    if (carMake.trim()) car.make = carMake.trim();
+    if (await saveCars([...cars, car])) { setCarName(''); setCarSize('sedan'); setCarYear(''); setCarMake(''); }
   };
   const removeCar = (i: number) => {
     Alert.alert(`Remove ${cars[i].name}?`, 'It won’t show up at checkout anymore.', [
@@ -132,7 +138,7 @@ export default function MemberSettings({ navigation }: Props) {
                 <View style={s.carNum}><Text style={s.carNumText}>{String(i + 1).padStart(2, '0')}</Text></View>
                 <View style={{ flex: 1 }}>
                   <Text style={s.carName} numberOfLines={1}>{c.name}</Text>
-                  <Text style={s.carSize}>{SIZE_NAMES[c.size]}</Text>
+                  <Text style={s.carSize}>{[`${c.year ?? ''} ${c.make ?? ''}`.trim(), sizeName(c.size)].filter(Boolean).join(' · ')}</Text>
                 </View>
                 <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${c.name}`} disabled={busy} onPress={() => removeCar(i)} style={s.remove}>
                   <Text style={s.removeText}>REMOVE</Text>
@@ -146,7 +152,17 @@ export default function MemberSettings({ navigation }: Props) {
             {cars.length >= MAX_CARS ? <Text style={s.empty}>That’s the max of {MAX_CARS} cars. Remove one to add another.</Text> : <>
               <Text style={[u.fieldLabel, s.first]}>WHAT DO YOU CALL IT?</Text>
               <TextInput accessibilityLabel="Car name" style={u.input} value={carName} onChangeText={setCarName} maxLength={40} placeholder="e.g. Black Tahoe" placeholderTextColor={t.faint} keyboardAppearance={mode} returnKeyType="done" />
-              <Text style={u.fieldLabel}>SIZE</Text>
+              <View style={s.row}>
+                <View style={s.yearCol}>
+                  <Text style={u.fieldLabel}>YEAR</Text>
+                  <TextInput accessibilityLabel="Car year" style={u.input} value={carYear} onChangeText={(v) => setCarYear(v.replace(/\D/g, ''))} maxLength={4} keyboardType="number-pad" placeholder="Optional" placeholderTextColor={t.faint} keyboardAppearance={mode} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={u.fieldLabel}>BRAND</Text>
+                  <TextInput accessibilityLabel="Car brand" style={u.input} value={carMake} onChangeText={setCarMake} maxLength={40} autoCapitalize="words" placeholder="Optional" placeholderTextColor={t.faint} keyboardAppearance={mode} />
+                </View>
+              </View>
+              <Text style={u.fieldLabel}>VEHICLE TYPE</Text>
               <View style={s.row}>
                 {SIZES.map((z) => (
                   <Pressable key={z.key} accessibilityRole="button" accessibilityState={{ selected: carSize === z.key }} onPress={() => setCarSize(z.key)} style={[u.chip, carSize === z.key && u.chipOn]}>
@@ -169,6 +185,7 @@ export default function MemberSettings({ navigation }: Props) {
 const make = (t: Theme) => StyleSheet.create({
   tabs: { flexDirection: 'row', gap: 8, marginTop: 22 },
   row: { flexDirection: 'row', gap: 8 },
+  yearCol: { width: 96 },
   first: { marginTop: 0 },
   fieldHint: { color: t.faint, fontSize: 12, lineHeight: 17 },
   save: { marginTop: 18 },

@@ -2,6 +2,20 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../api';
 import type { MemberSettings, SavedCar, Tier } from '../../../supabase/functions/_shared/membership';
+import type { DetailService, VehicleType } from '../../../supabase/functions/_shared/detail_pricing';
+
+// The member's plan this billing month (null for a balance-only account).
+export interface MemberPlan {
+  tier: Tier;
+  vehicleType: VehicleType;
+  monthlyPrice: number;
+  discountPercent: number;
+  stampsPerCar: number;
+  topupBonusPercent: number;
+  visits: Partial<Record<DetailService, number>>;
+  visitsLeft: Partial<Record<DetailService, number>>; // this billing month, per service
+  periodResetsOn: string;
+}
 
 export const TIER_COLORS: Record<string, string> = {
   bronze: '#CD7F32',
@@ -18,12 +32,13 @@ export interface MemberProfile {
   wallet: number; // prepaid balance, whole dollars
   isTest: boolean; // owner test account: shows the tier switcher
   hasBilling?: boolean; // pays through Stripe: plan changes happen in Stripe's Billing Portal
-  credits: number;
+  plan: MemberPlan | null;
+  credits: number; // total visits left this billing month (sum of plan.visitsLeft)
   stamps: number;
   savings: number;
   rewardMenu: { key: string; label: string; cost: number }[];
   issuedRewards: { id: string; reward: string; label: string }[];
-  history: { id: string; day: string; slot: string | null; status: string; total: number; paidWithCredit: boolean }[];
+  history: { id: string; day: string; slot: string | null; status: string; total?: number; paidWithCredit: boolean }[];
 }
 
 const KEY = 'bld_member_code';
@@ -71,7 +86,7 @@ export function MemberProvider({ children }: { children: React.ReactNode }) {
     if (error || !data || !('member' in data)) return error ?? 'network';
     const p = data as MemberProfile;
     setProfile({
-      ...p, wallet: p.wallet ?? 0, isTest: !!p.isTest,
+      ...p, wallet: p.wallet ?? 0, isTest: !!p.isTest, plan: p.plan ?? null,
       member: { ...p.member, tier: p.member.tier ?? null, address: p.member.address ?? '', cars: p.member.cars ?? [] },
     });
     setCode(c);

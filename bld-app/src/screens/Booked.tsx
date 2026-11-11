@@ -4,14 +4,22 @@ import * as Calendar from 'expo-calendar';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../App';
 import { useOrder } from '../state/order';
+import { fmtSlot } from './Build';
 import { colors, fonts, radius, spacing } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Booked'>;
-const PAID = { full: 'Paid in full.', credit: 'Booked with your membership.', balance: 'Paid from your balance.', deposit: 'Deposit paid.' };
+const PAID = { demo: 'Demo deposit recorded, no money taken.', balance: 'Deposit paid from your balance.', membership: 'Booked with your membership.' };
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+// Same reference the website shows: BLD- plus the booking id's first 6 hex, uppercase.
+export const bookingRef = (id: string) => `BLD-${id.replace(/-/g, '').slice(0, 6).toUpperCase()}`;
 
 export default function Booked({ navigation, route }: Props) {
   const { state, dispatch } = useOrder();
-  const { escalated, paid, stamps = 0, saved = 0 } = route.params;
+  const { bookingId, escalated, paid = 'demo', stamps = 0, saved = 0 } = route.params;
+  const [y, m, d] = state.day.split('-').map(Number);
+  const dayText = state.day ? `${MONTHS[m - 1]} ${d}` : '';
+  const address = `${state.street}, ${state.zip}`;
 
   const addToCalendar = async () => {
     const { status } = await Calendar.requestCalendarPermissionsAsync();
@@ -19,15 +27,16 @@ export default function Booked({ navigation, route }: Props) {
     const cals = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
     const cal = cals.find((c) => c.allowsModifications);
     if (!cal) return;
-    const start = new Date(`${state.preferredDay}T${state.window === 'afternoon' ? '13:00' : '09:00'}:00`);
+    const hour = Number((escalated ? '09:00' : state.slot || '09:00').slice(0, 2));
+    const start = new Date(y, m - 1, d, hour);
     await Calendar.createEventAsync(cal.id, {
       title: 'Brotherly Love Detailing',
-      location: state.address,
+      location: address,
       startDate: start,
       endDate: new Date(start.getTime() + 2 * 3600e3),
-      notes: 'Exact time will be confirmed by email.',
+      notes: `Booking ${bookingRef(bookingId)}.${escalated ? ' Exact time to be confirmed.' : ''}`,
     });
-    Alert.alert('Added', 'Detail day is on your calendar.');
+    Alert.alert('Added', 'Your detail is on your calendar.');
   };
 
   const done = () => {
@@ -39,15 +48,14 @@ export default function Booked({ navigation, route }: Props) {
     <View style={s.root}>
       <Text style={s.check}>✓</Text>
       <Text style={s.title}>YOU'RE BOOKED</Text>
-      <Text style={s.sub}>{PAID[paid ?? 'deposit']} We'll email you shortly to lock in your exact time for {state.preferredDay} ({state.window}).</Text>
-      <Text style={s.addr}>{state.address}</Text>
-      {!!escalated && (
-        <Text style={s.note}>Two VIPs wanted this slot — we'll email your exact time today.</Text>
-      )}
+      <Text style={s.ref}>{bookingRef(bookingId)}</Text>
+      <Text style={s.sub}>{escalated
+        ? `${dayText}. We’ll confirm your time.`
+        : `${dayText} at ${fmtSlot(state.slot)}.`}</Text>
+      <Text style={s.addr}>{address}</Text>
+      <Text style={s.paid}>{PAID[paid]}</Text>
       {saved > 0 && <Text style={s.saved}>You saved ${saved} with your membership.</Text>}
-      {stamps > 0 && (
-        <Text style={s.stamp}>✓ You'll earn {stamps === 1 ? 'a stamp' : `${stamps} stamps`} when this wash is done.</Text>
-      )}
+      {stamps > 0 && <Text style={s.stamp}>✓ You'll earn {stamps === 1 ? 'a stamp' : `${stamps} stamps`} when this detail is done.</Text>}
       <Pressable accessibilityRole="button" style={s.ghost} onPress={addToCalendar}>
         <Text style={s.ghostText}>ADD TO CALENDAR</Text>
       </Pressable>
@@ -62,9 +70,10 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', padding: spacing(8) },
   check: { fontSize: 64, color: colors.success },
   title: { fontFamily: fonts.headingBlack, fontSize: 32, color: colors.text, marginTop: spacing(4) },
+  ref: { fontFamily: fonts.heading, fontSize: 18, color: colors.primaryBright, letterSpacing: 1.5, marginTop: spacing(2) },
   sub: { color: colors.textSecondary, fontSize: 16, textAlign: 'center', marginTop: spacing(3), lineHeight: 23 },
-  addr: { color: colors.textMuted, fontSize: 14, marginTop: spacing(2) },
-  note: { color: '#F5B942', fontSize: 14, textAlign: 'center', marginTop: spacing(3) },
+  addr: { color: colors.textMuted, fontSize: 14, marginTop: spacing(2), textAlign: 'center' },
+  paid: { color: colors.textMuted, fontSize: 13, marginTop: spacing(3), textAlign: 'center' },
   stamp: { color: colors.success, fontSize: 14, textAlign: 'center', marginTop: spacing(2) },
   saved: { color: '#F5B942', fontFamily: fonts.heading, fontSize: 15, textAlign: 'center', marginTop: spacing(4) },
   ghost: { marginTop: spacing(8), borderWidth: 1, borderColor: colors.border, borderRadius: radius.button, paddingVertical: spacing(3.5), paddingHorizontal: spacing(8), minHeight: 48, justifyContent: 'center' },

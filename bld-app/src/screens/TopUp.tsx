@@ -7,7 +7,6 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../App';
-import { topupBonus, type MemberCatalog } from '../../../supabase/functions/_shared/membership';
 import { supabase } from '../api';
 import { useCatalog } from '../state/catalog';
 import { useMember } from '../state/member';
@@ -24,7 +23,7 @@ const PRESETS = [25, 50, 100, 200];
 export default function TopUp({ navigation }: Props) {
   const { profile, code, refresh } = useMember();
   const { mode } = useAppearance();
-  const catalog = useCatalog() as unknown as Partial<MemberCatalog>;
+  const { membership } = useCatalog();
   const [preset, setPreset] = useState(50);
   const [other, setOther] = useState('');
   const [name, setName] = useState('');
@@ -37,13 +36,15 @@ export default function TopUp({ navigation }: Props) {
   const u = ui[mode];
   const s = styles[mode];
   const loggedIn = !!(profile && code);
-  const { min, max } = catalog.topup ?? { min: 10, max: 500 };
+  // the server's limits; it answers bad_amount with its own min/max if these ever differ
+  const min = 10, max = 500;
   const amount = other ? Number(other) : preset;
   const valid = Number.isInteger(amount) && amount >= min && amount <= max;
-  const tier = loggedIn ? profile!.member.tier : null;
-  const plan = tier ? catalog.plans?.[tier] : undefined;
-  const bonus = valid ? topupBonus(amount, plan) : 0;
-  const bestBonus = Math.max(0, ...Object.values(catalog.plans ?? {}).map((p) => p.topupBonusPercent ?? 0));
+  const plan = loggedIn ? profile!.plan : null;
+  const tier = plan?.tier ?? null;
+  // display only: the topup function computes the real bonus the same way
+  const bonus = valid && plan ? Math.round((amount * plan.topupBonusPercent) / 100) : 0;
+  const bestBonus = Math.max(0, ...Object.values(membership ?? {}).map((p) => p.topupBonusPercent ?? 0));
   const guestEmail = email.trim().toLowerCase();
 
   const topupError = async (e: unknown) => {
@@ -96,14 +97,14 @@ export default function TopUp({ navigation }: Props) {
         </View>
         <Text style={u.eyebrow}>YOUR BALANCE</Text>
         <Text style={u.title}>LOAD UP.{'\n'}SPEND LATER.</Text>
-        <Text style={u.intro}>Your balance pays first at checkout, before any card.{loggedIn ? ` You have $${profile!.wallet} on it now.` : ''}</Text>
+        <Text style={u.intro}>Your balance can pay your booking deposit and your bill at the detail.{loggedIn ? ` You have $${profile!.wallet} on it now.` : ''}</Text>
 
         {done ? (
           <View style={[u.sheet, s.doneSheet]}>
             <Text style={s.doneAmount}>+${done.added}</Text>
             <Text style={u.fieldHeading}>ADDED TO YOUR BALANCE.</Text>
             {loggedIn
-              ? <Text style={u.hint}>Your balance is now ${profile!.wallet}. It pays first on your next detail.</Text>
+              ? <Text style={u.hint}>Your balance is now ${profile!.wallet}. Use it for your next deposit or at the detail.</Text>
               : <Text style={u.hint}>We emailed your login code to {done.email}. Enter it to see your balance and spend it at checkout.</Text>}
             <Pressable accessibilityRole="button" style={[u.button, s.doneButton]}
               onPress={() => (loggedIn ? navigation.goBack() : navigation.replace('MemberCode'))}>

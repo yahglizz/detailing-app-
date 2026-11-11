@@ -1,73 +1,85 @@
 import React, { createContext, useContext, useReducer } from 'react';
-import type { CarItem, Extra, Service, Size } from '../../../supabase/functions/_shared/pricing';
-import type { PayMode } from '../../../supabase/functions/_shared/payments/checkout';
+import type { DetailService, VehicleType } from '../../../supabase/functions/_shared/detail_pricing';
+import type { SavedCar } from '../../../supabase/functions/_shared/membership';
+
+export const MAX_CARS = 6;
+export type Condition = 'light' | 'moderate' | 'heavy';
+
+// One car in the booking. condition '' and petHair null = not answered yet (the website asks too).
+// label = the member's saved car this was filled from.
+export interface Car {
+  year: string;
+  make: string;
+  vehicleType: VehicleType;
+  service: DetailService;
+  condition: Condition | '';
+  petHair: boolean | null;
+  label?: string;
+}
+export interface Photo { uri: string; ext: string }
 
 export interface OrderState {
-  items: CarItem[];
-  address: string;
-  preferredDay: string; // YYYY-MM-DD
-  timeSlot: string; // 24h "HH:MM", e.g. '09:00' — '' until picked
-  window: 'morning' | 'afternoon' | 'either';
+  cars: Car[];
+  street: string;
+  zip: string;
+  day: string; // YYYY-MM-DD
+  slot: string; // 24h "HH:00", '' until picked
   notes: string;
-  remainderMethod: 'cash' | 'card';
-  payMode: PayMode;
   name: string;
-  anchor: boolean;
+  phone: string;
+  email: string;
+  photos: Photo[];
 }
 
+type CarField = keyof Omit<Car, 'label'>;
+type Field = 'street' | 'zip' | 'day' | 'slot' | 'notes' | 'name' | 'phone' | 'email';
+
 export type OrderAction =
-  | { type: 'SET_CAR_COUNT'; count: number }
-  | { type: 'SET_SIZE'; index: number; size: Size }
-  | { type: 'SET_CAR'; index: number; label: string; size: Size } // a member's saved car
-  | { type: 'SET_SERVICE'; index: number; service: Service }
-  | { type: 'TOGGLE_EXTRA'; index: number; extra: Extra }
-  | { type: 'SET_FIELD'; field: 'address' | 'preferredDay' | 'timeSlot' | 'window' | 'notes' | 'remainderMethod' | 'payMode' | 'name'; value: string }
-  | { type: 'SET_ANCHOR'; anchor: boolean }
+  | { type: 'ADD_CAR' }
+  | { type: 'REMOVE_CAR'; index: number }
+  | { type: 'SET_CAR_FIELD'; index: number; field: CarField; value: Car[CarField] }
+  | { type: 'PREFILL_CAR'; index: number; car: SavedCar }
+  | { type: 'SET_FIELD'; field: Field; value: string }
+  | { type: 'SET_PHOTOS'; photos: Photo[] }
   | { type: 'RESET' };
 
-const newCar = (): CarItem => ({ size: 'sedan', service: 'full', extras: [] });
+const newCar = (): Car => ({ year: '', make: '', vehicleType: 'sedan', service: 'full', condition: '', petHair: null });
 
 export const initialOrder: OrderState = {
-  items: [newCar()],
-  address: '',
-  preferredDay: '',
-  timeSlot: '',
-  window: 'either',
-  notes: '',
-  remainderMethod: 'cash',
-  payMode: 'deposit',
-  name: '',
-  anchor: false,
+  cars: [newCar()],
+  street: '', zip: '', day: '', slot: '', notes: '', name: '', phone: '', email: '',
+  photos: [],
 };
+
+const editCar = (s: OrderState, index: number, fn: (c: Car) => Car): OrderState =>
+  ({ ...s, cars: s.cars.map((c, i) => (i === index ? fn(c) : c)) });
 
 export function orderReducer(state: OrderState, action: OrderAction): OrderState {
   switch (action.type) {
-    case 'SET_CAR_COUNT': {
-      const count = Math.max(1, Math.min(6, action.count));
-      const items = state.items.slice(0, count);
-      while (items.length < count) items.push(newCar());
-      return { ...state, items };
+    case 'ADD_CAR':
+      return state.cars.length >= MAX_CARS ? state : { ...state, cars: [...state.cars, newCar()] };
+    case 'REMOVE_CAR':
+      return state.cars.length <= 1 ? state : { ...state, cars: state.cars.filter((_, i) => i !== action.index) };
+    case 'SET_CAR_FIELD':
+      return editCar(state, action.index, (c) => {
+        const next = { ...c, [action.field]: action.value };
+        // hand-editing what the saved car filled in makes it a plain car again
+        if (action.field === 'vehicleType' || action.field === 'year' || action.field === 'make') delete next.label;
+        return next;
+      });
+    case 'PREFILL_CAR': {
+      const saved = action.car;
+      // old saved cars may still say 'truck': that's SUV / Truck now
+      const vehicleType: VehicleType = (saved.size as string) === 'truck' ? 'suv' : saved.size;
+      return editCar(state, action.index, (c) => ({
+        ...c, vehicleType, label: saved.name,
+        year: saved.year ?? c.year, make: saved.make ?? c.make,
+      }));
     }
-    case 'SET_SIZE': // a new size means it's no longer that saved car
-      return { ...state, items: state.items.map((c, i) => (i === action.index ? { service: c.service, extras: c.extras, size: action.size } : c)) };
-    case 'SET_CAR':
-      return { ...state, items: state.items.map((c, i) => (i === action.index ? { ...c, label: action.label, size: action.size } : c)) };
-    case 'SET_SERVICE':
-      return { ...state, items: state.items.map((c, i) => (i === action.index ? { ...c, service: action.service } : c)) };
-    case 'TOGGLE_EXTRA':
-      return {
-        ...state,
-        items: state.items.map((c, i) =>
-          i !== action.index ? c : {
-            ...c,
-            extras: c.extras.includes(action.extra) ? c.extras.filter((e) => e !== action.extra) : [...c.extras, action.extra],
-          },
-        ),
-      };
     case 'SET_FIELD':
       return { ...state, [action.field]: action.value };
-    case 'SET_ANCHOR':
-      return { ...state, anchor: action.anchor };
+    case 'SET_PHOTOS':
+      return { ...state, photos: action.photos };
     case 'RESET':
       return initialOrder;
   }

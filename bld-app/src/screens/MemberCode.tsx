@@ -61,7 +61,7 @@ export default function MemberCode({ navigation }: Props) {
         </View>
 
         <JoinTiers mode={mode} num="02" title="JOIN A TIER" heading="NEW TO THE BROTHERHOOD?"
-          hint="The higher the tier, the bigger every perk. Your member code arrives by email right after you pay." />
+          hint="The higher the tier, the bigger every perk. Ask about a plan and we'll set it up with you, then email your member code." />
       </ScrollView>
     </SafeAreaView>
   );

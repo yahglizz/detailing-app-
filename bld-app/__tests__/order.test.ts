@@ -1,48 +1,52 @@
-import { orderReducer, initialOrder } from '../src/state/order';
+import { orderReducer, initialOrder, MAX_CARS } from '../src/state/order';
 
-test('initial order has one full-service sedan', () => {
-  expect(initialOrder.items).toEqual([{ size: 'sedan', service: 'full', extras: [] }]);
+test('initial order has one blank full-detail sedan', () => {
+  expect(initialOrder.cars).toEqual([{ year: '', make: '', vehicleType: 'sedan', service: 'full', condition: '', petHair: null }]);
+  expect(initialOrder.photos).toEqual([]);
 });
 
-test('SET_CAR_COUNT grows preserving existing cars and shrinks from the end', () => {
-  let s = orderReducer(initialOrder, { type: 'SET_SIZE', index: 0, size: 'truck' });
-  s = orderReducer(s, { type: 'SET_CAR_COUNT', count: 3 });
-  expect(s.items).toHaveLength(3);
-  expect(s.items[0].size).toBe('truck');
-  expect(s.items[2]).toEqual({ size: 'sedan', service: 'full', extras: [] });
-  s = orderReducer(s, { type: 'SET_CAR_COUNT', count: 1 });
-  expect(s.items).toEqual([{ size: 'truck', service: 'full', extras: [] }]);
+test('ADD_CAR caps at 6', () => {
+  let s = initialOrder;
+  for (let i = 0; i < 10; i++) s = orderReducer(s, { type: 'ADD_CAR' });
+  expect(MAX_CARS).toBe(6);
+  expect(s.cars).toHaveLength(6);
 });
 
-test('TOGGLE_EXTRA adds then removes', () => {
-  let s = orderReducer(initialOrder, { type: 'TOGGLE_EXTRA', index: 0, extra: 'ceramic' });
-  expect(s.items[0].extras).toEqual(['ceramic']);
-  s = orderReducer(s, { type: 'TOGGLE_EXTRA', index: 0, extra: 'ceramic' });
-  expect(s.items[0].extras).toEqual([]);
+test('REMOVE_CAR keeps at least 1', () => {
+  let s = orderReducer(initialOrder, { type: 'ADD_CAR' });
+  s = orderReducer(s, { type: 'SET_CAR_FIELD', index: 1, field: 'make', value: 'Honda' });
+  s = orderReducer(s, { type: 'REMOVE_CAR', index: 0 });
+  expect(s.cars).toHaveLength(1);
+  expect(s.cars[0].make).toBe('Honda');
+  s = orderReducer(s, { type: 'REMOVE_CAR', index: 0 });
+  expect(s.cars).toHaveLength(1);
+  expect(s.cars[0].make).toBe('Honda');
 });
 
-test('SET_FIELD sets schedule fields; RESET restores initial', () => {
-  let s = orderReducer(initialOrder, { type: 'SET_FIELD', field: 'address', value: '2841 S 12th St' });
-  expect(s.address).toBe('2841 S 12th St');
+test('SET_CAR_FIELD updates one car', () => {
+  let s = orderReducer(initialOrder, { type: 'ADD_CAR' });
+  s = orderReducer(s, { type: 'SET_CAR_FIELD', index: 1, field: 'service', value: 'premium' });
+  s = orderReducer(s, { type: 'SET_CAR_FIELD', index: 1, field: 'petHair', value: true });
+  expect(s.cars[0]).toEqual(initialOrder.cars[0]);
+  expect(s.cars[1].service).toBe('premium');
+  expect(s.cars[1].petHair).toBe(true);
+});
+
+test('prefill from saved car sets vehicleType/year/make', () => {
+  let s = orderReducer(initialOrder, { type: 'PREFILL_CAR', index: 0, car: { name: 'Black Tahoe', size: 'large', year: '2019', make: 'Chevrolet' } });
+  expect(s.cars[0]).toMatchObject({ vehicleType: 'large', year: '2019', make: 'Chevrolet', label: 'Black Tahoe', service: 'full' });
+  // an old saved 'truck' reads as suv; missing year/make leave the fields as they were
+  s = orderReducer(s, { type: 'PREFILL_CAR', index: 0, car: { name: 'Work truck', size: 'truck' as never } });
+  expect(s.cars[0]).toMatchObject({ vehicleType: 'suv', year: '2019', make: 'Chevrolet', label: 'Work truck' });
+  // editing the car by hand makes it a plain car again
+  s = orderReducer(s, { type: 'SET_CAR_FIELD', index: 0, field: 'vehicleType', value: 'sedan' });
+  expect(s.cars[0]).not.toHaveProperty('label');
+});
+
+test('SET_FIELD, photos and RESET', () => {
+  let s = orderReducer(initialOrder, { type: 'SET_FIELD', field: 'street', value: '2841 S 12th St' });
+  s = orderReducer(s, { type: 'SET_PHOTOS', photos: [{ uri: 'file:///a.jpg', ext: 'jpg' }] });
+  expect(s.street).toBe('2841 S 12th St');
+  expect(s.photos).toHaveLength(1);
   expect(orderReducer(s, { type: 'RESET' })).toEqual(initialOrder);
-});
-
-test('anchor toggles and resets', () => {
-  let st = orderReducer(initialOrder, { type: 'SET_ANCHOR', anchor: true });
-  expect(st.anchor).toBe(true);
-  st = orderReducer(st, { type: 'RESET' });
-  expect(st.anchor).toBe(false);
-});
-
-test('SET_CAR picks a saved car; changing its size makes it a plain car again', () => {
-  let s = orderReducer(initialOrder, { type: 'SET_CAR', index: 0, label: 'Black Tahoe', size: 'suv' });
-  expect(s.items[0]).toEqual({ size: 'suv', service: 'full', extras: [], label: 'Black Tahoe' });
-  s = orderReducer(s, { type: 'SET_SIZE', index: 0, size: 'truck' });
-  expect(s.items[0]).toEqual({ size: 'truck', service: 'full', extras: [] });
-  expect(s.items[0]).not.toHaveProperty('label');
-});
-
-test('pay mode defaults to deposit and can switch to full', () => {
-  expect(initialOrder.payMode).toBe('deposit');
-  expect(orderReducer(initialOrder, { type: 'SET_FIELD', field: 'payMode', value: 'full' }).payMode).toBe('full');
 });

@@ -26,6 +26,9 @@
       "expo-font",
       "expo-video",
       "expo-web-browser"
-    ]
+    ],
+    "experiments": {
+      "onDemandFilesystem": false
+    }
   }
 }
