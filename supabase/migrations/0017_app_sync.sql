@@ -172,9 +172,11 @@ grant execute on function detail_reserve(jsonb, int, int, jsonb, timestamptz) to
 -- The caller (detail pay-demo) checks app_config.payments_mode = 'demo' first.
 -- Errors: not_found (no such detail_v2 booking, or wrong payKey), not_pending, price_changed
 -- (the reward the quote used was spent elsewhere; the booking stays pending_payment).
+-- Returns bumped: the bookings a VIP bump by this one moved and nobody has told yet. They are
+-- marked detail.bumpNotified here, in the same transaction, and detail pay-demo emails them.
 create or replace function detail_pay_demo(p_booking uuid, p_paykey text)
 returns jsonb language plpgsql security definer set search_path = public as $$
-declare b bookings%rowtype; v_reward uuid;
+declare b bookings%rowtype; v_reward uuid; v_bumped jsonb;
 begin
   select * into b from bookings where id = p_booking and flow = 'detail_v2' for update;
   if not found or p_paykey is null or p_paykey = '' or b.detail->>'payKey' is distinct from p_paykey then
@@ -188,10 +190,55 @@ begin
     if not found then raise exception 'price_changed'; end if;
   end if;
   update bookings set status = 'requested', deposit_status = 'demo' where id = b.id;
-  return jsonb_build_object('ok', true);
+  with m as (
+    update bookings set detail = detail || '{"bumpNotified": true}'::jsonb
+      where detail->>'bumpedBy' = b.id::text and status not in ('declined', 'refunded')
+        and not (detail ? 'bumpNotified')
+      returning id)
+  select coalesce(jsonb_agg(id), '[]'::jsonb) into v_bumped from m;
+  return jsonb_build_object('ok', true, 'bumped', v_bumped);
 end $$;
 revoke all on function detail_pay_demo(uuid, text) from public, anon, authenticated;
 grant execute on function detail_pay_demo(uuid, text) to service_role;
+
+-- ——— undo a VIP bump whose deposit step never finished ———
+-- A VIP hold moves the holder at reserve time. If that hold is then released or expires
+-- (p_booking declined/refunded), each booking it moved that the owner hasn't confirmed
+-- (pending_payment|requested, same day) goes back to its old time if that time is free, and
+-- loses the bump marks. One whose old time is taken by now keeps the time it was moved to.
+-- Same day lock as detail_reserve, so nothing can take the old time halfway through.
+-- Returns the number restored (0 when p_booking is still live). Service role only.
+create or replace function detail_unbump(p_booking uuid)
+returns int language plpgsql security definer set search_path = public as $$
+declare v_day date; h record; v_n int := 0;
+begin
+  select preferred_day into v_day from bookings where id = p_booking;
+  if v_day is null then return 0; end if;
+  perform pg_advisory_xact_lock(hashtext('detail-day:' || v_day::text));
+  if not exists (select 1 from bookings where id = p_booking and status in ('declined', 'refunded')) then
+    return 0;
+  end if;
+  for h in select b.id, b.detail->>'bumpedFrom' as slot from bookings b
+      where b.detail->>'bumpedBy' = p_booking::text and b.preferred_day = v_day
+        and b.status in ('pending_payment', 'requested')
+      for update of b
+  loop
+    -- = booked_slots(v_day) without h itself (every flow, like the unique slot check)
+    if h.slot is not null and not exists (
+        select 1 from bookings o where o.preferred_day = v_day and o.time_slot = h.slot and o.id <> h.id
+          and o.status not in ('declined', 'refunded')) then
+      update bookings set time_slot = h.slot,
+          time_window = case when h.slot < '12:00' then 'morning' else 'afternoon' end,
+          bumped_from = null,
+          detail = detail - 'bumpedFrom' - 'bumpedAt' - 'bumpedBy' - 'bumpNotified'
+        where id = h.id;
+      v_n := v_n + 1;
+    end if;
+  end loop;
+  return v_n;
+end $$;
+revoke all on function detail_unbump(uuid) from public, anon, authenticated;
+grant execute on function detail_unbump(uuid) to service_role;
 
 -- ——— mark an invoice paid (replaces 0015's): one line per car, member % off, and balance
 -- as a payment method. One transaction, row-locked, as before. The deposit counts as credit

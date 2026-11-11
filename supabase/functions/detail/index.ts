@@ -327,10 +327,11 @@ const handlers: Record<string, (b: Obj, req: Request) => Promise<Response>> = {
       return bad('booking_insert_failed', 500);
     }
 
-    if (res?.bumpedId) await notifyBumped(String(res.bumpedId), r.day, res.movedTo ?? null, r.name);
-
+    // The deposit step is done: tell the owner now, and anyone a VIP bump moved. Otherwise the
+    // moved customer hears at pay-demo; an abandoned hold undoes the bump (release, sweep).
     const paidFromBalance = debit > 0;
-    if (paidFromBalance) { // the deposit step is done: tell the owner now
+    if (paidFromBalance) {
+      if (res?.bumpedId) await notifyBumped(String(res.bumpedId), r.name);
       const saved = await loadRow(bookingId);
       if (saved) await notify(saved, cfg);
     }
@@ -347,8 +348,10 @@ const handlers: Record<string, (b: Obj, req: Request) => Promise<Response>> = {
   // The customer closed the dialog on the deposit step: free their held time right away.
   release: async (b) => {
     if (!UUID.test(String(b.bookingId)) || typeof b.payKey !== 'string' || !b.payKey) return bad('not_found', 404);
-    await db.from('bookings').update({ status: 'declined' })
-      .eq('id', b.bookingId).eq('flow', 'detail_v2').eq('status', 'pending_payment').eq('detail->>payKey', b.payKey);
+    const { data } = await db.from('bookings').update({ status: 'declined' })
+      .eq('id', b.bookingId).eq('flow', 'detail_v2').eq('status', 'pending_payment').eq('detail->>payKey', b.payKey)
+      .select('id, detail');
+    if (data?.length) await undoBumps(b.bookingId, data[0].detail?.name);
     return json({ ok: true });
   },
 
@@ -359,7 +362,7 @@ const handlers: Record<string, (b: Obj, req: Request) => Promise<Response>> = {
     // One transaction (detail_pay_demo, migration 0017): payKey check, the quote's reward spent,
     // pending_payment -> requested. A reward spent elsewhere meanwhile = price_changed and the
     // booking stays pending_payment.
-    const { error } = await db.rpc('detail_pay_demo', { p_booking: b.bookingId, p_paykey: b.payKey });
+    const { data: paid, error } = await db.rpc('detail_pay_demo', { p_booking: b.bookingId, p_paykey: b.payKey });
     if (error) {
       const msg = error.message ?? '';
       if (msg.includes('not_found')) return bad('not_found', 404);
@@ -369,6 +372,10 @@ const handlers: Record<string, (b: Obj, req: Request) => Promise<Response>> = {
     }
     const row = await loadRow(b.bookingId);
     if (row) await notify(row, await pricing());
+    // the bookings this one moved, marked bumpNotified by detail_pay_demo (told once)
+    for (const id of (Array.isArray(paid?.bumped) ? paid.bumped : []) as string[]) {
+      await notifyBumped(String(id), row?.detail?.name);
+    }
     return json({ ok: true, demo: true });
   },
 };
@@ -378,22 +385,42 @@ const clock = (slot: string) => {
   return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
 };
 
-// A VIP took a held time: tell the bumped customer and the owner. The booking stands either way.
-async function notifyBumped(bumpedId: string, day: string, movedTo: string | null, vipName: string) {
+// A VIP took a held time: tell the bumped customer (where they are now) and the owner. The
+// booking stands either way.
+async function notifyBumped(bumpedId: string, vipName: unknown) {
   try {
     const row = await loadRow(bumpedId);
-    const to = movedTo ? clock(movedTo) : null;
-    const from = row?.detail?.bumpedFrom ? clock(String(row.detail.bumpedFrom)) : 'their old time';
-    const email = row?.customers?.email;
+    if (!row) return;
+    const day = String(row.preferred_day);
+    const to = row.time_slot ? clock(String(row.time_slot)) : null;
+    const from = row.detail?.bumpedFrom ? clock(String(row.detail.bumpedFrom)) : 'their old time';
+    const email = row.customers?.email;
     if (email) {
       await sendEmail(email, 'Your detail time moved',
         `<p>Hi, your Brotherly Love Detailing appointment on ${esc(day)} moved to ${to ? esc(to) : "a new time. We'll call to set it"}.</p>
          <p>Questions? Just reply to this email.</p>`);
     }
     await sendEmail(ownerEmail(), 'VIP booking moved a customer',
-      `<p>VIP booking by ${esc(vipName)} moved ${esc(row?.detail?.name)} from ${esc(from)} to ${to ? esc(to) : 'no time yet'} on ${esc(day)}.</p>`);
+      `<p>VIP booking by ${esc(vipName)} moved ${esc(row.detail?.name)} from ${esc(from)} to ${to ? esc(to) : 'no time yet'} on ${esc(day)}.</p>`);
   } catch (e) {
     console.error('bump notify failed', (e as Error).message);
+  }
+}
+
+// A VIP hold was released before its deposit: put the bookings it moved back (detail_unbump,
+// migration 0017). One whose old time was taken meanwhile keeps its new time and hasn't been
+// told yet (that waits for the VIP's deposit), so tell it now. Never fails the release.
+// sweep/index.ts does the same for holds that expire.
+async function undoBumps(vipId: string, vipName: unknown) {
+  try {
+    const { error } = await db.rpc('detail_unbump', { p_booking: vipId });
+    if (error) throw error;
+    const { data: kept, error: e2 } = await db.from('bookings').select('id')
+      .eq('detail->>bumpedBy', vipId).in('status', ['pending_payment', 'requested']).is('detail->>bumpNotified', null);
+    if (e2) throw e2;
+    for (const h of kept ?? []) await notifyBumped(String(h.id), vipName);
+  } catch (e) {
+    console.error('unbump failed', vipId, (e as Error).message);
   }
 }
 

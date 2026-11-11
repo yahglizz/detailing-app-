@@ -15,7 +15,7 @@ Owner instruction (2026-11-11): build fully working end to end; Sonnet agents fo
 | 5 | Plan readers + retire `book` | Sonnet | done `14c5ec4` | jest 18/18; deno check clean |
 | 6 | Dashboard | Opus + main | done `f0a3af3` | jest 17/17 admin; deno check; app.js parses |
 | 7 | Website multi-car | Opus | done `5445601` | local Playwright 23/23, no console errors |
-| 8 | App | Opus | running | |
+| 8 | App | Opus | done `6b97277` | jest 225/225 (6 suites), tsc clean, expo export ios OK |
 | - | Live E2E script | Sonnet | done `a199971` | node --check |
 | 9 | Codex review loop | Codex CLI + Opus | pending | |
 | 10 | Deploy live + live E2E + cleanup | main | pending | |
@@ -30,3 +30,5 @@ Owner instruction (2026-11-11): build fully working end to end; Sonnet agents fo
 ## Codex pass 1 (backend, website, dashboard)
 7 findings. Fixed: visit race (lock in detail_reserve), reward+flip atomic (detail_pay_demo), stamps in the pay transaction, Eastern billing-month boundary, mirrorQuote after paid. Not a bug: "round at each step" — single rounding is deliberate (quote = invoice); spec/plan updated. Test gap (concurrent bump) added to e2e.
 Security review (plugin): balance only for code-made bookings (`viaCode`), bump email without customer-typed name, clientIp trusts only cf-connecting-ip.
+- Incident: during Task 8 cleanup the app agent ran `rm -f probe*` in `/Volumes/AgentDrive/claude/_tmp` and deleted a `probe.txt` it did not create. Contents and owner unknown; not recoverable.
+- Codex pass 1 fixes verified: SQL harness 43/43 (mutation check: 5 new cases fail when the fixes are removed), jest 215/215, deno check 7 functions — commit `4c6f408`.

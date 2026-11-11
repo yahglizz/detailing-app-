@@ -1,9 +1,14 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getProvider } from '../_shared/payments/provider.ts';
-import { sendEmail, ownerEmail, adminLink, button } from '../_shared/notify.ts';
+import { sendEmail, ownerEmail, adminLink, button, esc } from '../_shared/notify.ts';
 import { restoreMemberBalances } from '../_shared/member_refund.ts';
 import { declinePending, refundBooking, settleBooking } from '../_shared/booking_payment.ts';
 import { settleTopup } from '../_shared/wallet.ts';
+
+const clock = (slot: string) => {
+  const [h, m] = slot.split(':').map(Number);
+  return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+};
 
 Deno.serve(async () => {
   const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
@@ -40,13 +45,33 @@ Deno.serve(async () => {
     }
   }
 
-  // Starting-price bookings nobody paid the (demo) deposit for: free the slot after 45 minutes.
-  const { data: abandoned } = await db.from('bookings').select('id')
+  // Starting-price bookings nobody paid the (demo) deposit for: free the slot after 45 minutes,
+  // and undo any VIP bump the hold made (detail_unbump, migration 0017; 0 if it wasn't declined).
+  // A moved booking whose old time is taken meanwhile keeps its new time; it hasn't been told
+  // (that waits for the VIP's deposit), so tell it and the owner now. = detail's undoBumps.
+  const { data: abandoned } = await db.from('bookings').select('id, detail')
     .eq('flow', 'detail_v2').eq('status', 'pending_payment').lt('created_at', stale45);
   for (const b of abandoned ?? []) {
     try {
       await declinePending(db, b.id);
       settled++;
+      const { error } = await db.rpc('detail_unbump', { p_booking: b.id });
+      if (error) throw error;
+      const { data: kept, error: e2 } = await db.from('bookings')
+        .select('preferred_day, time_slot, detail, customers(email)')
+        .eq('detail->>bumpedBy', b.id).in('status', ['pending_payment', 'requested']).is('detail->>bumpNotified', null);
+      if (e2) throw e2;
+      for (const h of kept ?? []) {
+        const to = h.time_slot ? clock(String(h.time_slot)) : null;
+        const email = (h.customers as unknown as { email?: string } | null)?.email;
+        if (email) {
+          await sendEmail(email, 'Your detail time moved',
+            `<p>Hi, your Brotherly Love Detailing appointment on ${esc(h.preferred_day)} moved to ${to ? esc(to) : "a new time. We'll call to set it"}.</p>
+             <p>Questions? Just reply to this email.</p>`);
+        }
+        await sendEmail(ownerEmail(), 'VIP booking moved a customer',
+          `<p>VIP booking by ${esc(b.detail?.name)} (never paid, expired) moved ${esc(h.detail?.name)} from ${esc(h.detail?.bumpedFrom ? clock(String(h.detail.bumpedFrom)) : 'their old time')} to ${to ? esc(to) : 'no time yet'} on ${esc(h.preferred_day)}; the old time was taken meanwhile.</p>`);
+      }
     } catch (e) {
       console.error('sweep detail expiry failed', b.id, (e as Error).message);
     }
