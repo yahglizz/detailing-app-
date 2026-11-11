@@ -285,6 +285,21 @@ export function billingMonthStart(periodStart: string, today: string): string {
   return iso(py, pm, anniv(py, pm));
 }
 
+// 00:00 America/New_York on an ISO day, as an ISO timestamp with its offset
+// ('2026-01-15T00:00:00-05:00', '2026-07-15T00:00:00-04:00'). The billing month starts at the
+// business's midnight, not UTC's. US DST switches at 02:00 local, so the offset at 05:00 UTC
+// (00:00 EST / 01:00 EDT, before any switch that day) is the offset at local midnight.
+export function easternMidnight(day: string): string {
+  const r = /^(\d{4})-(\d{2})-(\d{2})$/.exec(typeof day === 'string' ? day : '');
+  const d = r && new Date(Date.UTC(+r[1], +r[2] - 1, +r[3], 5));
+  if (!r || !d || d.getUTCMonth() !== +r[2] - 1 || d.getUTCDate() !== +r[3]) throw new Error('bad_date');
+  const tz = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', timeZoneName: 'longOffset' })
+    .formatToParts(d).find((p) => p.type === 'timeZoneName')?.value ?? '';
+  const off = /^GMT([+-]\d{2}:\d{2})$/.exec(tz);
+  if (!off) throw new Error('bad_tz');
+  return `${day}T00:00:00${off[1]}`;
+}
+
 // What the website shows for the plans: per vehicle type the monthly price, what the same visits
 // cost one at a time (worth) and the saving (never negative). All derived here, none typed in.
 export function membershipView(cfg: DetailPricing) {

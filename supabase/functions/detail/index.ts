@@ -21,7 +21,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { ALL_SLOTS } from '../_shared/bump.ts';
 import { validateReserve } from '../_shared/detail_booking.ts';
 import {
-  billingMonthStart, DEFAULT_DETAIL_PRICING, isService, isVehicle, MAX_CARS, memberQuote, membershipView, quoteCars,
+  billingMonthStart, DEFAULT_DETAIL_PRICING, easternMidnight, isService, isVehicle, MAX_CARS, memberQuote, membershipView, quoteCars,
   quoteDetail, SERVICES, validateDetailPricing,
   type CarLine, type DetailPricing, type DetailService, type MemberCtx, type RewardKey,
 } from '../_shared/detail_pricing.ts';
@@ -95,16 +95,21 @@ async function account(code: unknown, req: Request): Promise<Account | Response 
 // An active member's pricing context: plan vehicle size, visits left this billing month (plan
 // visits minus the visits recorded on this membership's live bookings since the anniversary),
 // and the oldest issued reward. Fails closed: a read error throws instead of granting visits.
-// ponytail: visits aren't locked, so one member racing two bookings at once could use a visit
-// twice; add a check inside detail_reserve if that ever matters.
-type Member = { ctx: MemberCtx; membershipId: string; rank: number; rewardId: string | null };
+// This count prices the quote; detail_reserve recounts under a per-member lock at insert, so two
+// bookings at once can't both spend the last visit (the loser gets price_changed + a new quote).
+type Member = {
+  ctx: MemberCtx; membershipId: string; rank: number; rewardId: string | null;
+  periodStart: string; visitCap: Partial<Record<DetailService, number>>;
+};
 async function memberOf(acct: Account, cfg: DetailPricing): Promise<Member | null> {
   const m = acct.membership;
   if (!m) return null; // a balance-only account: guest prices, rank 0
+  // the billing month starts at 00:00 Eastern on the anniversary day
+  const periodStart = easternMidnight(billingMonthStart(String(m.period_start), todayISO()));
   const [own, used, rew] = await Promise.all([
     db.from('memberships').select('vehicle_type').eq('id', m.id).single(),
     db.from('bookings').select('quote').eq('membership_id', m.id).in('status', LIVE)
-      .gte('created_at', billingMonthStart(String(m.period_start), todayISO())),
+      .gte('created_at', periodStart),
     db.from('redemptions').select('id, reward').eq('membership_id', m.id).eq('status', 'issued')
       .order('created_at').limit(1),
   ]);
@@ -123,7 +128,7 @@ async function memberOf(acct: Account, cfg: DetailPricing): Promise<Member | nul
   const reward = r && (REWARDS as string[]).includes(r.reward) ? r.reward as RewardKey : null;
   return {
     ctx: { tier: m.tier, planVehicle: isVehicle(own.data?.vehicle_type) ? own.data.vehicle_type : 'sedan', visitsLeft, reward },
-    membershipId: m.id, rank: plan.rank, rewardId: reward ? r!.id : null,
+    membershipId: m.id, rank: plan.rank, rewardId: reward ? r!.id : null, periodStart, visitCap: plan.visits,
   };
 }
 
@@ -302,10 +307,14 @@ const handlers: Record<string, (b: Obj, req: Request) => Promise<Response>> = {
       },
     };
 
-    const { data: res, error: rpcErr } = await db.rpc('detail_reserve', { p_row: row, p_rank: row.rank, p_wallet_debit: debit });
+    const { data: res, error: rpcErr } = await db.rpc('detail_reserve', {
+      p_row: row, p_rank: row.rank, p_wallet_debit: debit,
+      p_visit_cap: mem ? mem.visitCap : null, p_period_start: mem ? mem.periodStart : null,
+    });
     if (rpcErr) {
       const msg = rpcErr.message ?? '';
-      // the reward the price used was spent elsewhere (balance path only): send the new price
+      // another booking used the included visits this price counted on, or the reward it used
+      // was spent elsewhere (balance path): send the new price
       if (msg.includes('price_changed')) {
         return json({ error: 'price_changed', quote: bookingQuote(cfg, cars, acct && await memberOf(acct, cfg)) }, 409);
       }
@@ -346,33 +355,19 @@ const handlers: Record<string, (b: Obj, req: Request) => Promise<Response>> = {
     const { data: mode } = await db.from('app_config').select('value').eq('key', 'payments_mode').maybeSingle();
     if (String(mode?.value ?? '') !== 'demo') return bad('payments_not_demo', 503); // fail closed
     if (!UUID.test(String(b.bookingId)) || typeof b.payKey !== 'string' || !b.payKey) return bad('not_found', 404);
+    // One transaction (detail_pay_demo, migration 0017): payKey check, the quote's reward spent,
+    // pending_payment -> requested. A reward spent elsewhere meanwhile = price_changed and the
+    // booking stays pending_payment.
+    const { error } = await db.rpc('detail_pay_demo', { p_booking: b.bookingId, p_paykey: b.payKey });
+    if (error) {
+      const msg = error.message ?? '';
+      if (msg.includes('not_found')) return bad('not_found', 404);
+      if (msg.includes('not_pending')) return bad('not_pending', 409);
+      if (msg.includes('price_changed')) return bad('price_changed', 409);
+      throw error;
+    }
     const row = await loadRow(b.bookingId);
-    if (!row || row.detail?.payKey !== b.payKey) return bad('not_found', 404);
-    if (row.status !== 'pending_payment') return bad('not_pending', 409);
-
-    // The deposit step completes here, so the reward the price used is spent now. Gone
-    // (spent on another booking meanwhile) = the price no longer holds; the booking stays put.
-    const rewardId = typeof row.quote?.rewardId === 'string' ? row.quote.rewardId : null;
-    if (rewardId) {
-      const { data: claimed } = await db.from('redemptions').update({ status: 'applied', booking_id: row.id })
-        .eq('id', rewardId).eq('status', 'issued').eq('membership_id', row.membership_id).select('id');
-      if (!claimed?.length) return bad('price_changed', 409);
-    }
-
-    // one transition, ever: only a pending_payment row can become requested
-    const { data: won } = await db.from('bookings')
-      .update({ status: 'requested', deposit_status: 'demo' })
-      .eq('id', row.id).eq('status', 'pending_payment').select('id');
-    if (!won?.length) {
-      // released or swept between the read and here: hand the reward back
-      if (rewardId) {
-        await db.from('redemptions').update({ status: 'issued', booking_id: null })
-          .eq('id', rewardId).eq('booking_id', row.id).eq('status', 'applied');
-      }
-      return bad('not_pending', 409);
-    }
-
-    await notify({ ...row, status: 'requested', deposit_status: 'demo' }, await pricing());
+    if (row) await notify(row, await pricing());
     return json({ ok: true, demo: true });
   },
 };

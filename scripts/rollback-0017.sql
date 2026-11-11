@@ -1,13 +1,17 @@
--- Rolls back the two functions migration 0017 added or replaced. Run only with the owner's go.
--- Restores detail_invoice_pay exactly as migration 0015 wrote it (cash|card, one service_price
--- line, no member %) and drops detail_reserve. The additive columns and widened checks from 0017
+-- Rolls back the functions migration 0017 added or replaced. Run only with the owner's go.
+-- Restores detail_invoice_pay(uuid, text) exactly as migration 0015 wrote it (cash|card, one
+-- service_price line, no member %, no stamps) and drops detail_reserve and detail_pay_demo.
+-- The pre-0017 edge functions must be deployed with it (they call the 0015 signatures). The additive columns and widened checks from 0017
 -- (memberships.vehicle_type, booking_invoices.lines/member_percent/reward_percent,
 -- 'balance' as a method) stay:
 -- they are harmless to the old code, and narrowing the checks would fail on any row already
 -- paid by balance. The detailPricing plan keys and the truck->suv car fix also stay (the old
 -- validator accepts the extra keys; 'suv' was always a valid saved-car size).
 
-drop function if exists detail_reserve(jsonb, int, int);
+drop function if exists detail_reserve(jsonb, int, int, jsonb, timestamptz);
+drop function if exists detail_reserve(jsonb, int, int); -- an early draft's signature
+drop function if exists detail_pay_demo(uuid, text);
+drop function if exists detail_invoice_pay(uuid, text, int);
 
 -- ——— copied from 0015_detail_booking.sql ———
 create or replace function detail_invoice_pay(p_booking uuid, p_method text)

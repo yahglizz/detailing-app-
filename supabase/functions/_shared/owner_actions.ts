@@ -100,34 +100,59 @@ export async function markDone(
     });
   }
 
-  const stamps = await awardStamps(db, id);
+  // the job is already marked done: a stamp failure is logged (the owner can add stamps by hand)
+  const stamps = await awardStamps(db, id).catch((e) => {
+    console.error('stamps after done failed', id, (e as Error)?.message ?? e);
+    return 0;
+  });
   return { ok: true, stamps };
 }
 
-// Stamps for a finished job: cars x the member's tier stampsPerCar. Safe to call twice:
-// a booking that already has its 'wash completed' row earns nothing more.
-export async function awardStamps(db: Db, bookingId: string): Promise<number> {
-  const { data: b } = await db.from('bookings')
-    .select('id, items, detail, membership_id, customers(email)').eq('id', bookingId).maybeSingle();
+// The stamps a finished job earns: cars x the member's tier stampsPerCar (0 for a non-member
+// booking). Read-only; throws on a read error so a payment never goes through without them.
+// admin invoice_pay passes this to detail_invoice_pay, which records it in the payment's
+// transaction, once per booking.
+export async function stampsFor(db: Db, bookingId: string): Promise<number> {
+  const { data: b, error } = await db.from('bookings')
+    .select('items, detail, membership_id').eq('id', bookingId).maybeSingle();
+  if (error) throw error;
   if (!b?.membership_id) return 0;
-  const { data: done } = await db.from('reward_ledger').select('id')
-    .eq('booking_id', b.id).eq('reason', 'wash completed').limit(1);
-  if (done?.length) return 0;
-  const { data: mem } = await db.from('memberships').select('tier').eq('id', b.membership_id).maybeSingle();
-  if (!mem?.tier) return 0;
-  const { data: cat } = await db.from('catalog').select('config').eq('id', 1).single();
-  const perCar = detailPricingOf(cat?.config).membership[mem.tier as 'bronze' | 'silver' | 'gold']?.stampsPerCar ?? 1;
+  const [mem, cat] = await Promise.all([
+    db.from('memberships').select('tier').eq('id', b.membership_id).maybeSingle(),
+    db.from('catalog').select('config').eq('id', 1).single(),
+  ]);
+  if (mem.error || cat.error) throw mem.error ?? cat.error;
+  if (!mem.data?.tier) return 0;
+  const perCar = detailPricingOf(cat.data?.config).membership[mem.data.tier as 'bronze' | 'silver' | 'gold']?.stampsPerCar ?? 1;
   const cars = (b.detail as { cars?: unknown[] } | null)?.cars?.length
     || (Array.isArray(b.items) ? b.items.length : 0) || 1;
-  const stamps = cars * perCar;
-  await db.from('reward_ledger').insert({
-    membership_id: b.membership_id, delta: stamps, reason: 'wash completed', booking_id: b.id,
-  });
+  return cars * perCar;
+}
+
+// Tell the member the stamps they just earned and their new total.
+export async function sendStampEmail(db: Db, bookingId: string, stamps: number): Promise<void> {
+  const { data: b } = await db.from('bookings').select('membership_id, customers(email)').eq('id', bookingId).maybeSingle();
+  if (!b?.membership_id) return;
   const { data: bal } = await db.from('reward_ledger').select('delta').eq('membership_id', b.membership_id);
   const total = ((bal ?? []) as { delta: number }[]).reduce((s, r) => s + r.delta, 0);
   const c = b.customers as { email: string } | null;
   await sendEmail(c?.email ?? '', `+${stamps} stamp${stamps > 1 ? 's' : ''} earned — you have ${total}`,
     `<h2 style="color:#A855F7;margin:0 0 12px">Stamp${stamps > 1 ? 's' : ''} earned 🎉</h2>
      <p>Wash complete — you earned <b>${stamps} stamp${stamps > 1 ? 's' : ''}</b>. You now have <b>${total}</b>. Open the app to redeem rewards.</p>`);
+}
+
+// markDone's path (old app rows): record the stamps, then email. Safe to call twice: a booking
+// that already has its 'wash completed' row earns nothing more.
+async function awardStamps(db: Db, bookingId: string): Promise<number> {
+  const stamps = await stampsFor(db, bookingId);
+  if (!stamps) return 0;
+  const { data: done } = await db.from('reward_ledger').select('id')
+    .eq('booking_id', bookingId).eq('reason', 'wash completed').limit(1);
+  if (done?.length) return 0;
+  const { data: b } = await db.from('bookings').select('membership_id').eq('id', bookingId).single();
+  await db.from('reward_ledger').insert({
+    membership_id: b.membership_id, delta: stamps, reason: 'wash completed', booking_id: bookingId,
+  });
+  await sendStampEmail(db, bookingId, stamps);
   return stamps;
 }

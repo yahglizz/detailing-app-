@@ -10,6 +10,7 @@ import {
   VehicleType,
   billingMonthStart,
   depositFor,
+  easternMidnight,
   invoiceTotals,
   invoiceTotalsLines,
   isService,
@@ -411,6 +412,26 @@ describe('billingMonthStart', () => {
   test('bad dates throw', () => {
     expect(() => billingMonthStart('nope', '2026-01-01')).toThrow('bad_date');
     expect(() => billingMonthStart('2026-01-01', '2026-13-01')).toThrow('bad_date');
+  });
+});
+
+describe('easternMidnight', () => {
+  test.each([
+    ['2026-01-15', '2026-01-15T00:00:00-05:00'], // winter: EST
+    ['2026-07-15', '2026-07-15T00:00:00-04:00'], // summer: EDT
+    ['2026-03-08', '2026-03-08T00:00:00-05:00'], // DST starts 02:00 that day: midnight is still EST
+    ['2026-11-01', '2026-11-01T00:00:00-04:00'], // DST ends 02:00 that day: midnight is still EDT
+  ])('%s -> %s', (day, want) => {
+    expect(easternMidnight(day)).toBe(want);
+    expect(new Date(want).getTime()).toBe(new Date(easternMidnight(day)).getTime());
+  });
+  test('the instant is 00:00 in New York', () => {
+    const t = new Date(easternMidnight('2026-11-11'));
+    expect(t.toLocaleString('en-US', { timeZone: 'America/New_York', hourCycle: 'h23' })).toBe('11/11/2026, 00:00:00');
+  });
+  test('bad dates throw', () => {
+    expect(() => easternMidnight('2026-02-30')).toThrow('bad_date');
+    expect(() => easternMidnight('2026-03-10T14:00:00Z')).toThrow('bad_date');
   });
 });
 

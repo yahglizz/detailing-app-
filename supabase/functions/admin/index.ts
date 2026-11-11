@@ -16,7 +16,9 @@ import {
   DEFAULT_DETAIL_PRICING, invoiceTotalsLines, isVehicle, linePayable, validateDetailPricing, type InvoiceLine,
 } from '../_shared/detail_pricing.ts';
 import { clientIp, rateLimited, recordMiss } from '../_shared/codes.ts';
-import { awardStamps, confirmBooking, declineBooking, markDone, type ActionResult } from '../_shared/owner_actions.ts';
+import {
+  confirmBooking, declineBooking, markDone, sendStampEmail, stampsFor, type ActionResult,
+} from '../_shared/owner_actions.ts';
 import { provisionMember } from '../_shared/member_provision.ts';
 import { walletBalance } from '../_shared/wallet.ts';
 import { detailPricingOf, type MemberCatalog, type Tier } from '../_shared/membership.ts';
@@ -169,8 +171,11 @@ function cleanExtras(x: unknown): { name: string; price: number }[] | null {
 }
 
 // Keep the numbers every existing dashboard view reads (bookings.quote) equal to the invoice.
+// Unpaid rows only: detail_invoice_pay sets 'done' and writes the paid totals, so a slow save
+// that lands after the payment can't overwrite them.
 async function mirrorQuote(row: Obj, total: number, balance: number) {
-  await db.from('bookings').update({ quote: { ...row.quote, total, balanceDue: balance, remainder: balance } }).eq('id', row.id);
+  await db.from('bookings').update({ quote: { ...row.quote, total, balanceDue: balance, remainder: balance } })
+    .eq('id', row.id).in('status', ['requested', 'confirmed']);
 }
 
 // The member % the booking was priced with (0 for guests). Server-written; the DB allows 0..50.
@@ -582,26 +587,29 @@ const handlers: Record<string, Handler> = {
     if (row instanceof Response) return row;
     const method = String(b.method ?? '');
     if (!['cash', 'card', 'balance'].includes(method)) return bad('bad_method');
+    // Paid = job done, so a member earns stamps (cars x their tier's stampsPerCar). Computed
+    // first; detail_invoice_pay records them in the payment's transaction, once per booking.
+    const stamps = row.membership_id ? await stampsFor(db, row.id) : 0;
     // One transaction in the database (detail_invoice_pay, migration 0017): invoice lines, member
-    // %, and for 'balance' the wallet debit; a short balance raises insufficient_balance.
-    const { data, error } = await db.rpc('detail_invoice_pay', { p_booking: row.id, p_method: method });
+    // %, for 'balance' the wallet debit (a short balance raises insufficient_balance), and stamps.
+    const { data, error } = await db.rpc('detail_invoice_pay', { p_booking: row.id, p_method: method, p_stamps: stamps });
     if (error) {
-      for (const code of ['insufficient_balance', 'balance_not_allowed', 'already_paid', 'not_open', 'not_found', 'bad_method']) {
-        if (String(error.message).includes(code)) return bad(code, code === 'not_found' ? 404 : code === 'bad_method' ? 400 : 409);
+      for (const code of ['insufficient_balance', 'balance_not_allowed', 'already_paid', 'not_open', 'not_found', 'bad_method', 'bad_stamps']) {
+        if (String(error.message).includes(code)) {
+          return bad(code, code === 'not_found' ? 404 : code === 'bad_method' || code === 'bad_stamps' ? 400 : 409);
+        }
       }
       throw error;
     }
-    // Paid = job done, so a member earns stamps now. The money is already recorded: a stamp
-    // failure is logged, not reported as a failed payment (the owner can add stamps by hand).
-    let stamps = 0;
-    if (row.membership_id) {
+    const earned = Number((data as Obj)?.stamps ?? 0); // 0 when markDone already gave them
+    if (earned > 0) {
       try {
-        stamps = await awardStamps(db, row.id);
+        await sendStampEmail(db, row.id, earned);
       } catch (e) {
-        console.error('stamps after invoice_pay failed', row.id, (e as Error)?.message ?? e);
+        console.error('stamp email after invoice_pay failed', row.id, (e as Error)?.message ?? e); // the stamps stand
       }
     }
-    return json({ ok: true, ...(data as Obj), stamps });
+    return json({ ok: true, ...(data as Obj), stamps: earned });
   },
 
   detail_pricing_get: async () => {

@@ -47,15 +47,22 @@ alter table bookings add constraint bookings_remainder_method_check
 -- higher rank -> the holder moves to the first free slot after this one that day (or loses
 -- its time, needs a new one); same rank above 0 -> this booking is saved with no time
 -- (escalated, the owner confirms one); otherwise slot_taken.
+-- p_visit_cap: the plan's included visits per service ({"exterior": 2, ...}); p_period_start:
+-- the start of the member's billing month (00:00 Eastern). Both only matter for a member row.
 -- Errors: bad_row, bad_debit, slot_taken, insufficient_balance, price_changed (the issued
--- reward the quote used is gone), plus the capacity trigger's day_full, day_closed, too_many.
-create or replace function detail_reserve(p_row jsonb, p_rank int, p_wallet_debit int)
+-- reward the quote used is gone, or another booking used the included visits this quote
+-- counted on), plus the capacity trigger's day_full, day_closed, too_many.
+drop function if exists detail_reserve(jsonb, int, int); -- the first draft's signature
+create or replace function detail_reserve(p_row jsonb, p_rank int, p_wallet_debit int,
+  p_visit_cap jsonb default null, p_period_start timestamptz default null)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   v_day date := (p_row->>'preferred_day')::date;
   v_slot text := p_row->>'time_slot';
   v_rank int := coalesce(p_rank, 0);
   v_debit int := coalesce(p_wallet_debit, 0);
+  v_member uuid := nullif(p_row->>'membership_id', '')::uuid;
+  v_new jsonb := case when jsonb_typeof(p_row #> '{quote,visitsUsed}') = 'object' then p_row #> '{quote,visitsUsed}' else '{}' end;
   h record;
   v_holders int;
   v_cols text;
@@ -74,6 +81,27 @@ begin
   -- every detail_v2 insert and every move on this day runs one at a time, so the unique slot
   -- index can't fire halfway through a move.
   perform pg_advisory_xact_lock(hashtext('detail-day:' || v_day::text));
+
+  -- Included visits: one member's bookings run one at a time (lock order: day, then member),
+  -- and the visits this quote uses are recounted against the plan here, so two bookings at
+  -- once can't both spend the last visit. A service missing from the cap has 0 included; a
+  -- missing period start counts every booking (fails closed).
+  if v_member is not null then
+    perform pg_advisory_xact_lock(hashtext('detail-member:' || v_member::text));
+    if exists (
+      select 1 from jsonb_each(v_new) n
+      where jsonb_typeof(n.value) = 'number' and n.value::int > 0
+        and n.value::int + coalesce((
+          select sum((b.quote #>> array['visitsUsed', n.key])::int) from bookings b
+          where b.membership_id = v_member
+            and b.status in ('pending_payment', 'requested', 'confirmed', 'done')
+            and b.created_at >= coalesce(p_period_start, '-infinity'::timestamptz)
+            and jsonb_typeof(b.quote #> array['visitsUsed', n.key]) = 'number'), 0)
+          > coalesce((p_visit_cap->>n.key)::int, 0)
+    ) then
+      raise exception 'price_changed';
+    end if;
+  end if;
 
   if v_slot is not null then
     select count(*) into v_holders from bookings
@@ -133,18 +161,49 @@ begin
 
   return jsonb_build_object('bookingId', v_id, 'escalated', v_escalated, 'bumpedId', v_bumped, 'movedTo', v_moved);
 end $$;
-revoke all on function detail_reserve(jsonb, int, int) from public, anon, authenticated;
-grant execute on function detail_reserve(jsonb, int, int) to service_role;
+revoke all on function detail_reserve(jsonb, int, int, jsonb, timestamptz) from public, anon, authenticated;
+grant execute on function detail_reserve(jsonb, int, int, jsonb, timestamptz) to service_role;
+
+-- ——— demo deposit step: claim the quote's reward and flip to requested in one transaction ———
+-- The caller (detail pay-demo) checks app_config.payments_mode = 'demo' first.
+-- Errors: not_found (no such detail_v2 booking, or wrong payKey), not_pending, price_changed
+-- (the reward the quote used was spent elsewhere; the booking stays pending_payment).
+create or replace function detail_pay_demo(p_booking uuid, p_paykey text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare b bookings%rowtype; v_reward uuid;
+begin
+  select * into b from bookings where id = p_booking and flow = 'detail_v2' for update;
+  if not found or p_paykey is null or p_paykey = '' or b.detail->>'payKey' is distinct from p_paykey then
+    raise exception 'not_found';
+  end if;
+  if b.status <> 'pending_payment' then raise exception 'not_pending'; end if;
+  v_reward := nullif(b.quote->>'rewardId', '')::uuid;
+  if v_reward is not null then
+    update redemptions set status = 'applied', booking_id = b.id
+      where id = v_reward and status = 'issued' and membership_id = b.membership_id;
+    if not found then raise exception 'price_changed'; end if;
+  end if;
+  update bookings set status = 'requested', deposit_status = 'demo' where id = b.id;
+  return jsonb_build_object('ok', true);
+end $$;
+revoke all on function detail_pay_demo(uuid, text) from public, anon, authenticated;
+grant execute on function detail_pay_demo(uuid, text) to service_role;
 
 -- ——— mark an invoice paid (replaces 0015's): one line per car, member % off, and balance
 -- as a payment method. One transaction, row-locked, as before. The deposit counts as credit
--- ONLY when it was really paid (deposit_status = 'paid'). Service role only. ———
-create or replace function detail_invoice_pay(p_booking uuid, p_method text)
+-- ONLY when it was really paid (deposit_status = 'paid'). p_stamps: the member's stamps for
+-- this job (cars x stampsPerCar, computed by admin), recorded in the same transaction, once
+-- per booking. Returns stamps = the stamps recorded now (0 if none or already given).
+-- Service role only. ———
+drop function if exists detail_invoice_pay(uuid, text); -- 0015's signature
+create or replace function detail_invoice_pay(p_booking uuid, p_method text, p_stamps int default 0)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare b bookings%rowtype; inv booking_invoices%rowtype;
   v_lines jsonb; v_gross int; v_extras int; v_total int; v_deposit int; v_credit int; v_balance int;
+  v_stamps int := 0;
 begin
   if p_method is null or p_method not in ('cash', 'card', 'balance') then raise exception 'bad_method'; end if;
+  if coalesce(p_stamps, 0) < 0 then raise exception 'bad_stamps'; end if;
   select * into b from bookings where id = p_booking and flow = 'detail_v2' for update;
   if not found then raise exception 'not_found'; end if;
   if b.status not in ('confirmed', 'done') then raise exception 'not_open'; end if;
@@ -210,10 +269,24 @@ begin
   update bookings set status = 'done', remainder_method = p_method, -- paid = the job is done
     quote = b.quote || jsonb_build_object('total', v_total, 'balanceDue', v_balance, 'remainder', v_balance)
     where id = p_booking;
-  return jsonb_build_object('total', v_total, 'credit', v_credit, 'balance', v_balance, 'refundDue', v_deposit - v_credit);
+  -- paid = job done: the member's stamps, unless this booking already got them (markDone)
+  if b.membership_id is not null and coalesce(p_stamps, 0) > 0 and not exists (
+      select 1 from reward_ledger where booking_id = p_booking and reason = 'wash completed') then
+    insert into reward_ledger (membership_id, delta, reason, booking_id)
+      values (b.membership_id, p_stamps, 'wash completed', p_booking);
+    v_stamps := p_stamps;
+  end if;
+  return jsonb_build_object('total', v_total, 'credit', v_credit, 'balance', v_balance, 'refundDue', v_deposit - v_credit,
+    'stamps', v_stamps);
 end $$;
-revoke all on function detail_invoice_pay(uuid, text) from public, anon, authenticated;
-grant execute on function detail_invoice_pay(uuid, text) to service_role;
+revoke all on function detail_invoice_pay(uuid, text, int) from public, anon, authenticated;
+grant execute on function detail_invoice_pay(uuid, text, int) to service_role;
+
+-- One stamp grant per finished job, whichever path (invoice pay or the old markDone) gets there
+-- first; a racing second insert fails instead of double-stamping. (reward_ledger had 0 rows when
+-- this was written, so no existing duplicates can block it.)
+create unique index if not exists reward_ledger_wash_once
+  on reward_ledger (booking_id) where reason = 'wash completed';
 
 -- ——— plan numbers: rank, stamps per car, top-up bonus, % off. Adds only the keys a tier is
 -- missing (the saved tier object is on the right of ||, so the owner's edits win). A config

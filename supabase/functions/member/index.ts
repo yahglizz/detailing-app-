@@ -7,7 +7,7 @@ import {
   cleanSettings, computeSavings, detailPricingOf, monthsActive, REWARD_LABELS,
   type MemberCatalog, type RewardKey, type SavedCar, type Tier,
 } from '../_shared/membership.ts';
-import { billingMonthStart, type VehicleType } from '../_shared/detail_pricing.ts';
+import { billingMonthStart, easternMidnight, type VehicleType } from '../_shared/detail_pricing.ts';
 import { esc, sendEmail, ownerEmail } from '../_shared/notify.ts';
 import { clientIp, resolveCode } from '../_shared/codes.ts';
 import { walletBalance } from '../_shared/wallet.ts';
@@ -164,7 +164,7 @@ Deno.serve(async (req) => {
     const monthStart = billingMonthStart(String(m.period_start), today);
     const { data: used } = await db.from('bookings').select('quote')
       .eq('membership_id', m.id).in('status', ['pending_payment', 'requested', 'confirmed', 'done'])
-      .gte('created_at', monthStart);
+      .gte('created_at', easternMidnight(monthStart)); // 00:00 Eastern, as detail counts it
     const left: Record<string, number> = {};
     for (const [svc, n] of Object.entries(def.visits)) {
       const usedN = (used ?? []).reduce((t: number, b: { quote: { visitsUsed?: Record<string, number> } | null }) =>
