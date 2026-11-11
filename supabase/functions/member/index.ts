@@ -130,7 +130,7 @@ Deno.serve(async (req) => {
   let plan: Record<string, unknown> | null = null;
   let issued: { id: string; reward: string }[] = [];
   if (m) {
-    const [{ data: creditRows }, { data: stampRows }, { data: iss }, { data: applied }, { data: own }] = await Promise.all([
+    const [{ data: creditRows }, { data: stampRows }, { data: iss }, { data: applied }, { data: own }, { data: allMine }] = await Promise.all([
       db.from('credit_ledger').select('delta').eq('membership_id', m.id),
       db.from('reward_ledger').select('delta').eq('membership_id', m.id),
       // Oldest-first so issuedRewards[0] is the one `book` will actually apply
@@ -139,6 +139,8 @@ Deno.serve(async (req) => {
       db.from('redemptions').select('id, reward').eq('membership_id', m.id).eq('status', 'issued').order('created_at'),
       db.from('redemptions').select('retail_value').eq('membership_id', m.id).eq('status', 'applied').in('reward', ['tireShine', 'miniSpray']),
       db.from('memberships').select('stripe_customer_id, vehicle_type').eq('id', m.id).single(),
+      // every booking on this membership, not just the 20-row history list, so lifetime savings are complete
+      db.from('bookings').select('status, quote').eq('membership_id', m.id),
     ]);
     hasBilling = !!own?.stripe_customer_id;
     void creditRows;
@@ -146,8 +148,8 @@ Deno.serve(async (req) => {
     issued = iss ?? [];
     // Dollars saved on every live booking made as this member: retail total minus what
     // was payable. Covers credits, rewards and the tier's member price alike.
-    const bookingSavings = (history ?? [])
-      .filter((b) => b.membership_id === m.id && !['declined', 'refunded', 'pending_payment'].includes(b.status))
+    const bookingSavings = (allMine ?? [])
+      .filter((b) => !['declined', 'refunded', 'pending_payment'].includes(b.status))
       .reduce((s, b) => {
         const q = b.quote as { total: number; subtotal?: number; payable?: number };
         return s + ((q.subtotal ?? q.total) - (q.payable ?? q.total));

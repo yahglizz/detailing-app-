@@ -124,7 +124,8 @@ begin
           time_window = case when v_moved is null then time_window
                              when v_moved < '12:00' then 'morning' else 'afternoon' end,
           bumped_from = v_slot,
-          detail = coalesce(detail, '{}'::jsonb) || jsonb_build_object('bumpedFrom', v_slot, 'bumpedAt', now(), 'bumpedBy', p_row->>'id')
+          detail = (coalesce(detail, '{}'::jsonb) - 'bumpNotified') -- a new move needs its own notice
+            || jsonb_build_object('bumpedFrom', v_slot, 'bumpedAt', now(), 'bumpedBy', p_row->>'id')
           where id = h.id;
         v_bumped := h.id;
       elsif v_rank = h.rank and v_rank > 0 then
@@ -325,6 +326,13 @@ begin
   update bookings set status = 'done', remainder_method = p_method, -- paid = the job is done
     quote = b.quote || jsonb_build_object('total', v_total, 'balanceDue', v_balance, 'remainder', v_balance)
     where id = p_booking;
+  -- A deposit taken from the prepaid balance that is more than the final bill goes back onto the
+  -- balance here, in the same transaction (a card/cash deposit refund stays the owner's job).
+  if v_deposit - v_credit > 0 and exists (
+      select 1 from wallet_ledger where booking_id = p_booking and reason = 'deposit' and delta < 0) then
+    insert into wallet_ledger (customer_id, delta, reason, booking_id)
+      values (b.customer_id, v_deposit - v_credit, 'deposit refund', p_booking);
+  end if;
   -- paid = job done: the member's stamps, unless this booking already got them (markDone)
   if b.membership_id is not null and coalesce(p_stamps, 0) > 0 and not exists (
       select 1 from reward_ledger where booking_id = p_booking and reason = 'wash completed') then
