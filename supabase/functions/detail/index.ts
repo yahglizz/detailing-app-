@@ -7,7 +7,7 @@
 //   availability { from?, to? }             -> { days, slots, today, windowDays }
 //   availability { day }                    -> same, plus { taken: ["10:00", ...], holders: {"10:00": rank}, minSlot }
 //   reserve { ...request }                  -> { bookingId, payKey, quote, uploads, escalated, paidFromBalance }
-//   pay-demo { bookingId, payKey }          -> { ok, demo: true }
+//   pay-demo { bookingId, payKey }          -> { ok, demo: true, day, slot }
 //   release { bookingId, payKey }           -> { ok }   (frees an unpaid hold)
 //
 // Every number is computed here from catalog.config.detailPricing; anything price-shaped in a
@@ -376,7 +376,8 @@ const handlers: Record<string, (b: Obj, req: Request) => Promise<Response>> = {
     for (const id of (Array.isArray(paid?.bumped) ? paid.bumped : []) as string[]) {
       await notifyBumped(String(id), row?.detail?.name);
     }
-    return json({ ok: true, demo: true });
+    // the booking's current slot: a VIP bump may have moved it since the customer picked
+    return json({ ok: true, demo: true, day: row?.preferred_day ?? null, slot: row?.time_slot ?? null });
   },
 };
 

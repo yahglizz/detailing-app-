@@ -15,11 +15,10 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 export const bookingRef = (id: string) => `BLD-${id.replace(/-/g, '').slice(0, 6).toUpperCase()}`;
 
 export default function Booked({ navigation, route }: Props) {
-  const { state, dispatch } = useOrder();
-  const { bookingId, escalated, paid = 'demo', stamps = 0, saved = 0, photosFailed = 0 } = route.params;
-  const [y, m, d] = state.day.split('-').map(Number);
-  const dayText = state.day ? `${MONTHS[m - 1]} ${d}` : '';
-  const address = `${state.street}, ${state.zip}`;
+  const { dispatch } = useOrder();
+  const { bookingId, day, slot, address, cars, escalated, paid = 'demo', stamps = 0, saved = 0, photosFailed = 0 } = route.params;
+  const [y, m, d] = day.split('-').map(Number);
+  const dayText = day ? `${MONTHS[m - 1]} ${d}` : '';
 
   const addToCalendar = async () => {
     const { status } = await Calendar.requestCalendarPermissionsAsync();
@@ -27,14 +26,14 @@ export default function Booked({ navigation, route }: Props) {
     const cals = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
     const cal = cals.find((c) => c.allowsModifications);
     if (!cal) return;
-    const hour = Number((escalated ? '09:00' : state.slot || '09:00').slice(0, 2));
+    const hour = Number((slot || '09:00').slice(0, 2));
     const start = new Date(y, m - 1, d, hour);
     await Calendar.createEventAsync(cal.id, {
       title: 'Brotherly Love Detailing',
       location: address,
       startDate: start,
       endDate: new Date(start.getTime() + 2 * 3600e3),
-      notes: `Booking ${bookingRef(bookingId)}.${escalated ? ' Exact time to be confirmed.' : ''}`,
+      notes: `Booking ${bookingRef(bookingId)}.${slot ? '' : ' Exact time to be confirmed.'}`,
     });
     Alert.alert('Added', 'Your detail is on your calendar.');
   };
@@ -49,9 +48,8 @@ export default function Booked({ navigation, route }: Props) {
       <Text style={s.check}>✓</Text>
       <Text style={s.title}>YOU'RE BOOKED</Text>
       <Text style={s.ref}>{bookingRef(bookingId)}</Text>
-      <Text style={s.sub}>{escalated
-        ? `${dayText}. We’ll confirm your time.`
-        : `${dayText} at ${fmtSlot(state.slot)}.`}</Text>
+      <Text style={s.sub}>{slot ? `${dayText} at ${fmtSlot(slot)}.` : `${dayText}. We’ll confirm your exact time.`}</Text>
+      {!!cars && <Text style={s.addr}>{cars}</Text>}
       <Text style={s.addr}>{address}</Text>
       <Text style={s.paid}>{PAID[paid]}</Text>
       {photosFailed > 0 && <Text style={s.warn}>{photosFailed} {photosFailed === 1 ? 'photo' : 'photos'} didn't upload. You can show us at the appointment.</Text>}

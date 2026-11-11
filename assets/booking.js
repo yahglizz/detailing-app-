@@ -273,7 +273,7 @@
     return '<div class="bk-done"><span class="ok-mark">' + icon('check') + '</span>' +
       '<p class="bk-sub" style="margin-bottom:8px">Thanks, ' + esc(S.name.split(' ')[0]) + '. We’ll email <b style="color:var(--text)">' + esc(S.email) + '</b> once we confirm your exact time.</p>' +
       '<div class="bk-ref">REFERENCE BLD-' + esc(S.booking.bookingId.slice(0, 6).toUpperCase()) + '</div></div>' +
-      '<div class="bk-review">' + [['Requested', fmtDay(S.day) + ' at ' + fmtSlot(S.slot)], ['Address', S.street + ', ' + S.zip]]
+      '<div class="bk-review">' + [['Requested', S.doneMoved ? (S.doneSlot ? fmtDay(S.doneDay) + ' at ' + fmtSlot(S.doneSlot) : fmtDay(S.doneDay) + ' (we’ll confirm your time)') : fmtDay(S.day) + ' at ' + fmtSlot(S.slot)], ['Address', S.street + ', ' + S.zip]]
         .map((r) => '<span class="k">' + r[0] + '</span><span class="v">' + esc(r[1]) + '</span><span></span>').join('') + '</div>' +
       priceBox(b.lines, b.subtotal, b.deposit, 'Booking deposit (demo, no money taken)') +
       '<p class="bk-legal">' + DISCLAIMER + '</p>';
@@ -467,7 +467,7 @@
       if (!S) return Promise.reject({ code: 'closed' });
       if (oks.some((x) => !x)) S.warn = 'One or more photos didn’t upload. Your request still goes through. You can show us the photos at the inspection.';
       return call('pay-demo', { bookingId: S.booking.bookingId, payKey: S.booking.payKey });
-    }).then(() => { if (S) { S.busy = false; S.step = 5; render(); } })
+    }).then((r) => { if (S) { if (r && r.day) { S.doneDay = r.day; S.doneSlot = r.slot || ''; S.doneMoved = true; } S.busy = false; S.step = 5; render(); } })
       .catch((e) => { if (!S || (e && e.code === 'closed')) return; S.busy = false; S.err = errText(e); renderStep(); });
   }
   function addFiles(list) {

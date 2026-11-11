@@ -27,6 +27,7 @@ type MemberPart = { lines: Line[]; subtotal: number; payable: number; deposit: n
 type Quote = { lines: Line[]; subtotal: number; deposit: number; member?: MemberPart };
 type Day = { day: string; capacity: number; booked: number; closed: boolean };
 type DayInfo = { taken: string[]; minSlot?: string; holders?: Record<string, number> };
+type Paid = { ok?: boolean; day?: string | null; slot?: string | null };
 type Reserved = { bookingId: string; payKey: string; uploads?: ({ path: string; signedUrl: string } | null)[]; escalated?: boolean; paidFromBalance?: boolean };
 
 export const DISCLAIMER = 'Prices shown are starting estimates. Final pricing is confirmed after an in-person vehicle inspection. Your booking deposit is applied toward your final service total. Any additional charges must be approved before work begins.';
@@ -223,6 +224,11 @@ export default function Build({ navigation }: Props) {
       hold.current = data.paidFromBalance ? null : { bookingId: data.bookingId, payKey: data.payKey };
 
       // Photos go straight to storage; a failed upload never blocks the booking (same as the website).
+      // Snapshot at submit time: the confirmation never reads live order state.
+      const snap = {
+        address: `${state.street.trim()}, ${state.zip.trim()}`,
+        cars: state.cars.map((c) => `${c.year} ${c.make.trim()}`.trim()).join(', '),
+      };
       let photosFailed = 0;
       await Promise.all(state.photos.map(async (p, i) => {
         const up = data.uploads?.[i];
@@ -236,8 +242,11 @@ export default function Build({ navigation }: Props) {
       if (!mounted.current) return; // unmount cleanup already released the hold
 
       // The deposit step moves the hold to a request (also for $0 member bookings).
+      // Where the booking really sits: pay-demo reports it (a VIP bump may have moved it);
+      // a balance booking uses what was reserved (no time when escalated).
+      let when: { day: string; slot: string | null } = { day: state.day, slot: data.escalated ? null : state.slot };
       if (!data.paidFromBalance) {
-        const paid = await detail({ action: 'pay-demo', bookingId: data.bookingId, payKey: data.payKey });
+        const paid = await detail<Paid>({ action: 'pay-demo', bookingId: data.bookingId, payKey: data.payKey });
         if (!mounted.current) return; // cleanup released the hold; booking not confirmed here
         if (!paid.data) {
           // start clean next tap: free this hold, then explain (price_changed re-quotes)
@@ -246,12 +255,15 @@ export default function Build({ navigation }: Props) {
           setError(await explain(paid.error ?? 'network'));
           return;
         }
+        // old backend: no day/slot in the answer -> keep what was picked
+        if (paid.data.day) when = { day: paid.data.day, slot: paid.data.slot ?? null };
       }
       hold.current = null;
       if (profile) await refresh();
       if (!mounted.current) return;
       navigation.reset({ index: 0, routes: [{ name: 'Booked', params: {
         bookingId: data.bookingId, escalated: !!data.escalated, photosFailed,
+        day: when.day, slot: when.slot, address: snap.address, cars: snap.cars,
         paid: data.paidFromBalance ? 'balance' : deposit === 0 ? 'membership' : 'demo',
         stamps: plan ? state.cars.length * plan.stampsPerCar : 0, saved: savings,
       } }] });
@@ -294,6 +306,7 @@ export default function Build({ navigation }: Props) {
     <SafeAreaView style={u.root} edges={['top', 'left', 'right']}>
       <StatusBar style={t.statusBar} />
       <LinearGradient colors={t.bg} style={StyleSheet.absoluteFill} />
+      <View style={{ flex: 1, opacity: busy ? 0.6 : 1 }} pointerEvents={busy ? 'none' : 'auto'}>
       <ScrollView contentContainerStyle={u.content} keyboardShouldPersistTaps="handled">
         <View style={u.topbar}>
           <Pressable accessibilityRole="button" accessibilityLabel="Back" disabled={busy} onPress={() => navigation.goBack()} style={u.topButton}><Text style={u.topButtonText}>‹</Text></Pressable>
@@ -462,6 +475,7 @@ export default function Build({ navigation }: Props) {
         {deposit > 0 && !payWithBalance && <Text style={u.hint}>Demo deposit: no money is taken yet.</Text>}
         <Text style={[u.hint, s.disclaimer]}>{DISCLAIMER}</Text>
       </ScrollView>
+      </View>
       <SafeAreaView edges={['bottom']} style={u.footer}>
         <View><Text style={u.footerLabel}>{payWithBalance ? 'FROM BALANCE' : 'DEPOSIT TODAY'}</Text><Text style={u.footerAmount}>{quote ? `$${deposit}` : '—'}</Text>{savings > 0 && <Text style={s.footerSave}>SAVING ${savings}</Text>}</View>
         <Pressable accessibilityRole="button" disabled={busy || !quote} onPress={reserve} style={[u.button, s.footerButton, (busy || !quote) && { opacity: 0.65 }]}>{busy ? <ActivityIndicator color="#fff" /> : <Text style={u.buttonText}>{buttonLabel}</Text>}</Pressable>
