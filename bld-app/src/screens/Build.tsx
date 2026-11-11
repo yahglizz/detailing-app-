@@ -467,7 +467,10 @@ export default function Build({ navigation }: Props) {
             </>}
             <View style={u.summaryRule} />
             <View style={u.rowBetween}><Text style={u.summaryLabel}>Deposit today</Text><Text style={u.summaryBig}>${deposit}</Text></View>
-            <Text style={u.summaryNote}>{deposit === 0 ? 'Covered by your membership' : `$${Math.max(0, total - deposit)} at your detail, after inspection`}</Text>
+            <Text style={u.summaryNote}>{deposit === 0 ? 'Covered by your membership' : payWithBalance
+              ? `$${Math.max(0, total - deposit)} at your detail, after inspection`
+              // a demo deposit takes no money, so the whole total is still collected at the job
+              : `$${total} at your detail, after inspection (the demo deposit takes no money)`}</Text>
             {savings > 0 && <View style={s.savingBadge}><Text style={s.savingText}>YOU'RE SAVING ${savings} WITH {quote.member!.tier.toUpperCase()}</Text></View>}
           </>}
         </LinearGradient>
