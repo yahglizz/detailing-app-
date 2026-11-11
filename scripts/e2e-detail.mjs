@@ -55,8 +55,11 @@ const owner = (action, payload = {}) => post('admin', { 'x-staff-code': OWNER },
 const setup = (action, payload = {}) => post('e2e-setup', {}, { token: OWNER, action, ...payload });
 
 const stamp = Date.now();
-const runStart = new Date(stamp - 60_000).toISOString(); // member-reset only touches rows made after this
-let testCredits = 0; // test_balance top-ups this run made; member-reset removes exactly this many
+const runStart = new Date(stamp).toISOString(); // member-reset only touches rows made after this
+// test_balance top-ups this run made; member-reset removes exactly this many. ponytail: a top-up
+// whose response is lost is not counted and stays behind; tag top-ups with a run id if that bites.
+// The single is_test member is not meant for concurrent runs.
+let testCredits = 0;
 const prefix = `e2e-detail-${stamp}`;
 const emailOf = (tag) => `${prefix}-${tag}@bldtest.co`;
 const cleanup = [];
@@ -553,7 +556,7 @@ let failed = false;
 try {
   // E2E_PART=core|app runs one half: a full run makes more bookings than the 10/hour IP cap allows.
   const part = process.env.E2E_PART || '';
-  if (part !== 'app') await main();
+  if (part !== 'app' && !ONLY.length) await main(); // E2E_ONLY picks app-sync steps, so it skips the core half
   if (part !== 'core') await extra();
   if (failedSteps) failed = true;
 } catch (e) {
@@ -561,7 +564,12 @@ try {
   console.error(`FAIL: ${e.message}`);
 } finally {
   console.log('\n--- cleanup ---');
-  for (const fn of cleanup.reverse()) { try { await fn(); } catch (e) { console.error(`cleanup step failed: ${e.message}`); } }
+  for (const fn of cleanup.reverse()) {
+    try {
+      const r = await fn();
+      if (r && r.status !== 200) { failed = true; console.error(`cleanup step failed: ${r.status} ${JSON.stringify(r.body)}`); }
+    } catch (e) { failed = true; console.error(`cleanup step failed: ${e.message}`); }
+  }
   // both cleanups always run; either one failing fails the run (leftover data is a failure)
   if (MC) {
     try {

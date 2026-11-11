@@ -83,22 +83,30 @@ Deno.serve(async (req) => {
     const ids = (custs ?? []).map((c) => c.id);
     let bookings = 0, members = 0, users = 0;
     if (ids.length) {
-      const { data: bk } = await db.from('bookings').select('id').in('customer_id', ids);
+      const { data: bk, error: be } = await db.from('bookings').select('id').in('customer_id', ids);
       const bookingIds = (bk ?? []).map((b) => b.id);
-      const { data: mem } = await db.from('memberships').select('id').in('customer_id', ids);
+      const { data: mem, error: me } = await db.from('memberships').select('id').in('customer_id', ids);
+      if (be || me) return Response.json({ error: `lookup: ${(be ?? me)!.message}` }, { status: 500 });
       const memberIds = (mem ?? []).map((m) => m.id);
-      // Children first (FKs).
-      if (bookingIds.length) await db.from('payments').delete().in('booking_id', bookingIds);
-      await db.from('wallet_ledger').delete().in('customer_id', ids);
-      await db.from('topups').delete().in('customer_id', ids);
-      if (memberIds.length) {
-        await db.from('reward_ledger').delete().in('membership_id', memberIds);
-        await db.from('redemptions').delete().in('membership_id', memberIds);
-        await db.from('credit_ledger').delete().in('membership_id', memberIds);
+      // Children first (FKs). Any database error stops here and is reported (no false "ok").
+      const steps: [string, unknown[], () => PromiseLike<{ error: { message: string } | null }>][] = [
+        ['payments', bookingIds, () => db.from('payments').delete().in('booking_id', bookingIds)],
+        ['customer_reports', bookingIds, () => db.from('customer_reports').delete().in('booking_id', bookingIds)],
+        ['wallet_ledger', ids, () => db.from('wallet_ledger').delete().in('customer_id', ids)],
+        ['topups', ids, () => db.from('topups').delete().in('customer_id', ids)],
+        ['reward_ledger', memberIds, () => db.from('reward_ledger').delete().in('membership_id', memberIds)],
+        ['redemptions', memberIds, () => db.from('redemptions').delete().in('membership_id', memberIds)],
+        ['credit_ledger', memberIds, () => db.from('credit_ledger').delete().in('membership_id', memberIds)],
+        ['bookings', bookingIds, () => db.from('bookings').delete().in('id', bookingIds)],
+        ['memberships', memberIds, () => db.from('memberships').delete().in('id', memberIds)],
+        ['customers', ids, () => db.from('customers').delete().in('id', ids)],
+      ];
+      for (const [t, list, run] of steps) {
+        if (!list.length) continue;
+        const { error } = await run();
+        if (error) return Response.json({ error: `${t}: ${error.message}` }, { status: 500 });
       }
-      if (bookingIds.length) { await db.from('bookings').delete().in('id', bookingIds); bookings = bookingIds.length; }
-      if (memberIds.length) { await db.from('memberships').delete().in('id', memberIds); members = memberIds.length; }
-      await db.from('customers').delete().in('id', ids);
+      bookings = bookingIds.length; members = memberIds.length;
     }
     // Always delete matching auth users by email prefix, even ones that never
     // created a customers row (e.g. a user minted but who never booked).
@@ -117,11 +125,13 @@ Deno.serve(async (req) => {
     const since = String(body.since ?? '');
     const wanted = Array.isArray(body.bookingIds) ? body.bookingIds.map(String) : [];
     if (!code || Number.isNaN(Date.parse(since))) return Response.json({ error: 'code+since required' }, { status: 400 });
-    const { data: m } = await db.from('memberships').select('customer_id, is_test').eq('code', code).maybeSingle();
+    const { data: m, error: me } = await db.from('memberships').select('customer_id, is_test').eq('code', code).maybeSingle();
+    if (me) return Response.json({ error: `memberships: ${me.message}` }, { status: 500 });
     if (!m?.is_test) return Response.json({ error: 'test members only' }, { status: 400 });
-    const { data: bk } = wanted.length
+    const { data: bk, error: be } = wanted.length
       ? await db.from('bookings').select('id').in('id', wanted).eq('customer_id', m.customer_id)
-      : { data: [] };
+      : { data: [], error: null };
+    if (be) return Response.json({ error: `bookings: ${be.message}` }, { status: 500 });
     const ids = (bk ?? []).map((b) => b.id);
     const fail = (t: string, e: { message: string }) => Response.json({ error: `${t}: ${e.message}` }, { status: 500 });
     if (ids.length) {
