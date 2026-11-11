@@ -311,7 +311,10 @@ async function pickSlot() {
   throw new Error('no free slot in the booking window');
 }
 
+// E2E_ONLY=16,17,18 runs just those app-sync steps (each one books, and the IP cap is 10/hour).
+const ONLY = (process.env.E2E_ONLY || '').split(',').map((s) => s.trim()).filter(Boolean);
 async function step(name, fn) {
+  if (ONLY.length && !ONLY.includes(name.split('.')[0])) return console.log(`SKIP: ${name} (not in E2E_ONLY)`);
   try {
     pass(`${name}: ${await fn()}`);
   } catch (e) {
