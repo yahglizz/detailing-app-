@@ -124,7 +124,7 @@ begin
           time_window = case when v_moved is null then time_window
                              when v_moved < '12:00' then 'morning' else 'afternoon' end,
           bumped_from = v_slot,
-          detail = coalesce(detail, '{}'::jsonb) || jsonb_build_object('bumpedFrom', v_slot, 'bumpedAt', now())
+          detail = coalesce(detail, '{}'::jsonb) || jsonb_build_object('bumpedFrom', v_slot, 'bumpedAt', now(), 'bumpedBy', p_row->>'id')
           where id = h.id;
         v_bumped := h.id;
       elsif v_rank = h.rank and v_rank > 0 then
@@ -228,7 +228,12 @@ begin
     end if;
     insert into booking_invoices (booking_id, service_price, lines, member_percent, reward_percent)
     values (p_booking, 0, v_lines, coalesce((b.quote->>'memberPercent')::int, 0), coalesce((b.quote->>'rewardPercent')::int, 0))
+    on conflict (booking_id) do nothing
     returning * into inv;
+    if inv.booking_id is null then -- an invoice_save inserted one first: pay that one
+      select * into inv from booking_invoices where booking_id = p_booking for update;
+      if inv.status = 'paid' then raise exception 'already_paid'; end if;
+    end if;
   end if;
 
   v_lines := case when jsonb_typeof(inv.lines) = 'array' then

@@ -104,6 +104,7 @@ export default function Build({ navigation }: Props) {
     return data;
   };
   useEffect(() => {
+    quoteReq.current++; // drop any answer still in flight for the old cars
     setQuote(null);
     const id = setTimeout(fetchQuote, 300);
     return () => clearTimeout(id);
