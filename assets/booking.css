@@ -103,6 +103,23 @@
 .bk-done .ok-mark{display:inline-grid;place-items:center;width:56px;height:56px;border-radius:50%;background:#1c3a2a;color:var(--ok);margin-bottom:16px}
 .bk-done .ok-mark .i{width:28px;height:28px}
 .bk-ref{font:700 14px/1 ui-monospace,Menlo,monospace;letter-spacing:.1em;color:var(--text);margin:8px 0 24px}
+/* cars: one card per car, 1–6 per booking */
+.bk-car{border:1px solid var(--line);border-radius:12px;background:#0D0C10;padding:18px;margin-bottom:16px;min-width:0}
+.bk-car-h{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.bk-car-h h3{font-size:16px;margin:0}
+.bk-car-h h3:focus{outline:none}
+.bk-car-p{margin-left:auto;font:800 20px/1 'League Spartan',sans-serif;color:var(--text)}
+.bk-pk{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
+.bk-pk .bk-opt .row b{font:600 15px/1.25 'Hanken Grotesk',sans-serif}
+.bk-pk .bk-opt .row span{font-size:17px;white-space:nowrap}
+.bk-add{width:100%;justify-content:center;gap:8px}
+.bk-price .r.ln{margin:0 0 10px;font-size:14px}
+.bk-price .r.ln span{min-width:0;overflow-wrap:anywhere}
+.bk-price .r.ln b{white-space:nowrap}
+.bk-price .r.ln + .r.big{border-top:1px solid #3b2b4e;padding-top:14px;margin-top:14px}
+.bk-sum .line.car span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.bk-sum .line.car span b,.bk-sum .line.car small{overflow-wrap:anywhere}
+.bk-sum .line.car small{font-size:12px;color:var(--muted)}
 .bk-spin{width:18px;height:18px;border-radius:50%;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;animation:bkspin .7s linear infinite}
 @keyframes bkspin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:no-preference){.bk-step{animation:bkin .25s ease both}@keyframes bkin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}}
@@ -132,6 +149,8 @@
   .bk-nav .btn-primary{min-width:0;flex:1}
   .bk-review{grid-template-columns:auto 1fr}
   .bk-review button{display:none}
+  .bk-car{padding:14px}
+  .bk-pk{grid-template-columns:1fr}
 }
 
 /* ——— membership plans ——— */
