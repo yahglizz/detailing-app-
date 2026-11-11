@@ -50,6 +50,7 @@ const ERR = {
   forbidden: 'Only the owner can do that.',
   slot_taken: 'Another job already has that time. Pick a different slot.',
   not_open: 'This booking was already handled — refreshed.',
+  slot_changed: 'This booking just moved to a new time (a VIP booking took its slot). Reload to see the new time.',
   refund_failed: 'The refund didn’t go through, so nothing changed. Try again, or refund it in Stripe.',
   bad_time: 'Pick a valid date and time.',
   bad_amount: 'Enter the amount collected in whole dollars.',
@@ -514,8 +515,9 @@ function DetailJob({ b, me, onChanged, onCancel }) {
   const setPrice = (i, v) => setPrices(prices.map((p, n) => (n === i ? v : p)));
   const refresh = () => Promise.all([load(), onChanged()]);
 
-  const confirmTime = () => api('confirm', { id: b.id, day, slot: slot || null })
-    .then((r) => { toast(`Confirmed for ${r.when}. Customer emailed.`); setChanging(false); return refresh(); });
+  const confirmTime = () => api('confirm', { id: b.id, day, slot: slot || null, expectSlot: b.slot || null })
+    .then((r) => { toast(`Confirmed for ${r.when}. Customer emailed.`); setChanging(false); return refresh(); },
+      async (e) => { if (e.code === 'slot_changed') { setChanging(false); await refresh(); } throw e; });
   // One tap: save the prices if they changed, take the payment, the job is done.
   const pay = async (method) => {
     if (dirty) await api('invoice_save', { id: b.id, lines: lines.map((l) => ({ price: l.price })), extras: cleaned });
@@ -615,8 +617,8 @@ function BookingDrawer({ id, me, reload, onClose }) {
   }, []);
 
   const after = async (msg) => { toast(msg); await Promise.all([fetchIt(), reload()]); };
-  const fail = async (e) => { if (e.code === 'not_open') await Promise.all([fetchIt(), reload()]); throw e; };
-  const confirmTime = () => api('confirm', { id, day, slot: slot || null })
+  const fail = async (e) => { if (e.code === 'not_open' || e.code === 'slot_changed') await Promise.all([fetchIt(), reload()]); throw e; };
+  const confirmTime = () => api('confirm', { id, day, slot: slot || null, expectSlot: b.slot || null })
     .then((r) => after(b.status === 'confirmed' ? `Moved to ${r.when}. Customer emailed.` : `Confirmed for ${r.when}. Customer emailed.`), fail);
   const done = () => {
     const collected = collect && amount ? { amount: Number(amount), method } : null;

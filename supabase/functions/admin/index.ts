@@ -274,7 +274,8 @@ const handlers: Record<string, Handler> = {
     return data ? json(shape(data)) : bad('not_found', 404);
   },
 
-  confirm: async (b) => result(await confirmBooking(db, String(b.id), String(b.day ?? ''), b.slot ? String(b.slot) : null)),
+  confirm: async (b) => result(await confirmBooking(db, String(b.id), String(b.day ?? ''), b.slot ? String(b.slot) : null,
+    b.expectSlot === undefined ? undefined : b.expectSlot === null ? null : String(b.expectSlot))),
   decline: async (b) => result(await declineBooking(db, String(b.id))),
   done: async (b) => result(await markDone(db, String(b.id),
     b.collected ? { amount: Number(b.collected.amount), method: b.collected.method } : null)),

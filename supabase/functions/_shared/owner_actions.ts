@@ -18,7 +18,7 @@ const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 // Confirm a requested booking at a day + slot, or move a confirmed one. The owner may put
 // a job on a full day (their call), but never on top of another job's slot.
-export async function confirmBooking(db: Db, id: string, day: string, slot: string | null): Promise<ActionResult> {
+export async function confirmBooking(db: Db, id: string, day: string, slot: string | null, expectSlot?: string | null): Promise<ActionResult> {
   if (!ISO_DAY.test(day) || (slot !== null && !ALL_SLOTS.includes(slot))) return { ok: false, error: 'bad_time' };
   const { data: b } = await db.from('bookings')
     .select('id, status, preferred_day, time_slot, time_window, address, customers(email)').eq('id', id).maybeSingle();
@@ -34,10 +34,19 @@ export async function confirmBooking(db: Db, id: string, day: string, slot: stri
 
   const when = formatWhen(day, slot, b.time_window);
   const moved = b.status === 'confirmed' && (b.preferred_day !== day || (b.time_slot ?? null) !== slot);
-  const { data: won } = await db.from('bookings')
+  // expectSlot = the slot the dashboard showed; a VIP bump may have moved the row since
+  let upd = db.from('bookings')
     .update({ status: 'confirmed', preferred_day: day, time_slot: slot, scheduled_note: when })
-    .eq('id', id).eq('status', b.status).select('id');
-  if (!won?.length) return { ok: false, error: 'not_open' };
+    .eq('id', id).eq('status', b.status);
+  if (expectSlot !== undefined) upd = expectSlot === null ? upd.is('time_slot', null) : upd.eq('time_slot', expectSlot);
+  const { data: won } = await upd.select('id');
+  if (!won?.length) {
+    if (expectSlot !== undefined) {
+      const { data: now } = await db.from('bookings').select('time_slot').eq('id', id).maybeSingle();
+      if (now && (now.time_slot ?? null) !== expectSlot) return { ok: false, error: 'slot_changed' };
+    }
+    return { ok: false, error: 'not_open' };
+  }
 
   const email = (b.customers as { email: string } | null)?.email ?? '';
   if (b.status === 'requested') {

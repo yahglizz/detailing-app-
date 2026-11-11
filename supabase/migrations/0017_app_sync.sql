@@ -156,7 +156,11 @@ begin
         where id = v_reward and status = 'issued' and membership_id = (p_row->>'membership_id')::uuid;
       if not found then raise exception 'price_changed'; end if;
     end if;
-    update bookings set deposit_status = 'paid', status = 'requested' where id = v_id;
+    update bookings set deposit_status = 'paid', status = 'requested',
+      quote = quote || jsonb_build_object('paidOnline', v_debit,
+        'balanceDue', coalesce((quote->>'payable')::int, (quote->>'total')::int, 0) - v_debit,
+        'remainder', coalesce((quote->>'payable')::int, (quote->>'total')::int, 0) - v_debit)
+      where id = v_id;
   end if;
 
   return jsonb_build_object('bookingId', v_id, 'escalated', v_escalated, 'bumpedId', v_bumped, 'movedTo', v_moved);

@@ -142,8 +142,8 @@ function bookingQuote(cfg: DetailPricing, cars: CarLine[], mem: Member | null) {
   }) => ({
     lines: o.lines, subtotal: o.subtotal, total: o.payable, payable: o.payable, deposit: o.deposit,
     memberPercent: o.memberPercent, rewardPercent: o.rewardPercent, visitsUsed: o.visitsUsed, rewardId: o.rewardId,
-    startingPrice: o.subtotal, remainder: o.payable - o.deposit, balanceDue: o.payable - o.deposit,
-    balance: o.payable - o.deposit, paidOnline: 0, tier: o.tier,
+    startingPrice: o.subtotal, remainder: o.payable, balanceDue: o.payable, // nothing is paid until the deposit step
+    balance: o.payable - o.deposit, paidOnline: 0, // `balance` = estimated after deposit (website display) tier: o.tier,
   });
   if (!mem) {
     const q = quoteCars(cfg, cars);
