@@ -129,8 +129,10 @@ describe('migration seed matches the code default', () => {
       path.join(__dirname, '../../supabase/migrations/0015_detail_booking.sql'),
       'utf8',
     );
-    const m = sql.match(/-- detailPricing:begin\n([\s\S]*?)\n-- detailPricing:end/);
-    expect(m).not.toBeNull();
-    expect(JSON.parse(m![1].replace(/^--\s?/gm, ''))).toEqual(CFG);
+    const region = sql.match(/-- detailPricing:begin\n([\s\S]*?)\n-- detailPricing:end/);
+    expect(region).not.toBeNull();
+    const lit = region![1].match(/^\$json\$([\s\S]*)\$json\$::jsonb$/);
+    expect(lit).not.toBeNull();
+    expect(JSON.parse(lit![1])).toEqual(CFG);
   });
 });
