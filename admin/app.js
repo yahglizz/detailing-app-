@@ -63,10 +63,8 @@ const ERR = {
   bad_member: 'Enter a name, a valid email and a tier.',
   bad_name: 'Enter a name.',
   upload_failed: 'A photo didn’t upload. Check your connection and try again.',
-  not_approved: 'Record the customer’s approval first.',
   already_paid: 'This invoice is already paid.',
   bad_invoice: 'Check the price and extras. Whole dollars only, and every extra needs a name.',
-  note_required: 'Add a short note about how the customer approved (for example, “approved in person”).',
   not_detail: 'This booking has no inspection invoice.',
   too_many: 'Too many requests. Try again later.',
   server_error: 'Something went wrong on our side. Try again.',
@@ -464,97 +462,103 @@ function BookingRow({ b }) {
   </tr>`;
 }
 
-// ——— starting-price bookings: what the customer chose, the inspection invoice ———
+// ——— starting-price bookings: confirm the time, then take payment. Big buttons, little text. ———
 const YESNO = (v) => (v ? 'Yes' : 'No');
-function DetailPanel({ b, onChanged }) {
+const dayBtn = (iso) => { const d = utc(iso); return `${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getUTCDay()]} ${MONTH[d.getUTCMonth()].slice(0, 3)} ${d.getUTCDate()}`; };
+const nextDays = (n) => Array.from({ length: n }, (_, i) => { const d = new Date(); d.setDate(d.getDate() + i); return localISO(d); });
+function DetailJob({ b, me, onChanged, onCancel }) {
   const [d, setD] = useState(null);
   const [price, setPrice] = useState('');
   const [extras, setExtras] = useState([]);
-  const [note, setNote] = useState('');
-  const [method, setMethod] = useState('cash');
+  const [editing, setEditing] = useState(false);
+  const [changing, setChanging] = useState(false);
+  const [day, setDay] = useState(b.day);
+  const [slot, setSlot] = useState(b.slot || '');
   const load = useCallback(() => api('detail_get', { id: b.id }).then((x) => {
-    setD(x); setPrice(String(x.invoice.servicePrice)); setExtras(x.invoice.extras || []); setNote(x.invoice.approvedNote || '');
+    setD(x); setPrice(String(x.invoice.servicePrice)); setExtras(x.invoice.extras || []);
   }).catch(toastErr), [b.id]);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { setDay(b.day); setSlot(b.slot || ''); }, [b.day, b.slot]);
   if (!d) return html`<div class="section"><${Loading} /></div>`;
 
   const inv = d.invoice;
   const info = d.detail;
+  const paid = inv.status === 'paid';
+  const asked = b.status === 'requested';
+  const confirmed = b.status === 'confirmed';
   const cleaned = extras.filter((e) => String(e.name || '').trim()).map((e) => ({ name: String(e.name).trim(), price: Number(e.price) || 0 }));
   const dirty = Number(price) !== inv.servicePrice || JSON.stringify(cleaned) !== JSON.stringify(inv.extras || []);
   // Display arithmetic only: the server recomputes and is the authority.
   const total = (Number(price) || 0) + cleaned.reduce((s, e) => s + e.price, 0);
   const credit = Math.min(d.depositCreditable, total);
   const refund = d.depositCreditable - credit;
-  const locked = inv.status === 'paid' || !['requested', 'confirmed', 'done'].includes(b.status);
-  const canPay = inv.status === 'approved' && !dirty && (b.status === 'confirmed' || b.status === 'done');
+  const due = total - credit;
   const setExtra = (i, k, v) => setExtras(extras.map((e, n) => (n === i ? { ...e, [k]: v } : e)));
+  const refresh = () => Promise.all([load(), onChanged()]);
 
-  const save = () => api('invoice_save', { id: b.id, servicePrice: Number(price), extras: cleaned })
-    .then(() => { toast('Price saved.'); return Promise.all([load(), onChanged()]); });
-  const approve = () => api('invoice_approve', { id: b.id, note })
-    .then(() => { toast('Customer approval recorded.'); return Promise.all([load(), onChanged()]); });
-  const pay = () => api('invoice_pay', { id: b.id, method })
-    .then((r) => { toast(r.balance > 0 ? `Marked paid · ${money(r.balance)} collected.` : 'Marked paid.'); return Promise.all([load(), onChanged()]); });
+  const confirmTime = () => api('confirm', { id: b.id, day, slot: slot || null })
+    .then((r) => { toast(`Confirmed for ${r.when}. Customer emailed.`); setChanging(false); return refresh(); });
+  // One tap: save the price if it changed, take the payment, the job is done.
+  const pay = async (method) => {
+    if (dirty) await api('invoice_save', { id: b.id, servicePrice: Number(price), extras: cleaned });
+    const r = await api('invoice_pay', { id: b.id, method });
+    toast(`${money(r.balance)} ${method === 'cash' ? 'cash' : 'card'} received. Job done.`);
+    return refresh();
+  };
 
   return html`
-    <div class="section"><h4>What the customer chose</h4>
-      <dl class="kv">
-        <dt>Phone</dt><dd><a href=${`tel:${info.phone}`}>${info.phone}</a></dd>
-        <dt>Vehicle</dt><dd>${[info.vehicle?.year, info.vehicle?.make].filter(Boolean).join(' ')}</dd>
-        <dt>Interior condition</dt><dd style="text-transform:capitalize">${info.condition}</dd>
-        <dt>Pet hair</dt><dd>${YESNO(info.petHair)}</dd>
-      </dl>
-      <p class="muted small" style="margin:12px 0 0">Condition and pet hair are for your inspection. They do not change the price.</p>
-      ${d.photos.length > 0 ? html`<div class="photo-grid" style="margin-top:12px">${d.photos.map((u) => html`
-        <a href=${u} target="_blank" rel="noopener"><img src=${u} alt="Customer vehicle photo" loading="lazy" /></a>`)}</div>`
-        : html`<p class="muted small" style="margin:12px 0 0">No photos sent.</p>`}
-    </div>
-
-    <div class="section"><h4>Inspection and invoice</h4>
-      <p class="muted small" style="margin:-4px 0 12px">Starting price was ${money(d.startingPrice || inv.servicePrice)}. Set the final price after inspecting the vehicle. Extras need the customer’s approval before you add them.</p>
-      <div class="stack" style="gap:12px">
-        <label class="field"><span>Final service price</span><div class="money-wrap"><input class="input money" inputmode="numeric" value=${price} disabled=${locked}
-          onInput=${(e) => setPrice(e.target.value.replace(/[^\d]/g, ''))} /></div></label>
-        ${extras.map((e, i) => html`<div class="inv-extra">
-          <label class="field"><span>Extra</span><input class="input" value=${e.name} placeholder="Name" disabled=${locked} onInput=${(ev) => setExtra(i, 'name', ev.target.value)} /></label>
-          <label class="field"><span>Price</span><div class="money-wrap"><input class="input money" inputmode="numeric" value=${e.price} disabled=${locked}
-            onInput=${(ev) => setExtra(i, 'price', ev.target.value.replace(/[^\d]/g, ''))} /></div></label>
-          <button type="button" class="icon-btn" aria-label="Remove extra" disabled=${locked} onClick=${() => setExtras(extras.filter((_, n) => n !== i))}><${Icon} name="x" size=${16} /></button>
-        </div>`)}
-        ${!locked && extras.length < 10 && html`<button type="button" class="btn sm" onClick=${() => setExtras([...extras, { name: '', price: '' }])}><${Icon} name="plus" size=${16} /> Add an approved extra</button>`}
-      </div>
-      <dl class="kv" style="margin-top:14px">
-        <dt>Total</dt><dd>${money(total)}</dd>
-        <dt>Deposit credit</dt><dd>−${money(credit)}</dd>
-        ${refund > 0 && html`<dt>Deposit to refund</dt><dd>${money(refund)}</dd>`}
-        <dt>Balance to collect</dt><dd class="big">${money(total - credit)}</dd>
-      </dl>
-      ${d.depositStatus === 'demo' && html`<p class="muted small" style="margin:8px 0 0">Demo deposit: no money was taken, so nothing is credited. Collect the full total.</p>`}
-      ${refund > 0 && html`<div class="banner" style="margin-top:10px"><${Icon} name="alert" /><div>The deposit is more than the final total. Refund <b>${money(refund)}</b> to the customer.</div></div>`}
-      ${!locked && html`<div style="margin-top:12px"><${ActionButton} class="btn block" disabled=${!dirty} run=${save}><${Icon} name="check" size=${18} /> Save price<//></div>`}
-    </div>
-
-    <div class="section"><h4>Customer approval</h4>
-      ${inv.status === 'approved' || inv.status === 'paid'
-        ? html`<p style="margin:0"><b>Recorded</b> ${inv.approvedAt ? new Date(inv.approvedAt).toLocaleString() : ''}${inv.approvedNote ? html`<br /><span class="muted">${inv.approvedNote}</span>` : ''}</p>`
-        : html`<p class="muted small" style="margin:0 0 10px">Save the price, show it to the customer, then record that they approved it. Changing the numbers later clears the approval.</p>`}
-      ${!locked && inv.status !== 'paid' && html`<div class="stack" style="gap:10px;margin-top:10px">
-        <label class="field"><span>How they approved</span><input class="input" maxlength="200" value=${note} placeholder="For example: approved in person" onInput=${(e) => setNote(e.target.value)} /></label>
-        <${ActionButton} class="btn block" disabled=${dirty || !note.trim()} run=${approve}><${Icon} name="check" size=${18} /> ${inv.status === 'approved' ? 'Update approval' : 'Record customer approval'}<//>
-        ${dirty && html`<p class="muted small" style="margin:0">Save the price first.</p>`}
-      </div>`}
+    <div class="section"><h4>Appointment</h4>
+      <div class="when-card"><div><div class="when-big">${fmtLongDay(b.day)}</div><div class="when-sub">${timeOf(b)}</div></div>
+        <span class=${'pill ' + b.status}>${asked ? 'Requested' : confirmed ? 'Confirmed' : STATUS[b.status] || b.status}</span></div>
+      ${asked && !changing && html`<div class="stack" style="gap:8px;margin-top:12px">
+        <${ActionButton} class="btn primary block big" run=${confirmTime}><${Icon} name="check" size=${20} /> Confirm this time<//>
+        <button type="button" class="btn block" onClick=${() => setChanging(true)}>Pick another time</button></div>`}
+      ${confirmed && !changing && html`<button type="button" class="btn sm" style="margin-top:12px" onClick=${() => setChanging(true)}>Change time</button>`}
+      ${changing && html`<div class="stack" style="gap:12px;margin-top:12px">
+        <div class="quick">${nextDays(14).map((iso) => html`<button type="button" class=${'btn' + (day === iso ? ' primary' : '')} onClick=${() => setDay(iso)}>${dayBtn(iso)}</button>`)}</div>
+        <div class="quick">${SLOTS.map((t) => html`<button type="button" class=${'btn' + (slot === t ? ' primary' : '')} onClick=${() => setSlot(t)}>${fmtSlot(t)}</button>`)}</div>
+        <${ActionButton} class="btn primary block big" disabled=${!slot} run=${confirmTime}><${Icon} name="check" size=${20} /> ${slot ? `Confirm ${dayBtn(day)} · ${fmtSlot(slot)}` : 'Pick a time'}<//>
+        <button type="button" class="btn ghost block" onClick=${() => { setChanging(false); setDay(b.day); setSlot(b.slot || ''); }}>Cancel</button></div>`}
     </div>
 
     <div class="section"><h4>Payment</h4>
-      ${inv.status === 'paid'
-        ? html`<p style="margin:0"><b>Paid</b> by ${inv.paidMethod === 'card' ? 'card in person' : 'cash'} ${inv.paidAt ? new Date(inv.paidAt).toLocaleString() : ''}</p>`
-        : html`<label class="field"><span>Paid by</span><select class="input" value=${method} onChange=${(e) => setMethod(e.target.value)}>
-            <option value="cash">Cash</option><option value="card">Card in person</option></select></label>
-          <div style="margin-top:12px"><${ActionButton} class="btn primary block" disabled=${!canPay}
-            confirmText=${`Collect ${money(total - credit)} from the customer and mark this invoice paid?`} run=${pay}><${Icon} name="dollar" size=${18} /> Mark paid<//></div>
-          ${!canPay && html`<p class="muted small" style="margin:8px 0 0">${b.status === 'requested' ? 'Confirm a time first. ' : ''}${inv.status !== 'approved' ? 'Needs the customer’s recorded approval.' : dirty ? 'Save the price first.' : ''}</p>`}`}
-    </div>`;
+      ${paid
+        ? html`<div class="paid-card"><div><b>${money(inv.balance)}</b><div class="when-sub">${inv.paidMethod === 'card' ? 'Card' : 'Cash'} received${inv.paidAt ? ' · ' + new Date(inv.paidAt).toLocaleString() : ''}</div></div>
+            <span class="pill done">Job done</span></div>`
+        : html`<div class="total-card"><div><div class="when-sub">${credit > 0 ? `Total ${money(total)} − deposit ${money(credit)}` : `Quoted ${money(d.startingPrice || inv.servicePrice)}`}</div><b>${money(due)}</b></div>
+            ${confirmed && html`<button type="button" class="btn sm" onClick=${() => setEditing(!editing)}>${editing ? 'Done' : 'Change price'}</button>`}</div>
+          ${refund > 0 && html`<div class="banner" style="margin-top:10px"><${Icon} name="alert" /><div>Refund <b>${money(refund)}</b> of the deposit to the customer.</div></div>`}
+          ${confirmed && editing && html`<div class="stack" style="gap:12px;margin-top:12px">
+            <label class="field"><span>Final price</span><div class="money-wrap"><input class="input money" inputmode="numeric" value=${price}
+              onInput=${(e) => setPrice(e.target.value.replace(/[^\d]/g, ''))} /></div></label>
+            ${extras.map((e, i) => html`<div class="inv-extra">
+              <label class="field"><span>Extra</span><input class="input" value=${e.name} placeholder="Name" onInput=${(ev) => setExtra(i, 'name', ev.target.value)} /></label>
+              <label class="field"><span>Price</span><div class="money-wrap"><input class="input money" inputmode="numeric" value=${e.price}
+                onInput=${(ev) => setExtra(i, 'price', ev.target.value.replace(/[^\d]/g, ''))} /></div></label>
+              <button type="button" class="icon-btn" aria-label="Remove extra" onClick=${() => setExtras(extras.filter((_, n) => n !== i))}><${Icon} name="x" size=${16} /></button>
+            </div>`)}
+            ${extras.length < 10 && html`<button type="button" class="btn sm" onClick=${() => setExtras([...extras, { name: '', price: '' }])}><${Icon} name="plus" size=${16} /> Add an extra</button>`}</div>`}
+          ${confirmed
+            ? html`<div class="pay-split" style="margin-top:12px">
+                <${ActionButton} class="btn primary big" confirmText=${`Cash received: ${money(due)}?`} run=${() => pay('cash')}>Cash · ${money(due)}<//>
+                <${ActionButton} class="btn big" confirmText=${`Card payment received: ${money(due)}?`} run=${() => pay('card')}>Card · ${money(due)}<//></div>`
+            : html`<p class="muted small" style="margin:10px 0 0">${asked ? 'Confirm the time to take payment.' : ''}</p>`}`}
+    </div>
+
+    <div class="section"><h4>Job</h4>
+      <dl class="kv">
+        <dt>Address</dt><dd><a href=${`https://maps.google.com/?q=${encodeURIComponent(b.address)}`} target="_blank" rel="noopener">${b.address}</a></dd>
+        <dt>Phone</dt><dd><a href=${`tel:${info.phone}`}>${info.phone}</a></dd>
+        <dt>Package</dt><dd>${carLine(b.items[0])}</dd>
+        <dt>Vehicle</dt><dd>${[info.vehicle?.year, info.vehicle?.make].filter(Boolean).join(' ')}</dd>
+        <dt>Interior</dt><dd style="text-transform:capitalize">${info.condition}${info.petHair ? ' · pet hair' : ''}</dd>
+        ${b.notes && html`<dt>Notes</dt><dd style="white-space:pre-wrap">${b.notes}</dd>`}
+      </dl>
+      ${d.photos.length > 0 && html`<div class="photo-grid" style="margin-top:12px">${d.photos.map((u) => html`
+        <a href=${u} target="_blank" rel="noopener"><img src=${u} alt="Customer vehicle photo" loading="lazy" /></a>`)}</div>`}
+    </div>
+    ${me.role === 'owner' && isOpen(b) && html`<div class="section"><${ActionButton} class="btn danger block" run=${onCancel}
+      confirmText=${'Cancel this booking and free the time?'}>Cancel booking<//></div>`}`;
 }
 
 function BookingDrawer({ id, me, reload, onClose }) {
@@ -604,7 +608,7 @@ function BookingDrawer({ id, me, reload, onClose }) {
       ${b.reports > 0 && html`<a class="banner" href=${`#/customers/${b.customer.id}`} style="text-decoration:none">
         <${Icon} name="flag" /><div><b>${plural(b.reports, 'private report')}</b> on this customer. Read before the job →</div></a>`}
 
-      <div class="section"><h4>When & where</h4>
+      ${b.flow !== 'detail_v2' && html`<div class="section"><h4>When & where</h4>
         <dl class="kv">
           <dt>Date</dt><dd>${fmtLongDay(b.day)}</dd>
           <dt>Time</dt><dd>${timeOf(b)}</dd>
@@ -612,14 +616,14 @@ function BookingDrawer({ id, me, reload, onClose }) {
           ${b.notes && html`<dt>Notes</dt><dd style="white-space:pre-wrap">${b.notes}</dd>`}
           <dt>Customer</dt><dd><a href=${`#/customers/${b.customer.id}`}>${b.customer.email}</a></dd>
         </dl>
-      </div>
+      </div>`}
 
-      <div class="section"><h4>${plural(b.items.length, 'car')}</h4>
+      ${b.flow !== 'detail_v2' && html`<div class="section"><h4>${plural(b.items.length, 'car')}</h4>
         <div class="cars">${b.items.map((c, n) => html`<div class="car"><div><b>${carLine(c)}</b>
           <small>${c.extras?.length ? c.extras.map((e) => EXTRA[e] || e).join(' · ') : 'No extras'}</small></div><span class="muted small">Car ${n + 1}</span></div>`)}</div>
-      </div>
+      </div>`}
 
-      <div class="section"><h4>Money</h4>
+      ${b.flow !== 'detail_v2' && html`<div class="section"><h4>Money</h4>
         <dl class="kv">
           <dt>Total</dt><dd>${money(b.total)}</dd>
           ${b.savings > 0 && html`<dt>Member savings</dt><dd>−${money(b.savings)}</dd>`}
@@ -629,12 +633,12 @@ function BookingDrawer({ id, me, reload, onClose }) {
           ${b.collected > 0 && html`<dt>Collected at detail</dt><dd>${money(b.collected)}</dd>`}
           <dt>Still due</dt><dd class="big">${money(b.owing)}</dd>
         </dl>
-        ${b.owing > 0 && b.flow !== 'detail_v2' && html`<p class="muted small" style="margin:8px 0 0">Customer planned to pay the rest by ${b.remainderMethod}.</p>`}
-      </div>
+        ${b.owing > 0 && html`<p class="muted small" style="margin:8px 0 0">Customer planned to pay the rest by ${b.remainderMethod}.</p>`}
+      </div>`}
 
-      ${b.flow === 'detail_v2' && html`<${DetailPanel} b=${b} onChanged=${() => Promise.all([fetchIt(), reload()])} />`}
+      ${b.flow === 'detail_v2' && html`<${DetailJob} b=${b} me=${me} onChanged=${() => Promise.all([fetchIt(), reload()])} onCancel=${decline} />`}
 
-      ${isOpen(b) && html`<div class="section"><h4>${b.status === 'requested' ? 'Confirm a time' : 'Move this job'}</h4>
+      ${b.flow !== 'detail_v2' && isOpen(b) && html`<div class="section"><h4>${b.status === 'requested' ? 'Confirm a time' : 'Move this job'}</h4>
         <div class="row">
           <label class="field"><span>Day</span><input class="input" type="date" value=${day} onInput=${(e) => setDay(e.target.value)} /></label>
           <label class="field"><span>Time</span><select class="input" value=${slot} onChange=${(e) => setSlot(e.target.value)}>

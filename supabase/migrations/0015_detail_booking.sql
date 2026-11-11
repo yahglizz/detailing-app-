@@ -20,12 +20,10 @@ create table if not exists booking_invoices (
   booking_id uuid primary key references bookings(id) on delete cascade,
   service_price int not null default 0 check (service_price between 0 and 10000),
   extras jsonb not null default '[]'::jsonb,
-  customer_approved_at timestamptz,
-  approved_note text,
   deposit_credit int not null default 0 check (deposit_credit >= 0),
   total int not null default 0 check (total >= 0),
   balance int not null default 0 check (balance >= 0),
-  status text not null default 'draft' check (status in ('draft', 'approved', 'paid')),
+  status text not null default 'draft' check (status in ('draft', 'paid')),
   paid_at timestamptz,
   paid_method text check (paid_method in ('cash', 'card')),
   updated_at timestamptz not null default now()
@@ -97,10 +95,14 @@ begin
   if p_method not in ('cash', 'card') then raise exception 'bad_method'; end if;
   select * into b from bookings where id = p_booking and flow = 'detail_v2' for update;
   if not found then raise exception 'not_found'; end if;
-  if b.status = 'paid' then raise exception 'already_paid'; end if;
   if b.status not in ('confirmed', 'done') then raise exception 'not_open'; end if;
   select * into inv from booking_invoices where booking_id = p_booking for update;
-  if not found or inv.status <> 'approved' then raise exception 'not_approved'; end if;
+  if found and inv.status = 'paid' then raise exception 'already_paid'; end if;
+  if not found then -- paid without editing the price: the invoice is the starting price
+    insert into booking_invoices (booking_id, service_price)
+    values (p_booking, coalesce((b.quote->>'startingPrice')::int, (b.quote->>'total')::int, 0))
+    returning * into inv;
+  end if;
 
   select coalesce(sum((e->>'price')::int), 0) into v_extras from jsonb_array_elements(inv.extras) e;
   v_total := inv.service_price + v_extras;
@@ -114,7 +116,7 @@ begin
     insert into payments (booking_id, kind, amount_cents, status, provider)
     values (p_booking, 'remainder', v_balance * 100, 'succeeded', case when p_method = 'cash' then 'cash' else 'card_in_person' end);
   end if;
-  update bookings set status = 'paid', remainder_method = p_method,
+  update bookings set status = 'done', remainder_method = p_method, -- paid = the job is done
     quote = b.quote || jsonb_build_object('total', v_total, 'balanceDue', v_balance, 'remainder', v_balance)
     where id = p_booking;
   return jsonb_build_object('total', v_total, 'credit', v_credit, 'balance', v_balance, 'refundDue', v_deposit - v_credit);

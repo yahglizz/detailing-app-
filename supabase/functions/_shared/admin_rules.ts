@@ -9,7 +9,7 @@ const EVERYONE = [
   'calendar', 'set_day', 'set_schedule',
   'customers', 'customer', 'report_add', 'photo_upload_url', 'report_delete',
   'leads', 'lead_status',
-  'detail_get', 'invoice_save', 'invoice_approve', 'invoice_pay',
+  'detail_get', 'invoice_save', 'invoice_pay',
 ] as const;
 
 const OWNER_ONLY = [

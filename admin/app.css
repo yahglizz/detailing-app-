@@ -513,3 +513,15 @@ a.chip { text-decoration: none; }
 .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
 .photo-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; border: 1px solid var(--line); display: block; }
 .inv-extra { display: grid; grid-template-columns: 1fr 120px auto; gap: 10px; align-items: end; }
+
+/* ——— website bookings: confirm the time, take payment ——— */
+.when-card, .total-card, .paid-card { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px;
+  padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-2); }
+.when-big { font-family: var(--display); font-size: 20px; font-weight: 800; }
+.when-sub { font-size: 14.5px; font-weight: 600; color: var(--muted); }
+.total-card b, .paid-card b { display: block; font-family: var(--display); font-size: 34px; font-weight: 800; line-height: 1.1; }
+.paid-card { border-color: color-mix(in srgb, var(--ok) 45%, transparent); background: var(--ok-soft); }
+.quick { display: grid; grid-template-columns: repeat(auto-fill, minmax(82px, 1fr)); gap: 8px; }
+.quick .btn { padding: 0 6px; min-height: 44px; justify-content: center; }
+.btn.big { min-height: 54px; font-size: 16.5px; font-weight: 700; justify-content: center; }
+.pay-split { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }

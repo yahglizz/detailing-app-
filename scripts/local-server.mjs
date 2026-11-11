@@ -103,7 +103,7 @@ const detail = {
     // the price is always worked out here; any price the browser sends is ignored
     const sp = priceOf(b.service, b.vehicleType), dep = depOf(b.service, b.vehicleType);
     const id = crypto.randomUUID(), payKey = crypto.randomBytes(16).toString('hex');
-    bookings.set(id, { id, payKey, status: 'pending_payment', depositStatus: 'pending', createdAt: new Date().toISOString(), day: b.day, slot: b.slot, service: b.service, vehicleType: b.vehicleType, startingPrice: sp, deposit: dep, name, phone, email, street, zip, vehicle: { year, make }, condition: b.condition, petHair: b.petHair, notes: str(b.notes, 500), photos: exts.length, inv: { servicePrice: sp, extras: [], status: 'draft', approvedAt: null, approvedNote: null, paidAt: null, paidMethod: null } });
+    bookings.set(id, { id, payKey, status: 'pending_payment', depositStatus: 'pending', createdAt: new Date().toISOString(), day: b.day, slot: b.slot, service: b.service, vehicleType: b.vehicleType, startingPrice: sp, deposit: dep, name, phone, email, street, zip, vehicle: { year, make }, condition: b.condition, petHair: b.petHair, notes: str(b.notes, 500), photos: exts.length, inv: { servicePrice: sp, extras: [], status: 'draft', paidAt: null, paidMethod: null } });
     save();
     return [200, { bookingId: id, payKey, quote: { startingPrice: sp, deposit: dep, remainder: sp - dep, balance: sp - dep }, uploads: exts.map((_, i) => ({ path: `${id}/${i}`, signedUrl: `${BASE}/up/${id}/${i}` })) }];
   },
@@ -144,7 +144,10 @@ const admin = {
   me: () => ME,
   overview: () => ({ me: ME, today: todayStr(), newLeads: 0, bookings: live().map(shape), stats: { today: live().filter((x) => x.day === todayStr()).length, upcoming: live().length, awaiting: live().filter((x) => x.status === 'requested').length, owing: 0 } }),
   booking: (b) => (get(b) ? shape(get(b)) : 'not_found'),
-  confirm: (b) => { const x = get(b); if (!x) return 'not_found'; x.status = 'confirmed'; if (b.day) x.day = b.day; if (b.slot) x.slot = b.slot; save(); return { ok: true }; },
+  confirm: (b) => { const x = get(b); if (!x) return 'not_found'; x.status = 'confirmed'; if (b.day) x.day = b.day; if (b.slot) x.slot = b.slot; save();
+    const d = new Date(x.day + 'T12:00:00'), h = Number(String(x.slot || '').slice(0, 2));
+    return { ok: true, when: d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) + (x.slot ? ` at ${h % 12 || 12}:00 ${h < 12 ? 'AM' : 'PM'}` : '') };
+  },
   detail_get: (b) => {
     const x = get(b); if (!x) return 'not_found';
     return { detail: { name: x.name, phone: x.phone, vehicle: x.vehicle, condition: x.condition, petHair: x.petHair, notes: x.notes }, photos: Array.from({ length: x.photos }, (_, i) => `${BASE}/up/${x.id}/${i}`), depositStatus: x.depositStatus, depositCreditable: credit(x), startingPrice: x.startingPrice, invoice: invOut(x) };
@@ -153,16 +156,12 @@ const admin = {
     const x = get(b); if (!x) return 'not_found'; if (x.inv.status === 'paid') return ['already_paid', 409];
     const ex = b.extras ?? []; const sp = Number(b.servicePrice);
     if (!whole(sp, 0, 10000) || !Array.isArray(ex) || ex.some((e) => !e || !String(e.name ?? e.label ?? '').trim() || !whole(e.price, 0, 10000))) return 'bad_invoice';
-    x.inv = { ...x.inv, servicePrice: sp, extras: ex, status: 'draft', approvedAt: null, approvedNote: null }; save(); return invOut(x);
-  },
-  invoice_approve: (b) => {
-    const x = get(b); if (!x) return 'not_found'; if (x.inv.status === 'paid') return ['already_paid', 409];
-    if (!String(b.note || '').trim()) return 'note_required';
-    x.inv = { ...x.inv, status: 'approved', approvedAt: new Date().toISOString(), approvedNote: String(b.note).slice(0, 300) }; save(); return invOut(x);
+    x.inv = { ...x.inv, servicePrice: sp, extras: ex }; save(); return invOut(x);
   },
   invoice_pay: (b) => {
-    const x = get(b); if (!x) return 'not_found'; if (x.inv.status === 'paid') return ['already_paid', 409]; if (x.inv.status !== 'approved') return ['not_approved', 409];
-    x.inv = { ...x.inv, status: 'paid', paidAt: new Date().toISOString(), paidMethod: b.method === 'card' ? 'card' : 'cash' }; x.status = 'paid'; save(); return { ok: true, ...tot(x) };
+    const x = get(b); if (!x) return 'not_found'; if (!['confirmed', 'done'].includes(x.status)) return ['not_open', 409]; if (x.inv.status === 'paid') return ['already_paid', 409];
+    if (b.method !== 'cash' && b.method !== 'card') return 'bad_method';
+    x.inv = { ...x.inv, status: 'paid', paidAt: new Date().toISOString(), paidMethod: b.method }; x.status = 'done'; save(); return { ok: true, ...tot(x) }; // paid = job done
   },
   detail_pricing_get: () => ({ detailPricing: pricing }),
   detail_pricing_save: (b) => { if (!validPricing(b.detailPricing)) return 'bad_pricing'; for (const k of Object.keys(pricing)) delete pricing[k]; Object.assign(pricing, b.detailPricing); save(); return { ok: true, detailPricing: pricing }; },

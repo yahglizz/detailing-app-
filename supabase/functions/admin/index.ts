@@ -188,7 +188,7 @@ async function invoiceFor(row: Obj) {
   if (data) {
     return {
       servicePrice: data.service_price, extras: data.extras, depositCredit: data.deposit_credit, total: data.total,
-      balance: data.balance, status: data.status, approvedAt: data.customer_approved_at, approvedNote: data.approved_note,
+      balance: data.balance, status: data.status,
       paidAt: data.paid_at, paidMethod: data.paid_method, saved: true,
     };
   }
@@ -196,7 +196,7 @@ async function invoiceFor(row: Obj) {
   const t = invoiceTotals({ servicePrice: price, extras: [], depositCredit: depositCreditOf(row) });
   return {
     servicePrice: price, extras: [], depositCredit: t.credit, total: t.total, balance: t.balance,
-    status: 'draft', approvedAt: null, approvedNote: null, paidAt: null, paidMethod: null, saved: false,
+    status: 'draft', paidAt: null, paidMethod: null, saved: false,
   };
 }
 
@@ -480,7 +480,6 @@ const handlers: Record<string, Handler> = {
   invoice_save: async (b) => {
     const row = await detailRow(b.id);
     if (row instanceof Response) return row;
-    if (row.status === 'paid') return bad('already_paid', 409);
     if (!INVOICE_OPEN.includes(row.status)) return bad('not_open', 409);
     const extras = cleanExtras(b.extras);
     if (!extras) return bad('bad_invoice');
@@ -494,10 +493,9 @@ const handlers: Record<string, Handler> = {
     if (prev?.status === 'paid') return bad('already_paid', 409);
     const same = prev && prev.service_price === Number(b.servicePrice) && JSON.stringify(prev.extras) === JSON.stringify(extras);
     if (!same) {
-      // changed numbers void any earlier approval: the customer approved something else
       const { error } = await db.from('booking_invoices').upsert({
         booking_id: row.id, service_price: Number(b.servicePrice), extras, deposit_credit: t.credit, total: t.total,
-        balance: t.balance, status: 'draft', customer_approved_at: null, approved_note: null,
+        balance: t.balance, status: 'draft',
       });
       if (error) {
         if (String(error.message).includes('already_paid')) return bad('already_paid', 409); // paid-lock trigger
@@ -505,22 +503,6 @@ const handlers: Record<string, Handler> = {
       }
       await mirrorQuote(row, t.total, t.balance);
     }
-    return json(await invoiceFor(await detailRow(row.id) as Obj));
-  },
-
-  invoice_approve: async (b) => {
-    const row = await detailRow(b.id);
-    if (row instanceof Response) return row;
-    if (row.status === 'paid') return bad('already_paid', 409);
-    if (!INVOICE_OPEN.includes(row.status)) return bad('not_open', 409);
-    const note = String(b.note ?? '').trim().slice(0, 200);
-    if (!note) return bad('note_required');
-    await ensureInvoice(row);
-    const { data: won, error } = await db.from('booking_invoices')
-      .update({ status: 'approved', customer_approved_at: new Date().toISOString(), approved_note: note })
-      .eq('booking_id', row.id).neq('status', 'paid').select('booking_id');
-    if (error) throw error;
-    if (!won?.length) return bad('already_paid', 409);
     return json(await invoiceFor(await detailRow(row.id) as Obj));
   },
 
@@ -532,7 +514,7 @@ const handlers: Record<string, Handler> = {
     // One transaction in the database (see detail_invoice_pay in migration 0015).
     const { data, error } = await db.rpc('detail_invoice_pay', { p_booking: row.id, p_method: method });
     if (error) {
-      for (const code of ['already_paid', 'not_open', 'not_approved', 'not_found', 'bad_method']) {
+      for (const code of ['already_paid', 'not_open', 'not_found', 'bad_method']) {
         if (String(error.message).includes(code)) return bad(code, code === 'not_found' ? 404 : code === 'bad_method' ? 400 : 409);
       }
       throw error;

@@ -50,12 +50,17 @@ Design: [`docs/superpowers/specs/2026-11-10-bld-starting-prices-design.md`](docs
   while that value is exactly `demo` and records `deposit_status = 'demo'`. **Nothing writes
   `paid` yet** and no card is charged. The dashboard shows a "Demo deposit, no money taken" tag.
   Real Stripe deposits for this flow are a separate, later task.
-- **After the inspection (dashboard, booking drawer):** review the customer's choices and photos,
-  set the final service price, add approved extras, record the customer's approval (with a note),
-  and mark the invoice paid (cash or card in person). The deposit is applied as a credit **only if it
-  was really paid** (a demo deposit took no money, so the full total is collected), the balance is
-  calculated, any deposit above the final total is shown as a refund due, changing the numbers voids the approval, and **Mark paid stays
-  locked until approval is recorded**.
+- **In the dashboard (booking drawer), two steps with big buttons:** (1) **Appointment:** one tap on
+  "Confirm this time" (the customer is emailed), or "Pick another time" and tap a day and an hour.
+  (2) **Payment**, once the time is confirmed: the total shows in large type with "Change price"
+  (final price and extras) if the job changed, then **Cash** or **Card** records it as paid in one
+  tap (one "are you sure"). Paying marks the job **Done** automatically. There is no customer
+  approval step. The deposit is credited **only if it was really paid** (a demo deposit took no
+  money, so the full total is collected); a deposit above the final total shows as a refund due. A
+  paid invoice is locked.
+- **Stripe automation is not built yet.** Later: a Stripe payment is matched to the booking by
+  customer name/email and amount, and the job is marked Done automatically. Until then Cash / Card
+  are recorded by hand in the drawer.
 - **Website membership plans (draft, owner to confirm):** three monthly plans priced off the table
   above and kept in `detailPricing.membership` (edit in the dashboard, Pricing > Starting prices >
   Memberships). The worth and the saving are worked out from the service prices, never typed in.

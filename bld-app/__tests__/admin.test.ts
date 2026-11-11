@@ -34,7 +34,7 @@ describe('can()', () => {
     for (const a of ['overview', 'confirm', 'done', 'set_day', 'report_add', 'leads']) expect(can('manager', a)).toBe(true);
   });
   it('managers can run the inspection invoice but not edit detail prices', () => {
-    for (const a of ['detail_get', 'invoice_save', 'invoice_approve', 'invoice_pay']) expect(can('manager', a)).toBe(true);
+    for (const a of ['detail_get', 'invoice_save', 'invoice_pay']) expect(can('manager', a)).toBe(true);
     for (const a of ['detail_pricing_get', 'detail_pricing_save']) expect(can('manager', a)).toBe(false);
   });
   it('a price-list edit carries the detail pricing over untouched', () => {

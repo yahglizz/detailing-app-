@@ -276,6 +276,14 @@ booking flow off the public site.
   booking the same visits one at a time (table in the README). Perks are limited to what the
   existing app already does (priority booking by tier, a percent off other services) plus
   "cancel anytime"; the owner confirms them.
+- **Customer approval removed (later the same day).** The dashboard has no approval step, note or
+  `invoice_approve` action, and the invoice has no approval columns. Confirm the time (one tap,
+  or pick another), then record Cash or Card in one tap; payment marks the job **Done**
+  (`detail_invoice_pay` sets the booking to `done`, and builds the invoice from the starting
+  price if the owner never edited it). The brief still says extras must be approved before work
+  begins; that is now the owner's call at the car, with nothing recorded. Stripe matching (by
+  customer and amount, auto-marking Done) is a later job; Cash / Card are manual for now.
+  This supersedes the approval sections above and in the plan.
 - **Joining is by request.** The plan buttons open the existing quote request form. There is no
   membership checkout on the site, and the old Stripe join links ($79 / $99 / $199) are removed
   from the page because they would charge the old prices. The quote request form's service list
