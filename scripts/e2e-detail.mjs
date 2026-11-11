@@ -264,6 +264,7 @@ async function main() {
 // the rest still run. ponytail: needs ~7 more bookings from this IP; the cap is 10/hour (see header).
 const MC = process.env.BLD_TEST_MEMBER_CODE || '';
 const memberBookings = [];
+const raceGuests = []; // 15b bookings (guest + member); member ones are also in memberBookings
 let failedSteps = 0;
 
 const car = (service, vehicleType) => ({ year: '2021', make: 'Cadillac', vehicleType, service, condition: 'moderate', petHair: false });
@@ -338,7 +339,7 @@ async function extra() {
   });
 
   if (!MC) {
-    for (const n of ['14. member visit covered', '15. bump race', '16. confirmed is not bumpable', '17. release frees visit',
+    for (const n of ['14. member visit covered', '15. bump race', '15b. concurrent reserve race', '15c. last-visit race', '16. confirmed is not bumpable', '17. release frees visit',
       '18. balance deposit', '19. invoice pay balance', '20. stamps awarded']) skip(n);
     return;
   }
@@ -383,6 +384,67 @@ async function extra() {
     assert(dg.body.bump?.from === p.slot, `bump note: ${JSON.stringify(dg.body.bump)}`);
     await release(m); // give the member's visit back
     return `guest ${p.slot} -> ${after.body.slot}, dashboard bump.from ${dg.body.bump.from}`;
+  });
+
+  const badBody = (r) => r.status >= 500 || /23505|booking_insert_failed/.test(JSON.stringify(r.body));
+
+  await step('15b. concurrent reserve race', async () => {
+    const p = await pickSlot();
+    const cars = [car('exterior', 'sedan')];
+    const [g, m] = await Promise.all([
+      guestReserve(cars, { email: emailOf('race-g'), day: p.day, slot: p.slot }),
+      memberReserve(cars, { day: p.day, slot: p.slot }),
+    ]);
+    const all = [['guest', g], ['member', m]];
+    try {
+      for (const [who, r] of all) {
+        assert(!badBody(r), `${who} got 5xx/23505/booking_insert_failed: ${r.status} ${JSON.stringify(r.body).slice(0, 300)}`);
+        assert(r.status === 200 || (r.status === 409 && r.body.error === 'slot_taken'), `${who}: ${r.status} ${JSON.stringify(r.body).slice(0, 300)}`);
+      }
+      let holders = 0;
+      const notes = [];
+      for (const [who, r] of all) {
+        if (r.status !== 200) { notes.push(`${who} 409 slot_taken`); continue; }
+        raceGuests.push(r.body.bookingId);
+        const dg = await owner('detail_get', { id: r.body.bookingId });
+        assert(dg.status === 200, `detail_get ${who}: ${dg.status}`);
+        const bk = await owner('booking', { id: r.body.bookingId });
+        const slot = bk.body.slot ?? null;
+        if (slot === p.slot) holders++;
+        notes.push(`${who} slot ${slot ?? 'escalated(null)'}`);
+      }
+      assert(holders === 1, `${holders} bookings hold slot ${p.slot}, expected exactly 1 (${notes.join('; ')})`);
+      const av = await detail('availability', { day: p.day });
+      assert(av.body.taken.includes(p.slot), `availability does not show slot ${p.slot} taken`);
+      return notes.join('; ');
+    } finally {
+      for (const [, r] of all) if (r.status === 200) await release(r);
+    }
+  });
+
+  await step('15c. two member reserves, last included visit', async () => {
+    const q0 = await memberQuote([car('exterior', 'sedan')]);
+    const left = q0.member.visitsLeft || {};
+    const svc = Object.keys(left).find((s) => left[s] === 1);
+    if (!svc) return `SKIPPED: no service has exactly 1 included visit left (visitsLeft=${JSON.stringify(left)})`;
+    const cars = [car(svc, 'sedan')];
+    const [p1, p2] = [await pickSlot(), await pickSlot()];
+    const [a, b] = await Promise.all([
+      memberReserve(cars, { day: p1.day, slot: p1.slot, expectedTotal: 0 }),
+      memberReserve(cars, { day: p2.day, slot: p2.slot, expectedTotal: 0 }),
+    ]);
+    try {
+      for (const r of [a, b]) assert(!badBody(r), `5xx/23505: ${r.status} ${JSON.stringify(r.body).slice(0, 300)}`);
+      const ok = [a, b].filter((r) => r.status === 200);
+      const lost = [a, b].filter((r) => r.status !== 200);
+      assert(ok.length <= 1, `${ok.length} reserves took the last ${svc} visit`);
+      assert(ok.length === 1 && ok[0].body.quote.payable === 0, `winner: ${JSON.stringify(ok.map((r) => r.body.quote))}`);
+      assert(lost[0].status === 409 && lost[0].body.error === 'price_changed' && lost[0].body.quote,
+        `loser: ${lost[0].status} ${JSON.stringify(lost[0].body).slice(0, 300)}`);
+      return `${svc}: one payable 0, other 409 price_changed with quote`;
+    } finally {
+      for (const r of [a, b]) if (r.status === 200) await release(r);
+    }
   });
 
   await step('16. confirmed is not bumpable', async () => {
@@ -466,6 +528,7 @@ async function extra() {
   const end = await profile();
   console.log(`END STATE member ${MC}: stamps=${end.stamps} wallet=${end.wallet} (start was stamps=${start.stamps} wallet=${start.wallet})`);
   console.log(`member booking ids (delete by id, the prefix cleanup misses them): ${memberBookings.join(', ') || 'none'}`);
+  console.log(`race step booking ids (15b): ${raceGuests.join(', ') || 'none'}`);
 }
 
 let failed = false;
