@@ -55,6 +55,7 @@ const owner = (action, payload = {}) => post('admin', { 'x-staff-code': OWNER },
 const setup = (action, payload = {}) => post('e2e-setup', {}, { token: OWNER, action, ...payload });
 
 const stamp = Date.now();
+const runStart = new Date(stamp - 60_000).toISOString(); // member-reset removes test credits made after this
 const prefix = `e2e-detail-${stamp}`;
 const emailOf = (tag) => `${prefix}-${tag}@bldtest.co`;
 const cleanup = [];
@@ -555,6 +556,10 @@ try {
 } finally {
   console.log('\n--- cleanup ---');
   for (const fn of cleanup.reverse()) { try { await fn(); } catch (e) { console.error(`cleanup step failed: ${e.message}`); } }
+  if (MC) {
+    const r = await setup('member-reset', { code: MC, bookingIds: memberBookings, since: runStart });
+    console.log(r.status === 200 && r.body.ok ? `member reset (${r.body.bookings} bookings, ${r.body.testCredits} test credits)` : `member reset failed: ${r.status} ${JSON.stringify(r.body)}`);
+  }
   const c = await setup('cleanup', { emailLike: prefix });
   console.log(c.status === 200 && c.body.ok ? `removed test data (${c.body.bookings ?? 0} bookings)` : `cleanup failed: ${c.status} ${JSON.stringify(c.body)}`);
 }

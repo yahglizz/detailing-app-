@@ -109,5 +109,33 @@ Deno.serve(async (req) => {
     return Response.json({ ok: true, deleted: { customers: ids.length, bookings, members, users } });
   }
 
+  if (action === 'member-reset') {
+    // Undo an E2E run on the is_test member: its listed bookings (with their ledger rows, so
+    // visits, balance and stamps come back) plus the 'test credit' top-ups made since `since`.
+    // Test members only, and only bookings that belong to that member's customer.
+    const code = String(body.code ?? '').trim().toUpperCase();
+    const since = String(body.since ?? '');
+    const wanted = Array.isArray(body.bookingIds) ? body.bookingIds.map(String) : [];
+    if (!code || Number.isNaN(Date.parse(since))) return Response.json({ error: 'code+since required' }, { status: 400 });
+    const { data: m } = await db.from('memberships').select('customer_id, is_test').eq('code', code).maybeSingle();
+    if (!m?.is_test) return Response.json({ error: 'test members only' }, { status: 400 });
+    const { data: bk } = wanted.length
+      ? await db.from('bookings').select('id').in('id', wanted).eq('customer_id', m.customer_id)
+      : { data: [] };
+    const ids = (bk ?? []).map((b) => b.id);
+    if (ids.length) {
+      for (const t of ['payments', 'customer_reports', 'reward_ledger', 'redemptions', 'credit_ledger', 'wallet_ledger']) {
+        const { error } = await db.from(t).delete().in('booking_id', ids);
+        if (error) return Response.json({ error: `${t}: ${error.message}` }, { status: 500 });
+      }
+      const { error } = await db.from('bookings').delete().in('id', ids);
+      if (error) return Response.json({ error: `bookings: ${error.message}` }, { status: 500 });
+    }
+    const { data: credits, error: ce } = await db.from('wallet_ledger').delete()
+      .eq('customer_id', m.customer_id).eq('reason', 'test credit').is('booking_id', null).gte('created_at', since).select('id');
+    if (ce) return Response.json({ error: `wallet_ledger: ${ce.message}` }, { status: 500 });
+    return Response.json({ ok: true, bookings: ids.length, testCredits: credits?.length ?? 0 });
+  }
+
   return Response.json({ error: 'unknown action' }, { status: 400 });
 });
