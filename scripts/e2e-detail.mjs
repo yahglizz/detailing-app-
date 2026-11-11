@@ -250,13 +250,229 @@ async function main() {
     broken.services.full.prices.sedan = 1.5;
     const b = await owner('detail_pricing_save', { detailPricing: broken });
     assert(b.status === 400, `fractional price must be refused, got ${b.status}`);
+    // restore now (cleanup also does): the app-sync steps below assume the stock deposits
+    const back = await owner('detail_pricing_save', { detailPricing: original });
+    assert(back.status === 200, `pricing restore: ${back.status}`);
   }
   pass('12. pricing editor: edit reaches quote; invalid edit refused (400)');
+}
+
+// ——— app-sync steps: several cars, member pricing, VIP bumping, balance deposits, stamps ———
+// Guest rows use the e2e-detail- prefix, so the usual cleanup removes them. Member rows sit on the
+// test member's own customer (the email typed is ignored for a code), so the prefix cleanup does NOT
+// remove them: their ids are printed at the end for a SQL delete. Each step reports on its own and
+// the rest still run. ponytail: needs ~7 more bookings from this IP; the cap is 10/hour (see header).
+const MC = process.env.BLD_TEST_MEMBER_CODE || '';
+const memberBookings = [];
+let failedSteps = 0;
+
+const car = (service, vehicleType) => ({ year: '2021', make: 'Cadillac', vehicleType, service, condition: 'moderate', petHair: false });
+const reserveBody = (cars, over) => ({
+  name: 'E2E TEST Customer', phone: '(302) 555-0148', email: emailOf('g'), street: '1 Test St', zip: '19801',
+  notes: 'E2E TEST', photoExts: [], cars, ...over,
+});
+const guestReserve = (cars, over = {}) => detail('reserve', reserveBody(cars, over));
+const memberReserve = async (cars, over = {}) => {
+  const r = await detail('reserve', reserveBody(cars, { memberCode: MC, email: emailOf('m'), ...over }));
+  if (r.status === 200) memberBookings.push(r.body.bookingId);
+  return r;
+};
+const profile = async () => {
+  const p = await post('member', {}, { code: MC });
+  assert(p.status === 200, `member profile: ${p.status} ${JSON.stringify(p.body).slice(0, 200)}`);
+  return p.body;
+};
+const memberQuote = async (cars) => {
+  const q = await detail('quote', { cars, memberCode: MC });
+  assert(q.status === 200 && q.body.member, `member quote: ${q.status} ${JSON.stringify(q.body).slice(0, 200)}`);
+  return q.body;
+};
+const payDemo = async (r) => {
+  const p = await detail('pay-demo', { bookingId: r.body.bookingId, payKey: r.body.payKey });
+  assert(p.status === 200 && p.body.demo === true, `pay-demo: ${p.status} ${JSON.stringify(p.body)}`);
+};
+const release = (r) => detail('release', { bookingId: r.body.bookingId, payKey: r.body.payKey });
+
+// A free (day, slot) nobody holds, plus the next free slot after it (where a bumped guest lands).
+const usedSlots = new Set();
+async function pickSlot() {
+  const av = await detail('availability', {});
+  assert(av.status === 200, `availability: ${av.status}`);
+  const days = av.body.days.filter((d) => !d.closed && d.booked < d.capacity && d.day > av.body.today).map((d) => d.day);
+  for (const day of days) {
+    const a = await detail('availability', { day });
+    const free = av.body.slots.filter((s) => !a.body.taken.includes(s) && s >= a.body.minSlot && !usedSlots.has(`${day}|${s}`));
+    if (!free.length) continue;
+    usedSlots.add(`${day}|${free[0]}`);
+    return { day, slot: free[0], next: free[1] ?? null };
+  }
+  throw new Error('no free slot in the booking window');
+}
+
+async function step(name, fn) {
+  try {
+    pass(`${name}: ${await fn()}`);
+  } catch (e) {
+    failedSteps++;
+    console.error(`FAIL: ${name}: ${e.message}`);
+  }
+}
+const skip = (name) => console.log(`SKIP: ${name} (set BLD_TEST_MEMBER_CODE to the is_test gold member's code)`);
+
+async function extra() {
+  console.log('\n--- app-sync steps ---');
+  const cfg = await detail('config');
+  assert(cfg.status === 200, `config: ${cfg.status}`);
+
+  await step('13. two-car sum', async () => {
+    const cars = [car('full', 'sedan'), car('premium', 'large')];
+    const q = await detail('quote', { cars });
+    assert(q.status === 200 && q.body.subtotal === 510 && q.body.deposit === 70, `quote: ${JSON.stringify(q.body)}`);
+    const p = await pickSlot();
+    const r = await guestReserve(cars, { email: emailOf('two'), day: p.day, slot: p.slot });
+    assert(r.status === 200 && r.body.quote.subtotal === 510 && r.body.quote.deposit === 70, `reserve: ${r.status} ${JSON.stringify(r.body).slice(0, 300)}`);
+    await payDemo(r);
+    const dg = await owner('detail_get', { id: r.body.bookingId });
+    assert(dg.status === 200 && dg.body.cars.length === 2, `detail_get cars: ${JSON.stringify(dg.body.cars)}`);
+    return 'subtotal 510, deposit 70, detail_get shows 2 cars';
+  });
+
+  if (!MC) {
+    for (const n of ['14. member visit covered', '15. bump race', '16. confirmed is not bumpable', '17. release frees visit',
+      '18. balance deposit', '19. invoice pay balance', '20. stamps awarded']) skip(n);
+    return;
+  }
+
+  // starting state, for the main thread to restore afterwards
+  const start = await profile();
+  console.log(`START STATE member ${MC}: stamps=${start.stamps} wallet=${start.wallet} tier=${start.member.tier} isTest=${start.isTest}`);
+  assert(start.isTest === true, 'BLD_TEST_MEMBER_CODE is not an is_test account; refusing member steps');
+  const tier = start.member.tier;
+  const perCar = cfg.body.membership?.[tier]?.stampsPerCar;
+  assert(Number.isInteger(perCar), `no stampsPerCar for tier ${tier} in config.membership`);
+  console.log(`info: profile plan.visitsLeft=${JSON.stringify(start.plan?.visitsLeft)} (per-service counts are read from the member quote)`);
+
+  await step('14. member visit covered', async () => {
+    const cars = [car('full', 'sedan')];
+    const before = await memberQuote(cars);
+    const left = before.member.visitsLeft?.full ?? 0;
+    const expectPayable = left >= 1 ? 0 : Math.round(175 * 0.8);
+    assert(before.member.payable === expectPayable, `payable ${before.member.payable}, expected ${expectPayable} (full visits left ${left})`);
+    const p = await pickSlot();
+    const r = await memberReserve(cars, { day: p.day, slot: p.slot, expectedTotal: expectPayable });
+    assert(r.status === 200 && r.body.quote.payable === expectPayable, `reserve: ${r.status} ${JSON.stringify(r.body).slice(0, 300)}`);
+    await payDemo(r);
+    const after = await memberQuote(cars);
+    const now = after.member.visitsLeft?.full ?? 0;
+    assert(now === Math.max(0, left - 1), `full visits left ${left} -> ${now}, expected ${Math.max(0, left - 1)}`);
+    return `payable ${expectPayable}; full visits left ${left} -> ${now}`;
+  });
+
+  await step('15. bump race', async () => {
+    const p = await pickSlot();
+    const g = await guestReserve([car('full', 'sedan')], { email: emailOf('bump-g'), day: p.day, slot: p.slot });
+    assert(g.status === 200, `guest reserve: ${g.status} ${JSON.stringify(g.body)}`);
+    await payDemo(g);
+    const gb = await owner('booking', { id: g.body.bookingId });
+    assert(gb.body.status === 'requested' && gb.body.slot === p.slot, `guest before: ${JSON.stringify(gb.body).slice(0, 200)}`);
+    const m = await memberReserve([car('exterior', 'sedan')], { day: p.day, slot: p.slot });
+    assert(m.status === 200 && !m.body.escalated, `member reserve: ${m.status} ${JSON.stringify(m.body).slice(0, 300)}`);
+    const after = await owner('booking', { id: g.body.bookingId });
+    assert(after.body.slot === p.next, `guest slot ${p.slot} -> ${after.body.slot}, expected ${p.next}`);
+    const dg = await owner('detail_get', { id: g.body.bookingId });
+    assert(dg.body.bump?.from === p.slot, `bump note: ${JSON.stringify(dg.body.bump)}`);
+    await release(m); // give the member's visit back
+    return `guest ${p.slot} -> ${after.body.slot}, dashboard bump.from ${dg.body.bump.from}`;
+  });
+
+  await step('16. confirmed is not bumpable', async () => {
+    const p = await pickSlot();
+    const g = await guestReserve([car('full', 'sedan')], { email: emailOf('conf-g'), day: p.day, slot: p.slot });
+    assert(g.status === 200, `guest reserve: ${g.status} ${JSON.stringify(g.body)}`);
+    await payDemo(g);
+    const c = await owner('confirm', { id: g.body.bookingId, day: p.day, slot: p.slot });
+    assert(c.status === 200, `confirm: ${c.status} ${JSON.stringify(c.body)}`);
+    const m = await memberReserve([car('exterior', 'sedan')], { day: p.day, slot: p.slot });
+    assert(m.status === 409 && m.body.error === 'slot_taken', `member vs confirmed: ${m.status} ${JSON.stringify(m.body)}`);
+    return 'member got 409 slot_taken';
+  });
+
+  await step('17. release frees visit', async () => {
+    const cars = [car('exterior', 'sedan')];
+    const a = (await memberQuote(cars)).member.visitsLeft?.exterior ?? 0;
+    assert(a >= 1, `need an exterior visit left to test, have ${a}`);
+    const p = await pickSlot();
+    const r = await memberReserve(cars, { day: p.day, slot: p.slot });
+    assert(r.status === 200, `reserve: ${r.status} ${JSON.stringify(r.body)}`);
+    const held = (await memberQuote(cars)).member.visitsLeft?.exterior ?? 0;
+    assert(held === a - 1, `exterior visits ${a} -> ${held} while held, expected ${a - 1}`);
+    await release(r);
+    const back = (await memberQuote(cars)).member.visitsLeft?.exterior ?? 0;
+    assert(back === a, `exterior visits after release ${back}, expected ${a}`);
+    return `exterior visits ${a} -> ${held} -> ${back}`;
+  });
+
+  let paidBooking = null; // step 18's booking, paid in 19
+  await step('18. balance deposit', async () => {
+    const top = await post('member', {}, { code: MC, action: 'test_balance' });
+    assert(top.status === 200 && top.body.ok, `test_balance: ${top.status} ${JSON.stringify(top.body)}`);
+    const w0 = (await profile()).wallet;
+    const p = await pickSlot();
+    const cars = [car('premium', 'sedan')]; // not a plan visit, so there is a deposit to take
+    const r = await memberReserve(cars, { day: p.day, slot: p.slot, useBalance: true });
+    assert(r.status === 200 && r.body.paidFromBalance === true, `reserve: ${r.status} ${JSON.stringify(r.body).slice(0, 300)}`);
+    const bk = await owner('booking', { id: r.body.bookingId });
+    assert(bk.body.status === 'requested' && bk.body.depositStatus === 'paid' && bk.body.test === true,
+      `booking: status=${bk.body.status} deposit=${bk.body.depositStatus} test=${bk.body.test}`);
+    const dg = await owner('detail_get', { id: r.body.bookingId });
+    assert(dg.body.detail.test === true, `detail.test: ${dg.body.detail.test}`);
+    const w1 = (await profile()).wallet;
+    assert(w1 === w0 - r.body.quote.deposit, `wallet ${w0} -> ${w1}, expected -${r.body.quote.deposit}`);
+    paidBooking = { id: r.body.bookingId, day: p.day, slot: p.slot };
+    return `+$50 test credit; deposit $${r.body.quote.deposit} from balance (wallet ${w0} -> ${w1}); status requested, deposit paid, test true`;
+  });
+
+  let stampsBefore = null;
+  await step('19. invoice pay balance', async () => {
+    assert(paidBooking, 'needs step 18 booking');
+    const c = await owner('confirm', { id: paidBooking.id, day: paidBooking.day, slot: paidBooking.slot });
+    assert(c.status === 200, `confirm: ${c.status} ${JSON.stringify(c.body)}`);
+    const dg = await owner('detail_get', { id: paidBooking.id });
+    const owing = dg.body.invoice.balance;
+    const method = dg.body.wallet >= owing ? 'balance' : 'card';
+    stampsBefore = (await profile()).stamps;
+    const w0 = (await profile()).wallet;
+    const pay = await owner('invoice_pay', { id: paidBooking.id, method });
+    assert(pay.status === 200 && pay.body.ok, `invoice_pay ${method}: ${pay.status} ${JSON.stringify(pay.body)}`);
+    const bk = await owner('booking', { id: paidBooking.id });
+    assert(bk.body.status === 'done', `status after pay: ${bk.body.status}`);
+    if (method === 'balance') {
+      const w1 = (await profile()).wallet;
+      assert(w1 === w0 - owing, `wallet ${w0} -> ${w1}, expected -${owing}`);
+    }
+    paidBooking.stamps = pay.body.stamps;
+    return `paid ${owing} by ${method}; status done`;
+  });
+
+  await step('20. stamps awarded', async () => {
+    assert(paidBooking && stampsBefore !== null, 'needs step 19');
+    const cars = 1;
+    const now = (await profile()).stamps;
+    assert(now === stampsBefore + perCar * cars, `stamps ${stampsBefore} -> ${now}, expected +${perCar * cars}`);
+    assert(paidBooking.stamps === perCar * cars, `invoice_pay reported ${paidBooking.stamps} stamps, expected ${perCar * cars}`);
+    return `stamps ${stampsBefore} -> ${now} (+${perCar} x ${cars} car)`;
+  });
+
+  const end = await profile();
+  console.log(`END STATE member ${MC}: stamps=${end.stamps} wallet=${end.wallet} (start was stamps=${start.stamps} wallet=${start.wallet})`);
+  console.log(`member booking ids (delete by id, the prefix cleanup misses them): ${memberBookings.join(', ') || 'none'}`);
 }
 
 let failed = false;
 try {
   await main();
+  await extra();
+  if (failedSteps) failed = true;
 } catch (e) {
   failed = true;
   console.error(`FAIL: ${e.message}`);
