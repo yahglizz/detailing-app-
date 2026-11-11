@@ -16,6 +16,7 @@
 // The owner gets a "New detail request" email per paid-demo booking (2 per run).
 //
 // Run:  BLD_OWNER_TOKEN=<owner key> node scripts/e2e-detail.mjs
+//       (E2E_PART=core or E2E_PART=app runs one half; the halves together exceed the IP cap)
 // Requires Node 18+. No npm deps. Re-running more than ~4 times in an hour from one
 // network trips the per-IP cap (10 bookings/hour) on purpose.
 
@@ -47,7 +48,7 @@ async function call(url, opts) {
   return { status: res.status, body };
 }
 const post = (fn, headers, payload) => call(`${SUPABASE_URL}/functions/v1/${fn}`, {
-  method: 'POST', headers: { apikey: ANON, 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(payload),
+  method: 'POST', headers: { apikey: ANON, Authorization: `Bearer ${ANON}`, 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(payload),
 });
 const detail = (action, payload = {}) => post('detail', {}, { ...payload, action });
 const owner = (action, payload = {}) => post('admin', { 'x-staff-code': OWNER }, { ...payload, action });
@@ -540,8 +541,10 @@ async function extra() {
 
 let failed = false;
 try {
-  await main();
-  await extra();
+  // E2E_PART=core|app runs one half: a full run makes more bookings than the 10/hour IP cap allows.
+  const part = process.env.E2E_PART || '';
+  if (part !== 'app') await main();
+  if (part !== 'core') await extra();
   if (failedSteps) failed = true;
 } catch (e) {
   failed = true;
