@@ -7,7 +7,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getProvider } from '../_shared/payments/provider.ts';
 import { APP_LINK } from '../_shared/payments/checkout.ts';
 import { functionsBaseUrl } from '../_shared/notify.ts';
-import { topupBonus, type MemberCatalog } from '../_shared/membership.ts';
+import { detailPricingOf } from '../_shared/membership.ts';
 import { clientIp, resolveCode } from '../_shared/codes.ts';
 import { cancelTopup, settleTopup } from '../_shared/wallet.ts';
 
@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
 
   const { data: cat, error: catErr } = await db.from('catalog').select('config').eq('id', 1).single();
   if (catErr) return Response.json({ error: 'catalog_unavailable' }, { status: 500 });
-  const cfg = cat.config as MemberCatalog;
+  const cfg = cat.config as { topup?: { min: number; max: number } };
   const min = cfg.topup?.min ?? 10, max = cfg.topup?.max ?? 500;
   const amount = Number(raw.amount);
   if (!Number.isInteger(amount) || amount < min || amount > max) {
@@ -48,7 +48,8 @@ Deno.serve(async (req) => {
     customerId = acct.customerId;
     const { data: c } = await db.from('customers').select('email').eq('id', customerId).single();
     email = c?.email ?? '';
-    bonus = topupBonus(amount, acct.membership ? cfg.plans[acct.membership.tier] : null);
+    const plan = acct.membership ? detailPricingOf(cat.config).membership[acct.membership.tier] : null;
+    bonus = plan ? Math.round((amount * plan.topupBonusPercent) / 100) : 0;
   } else {
     // Guests never overwrite the name on an existing row.
     const name = String(raw.name ?? '').trim().slice(0, 60);

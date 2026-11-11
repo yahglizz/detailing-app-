@@ -4,9 +4,10 @@
 // and test_tier / test_balance for owner test accounts only.
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import {
-  cleanSettings, computeSavings, monthsActive, REWARD_LABELS,
+  cleanSettings, computeSavings, detailPricingOf, monthsActive, REWARD_LABELS,
   type MemberCatalog, type RewardKey, type SavedCar, type Tier,
 } from '../_shared/membership.ts';
+import { billingMonthStart, type VehicleType } from '../_shared/detail_pricing.ts';
 import { esc, sendEmail, ownerEmail } from '../_shared/notify.ts';
 import { clientIp, resolveCode } from '../_shared/codes.ts';
 import { walletBalance } from '../_shared/wallet.ts';
@@ -14,7 +15,18 @@ import { portalUrl } from '../_shared/stripe_admin.ts';
 import { APP_LINK } from '../_shared/payments/checkout.ts';
 
 const TIERS: Tier[] = ['bronze', 'silver', 'gold'];
-
+const totalVisits = (v: Partial<Record<string, number>>) => Object.values(v).reduce((s: number, n) => s + (n ?? 0), 0);
+const easternToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+// The day after the next anniversary: billingMonthStart(period, tomorrow-ish) is not it,
+// so step forward a month from the current billing month start (clamped to month end).
+function nextAnniversary(periodStart: string, today: string): string {
+  const cur = billingMonthStart(periodStart, today);
+  const want = +String(periodStart).slice(8, 10);
+  const [y, mo] = cur.split('-').map(Number);
+  const ny = mo === 12 ? y + 1 : y, nm = mo === 12 ? 1 : mo + 1;
+  const last = new Date(Date.UTC(ny, nm, 0)).getUTCDate();
+  return `${ny}-${String(nm).padStart(2, '0')}-${String(Math.min(want, last)).padStart(2, '0')}`;
+}
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return new Response('method not allowed', { status: 405 });
   const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
@@ -101,7 +113,7 @@ Deno.serve(async (req) => {
     if (tier !== 'none' && !TIERS.includes(tier)) return Response.json({ error: 'unknown_tier' }, { status: 400 });
     const patch = tier === 'none'
       ? { active: false }
-      : { active: true, tier, plan: tier, credits_per_period: cfg.plans[tier].credits };
+      : { active: true, tier, plan: tier, credits_per_period: totalVisits(detailPricingOf(cat!.config).membership[tier].visits) };
     const { error } = await db.from('memberships').update(patch).eq('code', acct.code).eq('is_test', true);
     return error ? Response.json({ error: 'save_failed' }, { status: 500 }) : Response.json({ ok: true });
   }
@@ -115,6 +127,7 @@ Deno.serve(async (req) => {
   ]);
 
   let credits = 0, stamps = 0, savings = 0, hasBilling = false;
+  let plan: Record<string, unknown> | null = null;
   let issued: { id: string; reward: string }[] = [];
   if (m) {
     const [{ data: creditRows }, { data: stampRows }, { data: iss }, { data: applied }, { data: own }] = await Promise.all([
@@ -125,10 +138,10 @@ Deno.serve(async (req) => {
       // discount matching the server's charge.
       db.from('redemptions').select('id, reward').eq('membership_id', m.id).eq('status', 'issued').order('created_at'),
       db.from('redemptions').select('retail_value').eq('membership_id', m.id),
-      db.from('memberships').select('stripe_customer_id').eq('id', m.id).single(),
+      db.from('memberships').select('stripe_customer_id, vehicle_type').eq('id', m.id).single(),
     ]);
     hasBilling = !!own?.stripe_customer_id;
-    credits = (creditRows ?? []).reduce((s, r) => s + r.delta, 0);
+    void creditRows;
     stamps = (stampRows ?? []).reduce((s, r) => s + r.delta, 0);
     issued = iss ?? [];
     // Dollars saved on every live booking made as this member: retail total minus what
@@ -141,7 +154,26 @@ Deno.serve(async (req) => {
       }, 0);
     const rewardsRetail = (applied ?? []).reduce((s, r) => s + r.retail_value, 0);
     const months = monthsActive(String(m.period_start), new Date().toISOString().slice(0, 10));
-    savings = computeSavings({ creditWashRetail: bookingSavings, rewardsRetail, months, monthlyPrice: cfg.plans[m.tier].price });
+    const pricing = detailPricingOf(cfg);
+    const def = pricing.membership[m.tier];
+    const vehicleType = ((own as { vehicle_type?: string } | null)?.vehicle_type ?? 'sedan') as VehicleType;
+    const monthlyPrice = def.prices[vehicleType] ?? def.prices.sedan;
+    savings = computeSavings({ creditWashRetail: bookingSavings, rewardsRetail, months, monthlyPrice });
+    // Visits used this billing month, off the booking quotes (cancelled/declined give them back).
+    const today = easternToday();
+    const monthStart = billingMonthStart(String(m.period_start), today);
+    const { data: used } = await db.from('bookings').select('quote')
+      .eq('membership_id', m.id).in('status', ['pending_payment', 'requested', 'confirmed', 'done'])
+      .gte('created_at', monthStart);
+    const usedN = (used ?? []).reduce((s: number, b: { quote: { visitsUsed?: number } | null }) => s + (b.quote?.visitsUsed ?? 0), 0);
+    const visits = totalVisits(def.visits);
+    const visitsLeft = Math.max(0, visits - usedN);
+    credits = visitsLeft;
+    plan = {
+      tier: m.tier, vehicleType, monthlyPrice, discountPercent: def.discountPercent,
+      stampsPerCar: def.stampsPerCar, topupBonusPercent: def.topupBonusPercent,
+      visits: def.visits, visitsLeft, periodResetsOn: nextAnniversary(String(m.period_start), today),
+    };
   }
 
   const c = cust as { name: string; email: string; address: string; cars: SavedCar[] };
@@ -151,7 +183,7 @@ Deno.serve(async (req) => {
       address: c.address ?? '', cars: c.cars ?? [],
     },
     wallet, isTest: acct.isTest, hasBilling,
-    credits, stamps, savings,
+    credits, stamps, savings, plan,
     rewardMenu: m ? (Object.keys(cfg.rewards) as RewardKey[]).map((key) => ({ key, label: REWARD_LABELS[key], cost: cfg.rewards[key] })) : [],
     issuedRewards: issued.map((r) => ({ id: r.id, reward: r.reward, label: REWARD_LABELS[r.reward as RewardKey] })),
     history: (history ?? []).map((b) => ({

@@ -134,3 +134,18 @@ test('topupBonus: tier % of the top-up, none for non-members', () => {
   expect(topupBonus(100, null)).toBe(0);
   expect(topupBonus(100, cfg.plans.gold)).toBe(0);
 });
+
+test('cleanSettings maps truck to suv', () => {
+  const r = cleanSettings({ cars: [{ name: 'F-150', size: 'truck' }] });
+  expect(r).toEqual({ ok: true, patch: { cars: [{ name: 'F-150', size: 'suv' }] } });
+});
+
+test('cleanSettings accepts large with year and make', () => {
+  const r = cleanSettings({ cars: [{ name: 'Tahoe', size: 'large', year: '2021', make: 'Chevrolet' }] });
+  expect(r).toEqual({ ok: true, patch: { cars: [{ name: 'Tahoe', size: 'large', year: '2021', make: 'Chevrolet' }] } });
+});
+
+test('cleanSettings rejects bad year', () => {
+  expect(cleanSettings({ cars: [{ name: 'Civic', size: 'sedan', year: '1850' }] })).toEqual({ ok: false, error: 'bad_cars' });
+  expect(cleanSettings({ cars: [{ name: 'Civic', size: 'sedan', year: 'abc' }] })).toEqual({ ok: false, error: 'bad_cars' });
+});

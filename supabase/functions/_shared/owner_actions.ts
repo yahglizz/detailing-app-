@@ -7,7 +7,7 @@ import { refundBooking } from './booking_payment.ts';
 import { restoreMemberBalances } from './member_refund.ts';
 import { formatWhen } from './payments/checkout.ts';
 import { ALL_SLOTS } from './bump.ts';
-import type { MemberCatalog, Tier } from './membership.ts';
+import { detailPricingOf } from './membership.ts';
 
 // deno-lint-ignore no-explicit-any
 type Db = any;
@@ -100,23 +100,34 @@ export async function markDone(
     });
   }
 
-  const { data: b } = await db.from('bookings')
-    .select('id, items, quote, membership_id, customers(email, name)').eq('id', id).single();
-  let stamps = 0;
-  if (b?.membership_id) {
-    const { data: cat } = await db.from('catalog').select('config').eq('id', 1).single();
-    const tier = (b.quote as { tier?: Tier | null }).tier;
-    const perCar = (tier && (cat!.config as MemberCatalog).plans[tier]?.stampsPerCar) || 1;
-    stamps = (b.items as unknown[]).length * perCar;
-    await db.from('reward_ledger').insert({
-      membership_id: b.membership_id, delta: stamps, reason: 'wash completed', booking_id: b.id,
-    });
-    const { data: bal } = await db.from('reward_ledger').select('delta').eq('membership_id', b.membership_id);
-    const total = ((bal ?? []) as { delta: number }[]).reduce((s, r) => s + r.delta, 0);
-    const c = b.customers as { email: string } | null;
-    await sendEmail(c?.email ?? '', `+${stamps} stamp${stamps > 1 ? 's' : ''} earned — you have ${total}`,
-      `<h2 style="color:#A855F7;margin:0 0 12px">Stamp${stamps > 1 ? 's' : ''} earned 🎉</h2>
-       <p>Wash complete — you earned <b>${stamps} stamp${stamps > 1 ? 's' : ''}</b>. You now have <b>${total}</b>. Open the app to redeem rewards.</p>`);
-  }
+  const stamps = await awardStamps(db, id);
   return { ok: true, stamps };
+}
+
+// Stamps for a finished job: cars x the member's tier stampsPerCar. Safe to call twice:
+// a booking that already has its 'wash completed' row earns nothing more.
+export async function awardStamps(db: Db, bookingId: string): Promise<number> {
+  const { data: b } = await db.from('bookings')
+    .select('id, items, detail, membership_id, customers(email)').eq('id', bookingId).maybeSingle();
+  if (!b?.membership_id) return 0;
+  const { data: done } = await db.from('reward_ledger').select('id')
+    .eq('booking_id', b.id).eq('reason', 'wash completed').limit(1);
+  if (done?.length) return 0;
+  const { data: mem } = await db.from('memberships').select('tier').eq('id', b.membership_id).maybeSingle();
+  if (!mem?.tier) return 0;
+  const { data: cat } = await db.from('catalog').select('config').eq('id', 1).single();
+  const perCar = detailPricingOf(cat?.config).membership[mem.tier as 'bronze' | 'silver' | 'gold']?.stampsPerCar ?? 1;
+  const cars = (b.detail as { cars?: unknown[] } | null)?.cars?.length
+    || (Array.isArray(b.items) ? b.items.length : 0) || 1;
+  const stamps = cars * perCar;
+  await db.from('reward_ledger').insert({
+    membership_id: b.membership_id, delta: stamps, reason: 'wash completed', booking_id: b.id,
+  });
+  const { data: bal } = await db.from('reward_ledger').select('delta').eq('membership_id', b.membership_id);
+  const total = ((bal ?? []) as { delta: number }[]).reduce((s, r) => s + r.delta, 0);
+  const c = b.customers as { email: string } | null;
+  await sendEmail(c?.email ?? '', `+${stamps} stamp${stamps > 1 ? 's' : ''} earned — you have ${total}`,
+    `<h2 style="color:#A855F7;margin:0 0 12px">Stamp${stamps > 1 ? 's' : ''} earned 🎉</h2>
+     <p>Wash complete — you earned <b>${stamps} stamp${stamps > 1 ? 's' : ''}</b>. You now have <b>${total}</b>. Open the app to redeem rewards.</p>`);
+  return stamps;
 }

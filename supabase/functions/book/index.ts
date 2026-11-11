@@ -46,6 +46,9 @@ Deno.serve(async (req) => {
   }
   if (!raw || typeof raw !== 'object') return Response.json({ error: 'bad_json' }, { status: 400 });
   if (raw.action === 'settle') return settle(admin, raw);
+  // Old app builds reserve here; the new flow is the detail function.
+  // ponytail: the old reserve body below is dead code now; delete it once old apps are gone.
+  if (raw.action !== 'settle') return Response.json({ error: 'app_update_required' }, { status: 410 });
   const body = raw as unknown as BookBody;
 
   const address = String(body.address ?? '').trim();

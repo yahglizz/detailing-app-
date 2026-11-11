@@ -1,5 +1,6 @@
 // Pure membership logic — no Deno APIs so jest can run it (same pattern as pricing.ts).
 import type { CatalogConfig, Quote, Service, Size } from './pricing.ts';
+import { DEFAULT_DETAIL_PRICING, validateDetailPricing, type DetailPricing } from './detail_pricing.ts';
 
 export type Tier = 'bronze' | 'silver' | 'gold';
 export type RewardKey = 'tireShine' | 'miniSpray' | 'percent25' | 'freeWash';
@@ -113,9 +114,15 @@ export function computeSavings(i: { creditWashRetail: number; rewardsRetail: num
 }
 
 // ——— member settings (Settings screen: MY INFO + MY CARS) ———
-export interface SavedCar { name: string; size: Size }
+export interface SavedCar { name: string; size: 'sedan' | 'suv' | 'large'; year?: string; make?: string }
 export interface MemberSettings { name?: string; address?: string; cars?: SavedCar[] }
-const CAR_SIZES: Size[] = ['sedan', 'suv', 'truck'];
+const CAR_SIZES = ['sedan', 'suv', 'large', 'truck'];
+
+// The plan config (catalog.config.detailPricing); defaults fill anything missing or invalid.
+export function detailPricingOf(catalogConfig: unknown): DetailPricing {
+  const r = validateDetailPricing((catalogConfig as { detailPricing?: unknown } | null)?.detailPricing);
+  return r.ok ? r.value : DEFAULT_DETAIL_PRICING;
+}
 
 // Validates a partial settings update from the app; only the fields sent are changed.
 export function cleanSettings(raw: unknown): { ok: true; patch: MemberSettings } | { ok: false; error: string } {
@@ -136,8 +143,18 @@ export function cleanSettings(raw: unknown): { ok: true; patch: MemberSettings }
     const cars: SavedCar[] = [];
     for (const c of r.cars as Record<string, unknown>[]) {
       const name = typeof c?.name === 'string' ? c.name.trim() : '';
-      if (!name || name.length > 40 || !CAR_SIZES.includes(c.size as Size)) return { ok: false, error: 'bad_cars' };
-      cars.push({ name, size: c.size as Size });
+      if (!name || name.length > 40 || !CAR_SIZES.includes(c.size as string)) return { ok: false, error: 'bad_cars' };
+      const car: SavedCar = { name, size: c.size === 'truck' ? 'suv' : (c.size as SavedCar['size']) };
+      if (c.year !== undefined && c.year !== '') {
+        if (typeof c.year !== 'string' || !/^(19|20)\d{2}$/.test(c.year)) return { ok: false, error: 'bad_cars' };
+        car.year = c.year;
+      }
+      if (c.make !== undefined && c.make !== '') {
+        const make = typeof c.make === 'string' ? c.make.trim() : '';
+        if (!make || make.length > 40) return { ok: false, error: 'bad_cars' };
+        car.make = make;
+      }
+      cars.push(car);
     }
     patch.cars = cars;
   }

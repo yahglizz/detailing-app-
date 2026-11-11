@@ -15,7 +15,7 @@
 //  - Failures are tagged retryable vs permanent so the webhook can 500 (Stripe retries)
 //    only for transient faults, and 200-ack permanent bad data (unknown tier, constraint
 //    violations) so Stripe stops retrying and never risks auto-disabling the endpoint.
-import { type MemberCatalog, type Tier } from './membership.ts';
+import { detailPricingOf, type Tier } from './membership.ts';
 import { freshCode } from './codes.ts';
 import { sendEmail } from './notify.ts';
 
@@ -46,9 +46,12 @@ export async function provisionMember(admin: Admin, input: ProvisionInput): Prom
 
   const { data: cat, error: catErr } = await admin.from('catalog').select('config').eq('id', 1).single();
   if (catErr) return { ok: false, error: 'catalog fetch failed: ' + catErr.message, retryable: true };
-  const cfg = cat?.config as MemberCatalog | undefined;
-  const plan = cfg?.plans?.[tier];
+  const pricing = detailPricingOf(cat?.config);
+  const plan = pricing.membership[tier];
   if (!plan) return { ok: false, error: `unknown tier: ${tier}`, retryable: false }; // permanent — don't retry
+  const visits = Object.entries(plan.visits).filter(([, n]) => (n ?? 0) > 0) as [keyof typeof pricing.services, number][];
+  const credits = visits.reduce((s, [, n]) => s + n, 0);
+  const included = visits.map(([k, n]) => `${n} × ${pricing.services[k]?.name ?? k}`).join(', ');
 
   // Resolve the membership: either it already exists for this subscription (idempotent
   // replay / race loser), or we create it fresh.
@@ -81,7 +84,7 @@ export async function provisionMember(admin: Admin, input: ProvisionInput): Prom
     for (let i = 0; i < 6; i++) {
       const { data: inserted, error } = await admin.from('memberships').insert({
         customer_id: customerId, plan: tier, tier, code,
-        credits_per_period: plan.credits, period_start: new Date().toISOString().slice(0, 10),
+        credits_per_period: credits, period_start: new Date().toISOString().slice(0, 10),
         stripe_customer_id: input.stripeCustomerId ?? null,
         stripe_subscription_id: subId,
       }).select('id').single();
@@ -107,7 +110,7 @@ export async function provisionMember(admin: Admin, input: ProvisionInput): Prom
   // Initial credits — idempotent via the partial-unique index (migration 0009). We attempt
   // this on EVERY call (create OR replay) so a membership whose grant failed once heals.
   const { error: grantErr } = await admin.from('credit_ledger')
-    .insert({ membership_id: membershipId, delta: plan.credits, reason: 'initial grant' });
+    .insert({ membership_id: membershipId, delta: credits, reason: 'initial grant' });
   let grantedNow = false;
   if (!grantErr) grantedNow = true;
   else if (grantErr.code === '23505') grantedNow = false; // already granted before — fine
@@ -119,11 +122,11 @@ export async function provisionMember(admin: Admin, input: ProvisionInput): Prom
   if (grantedNow) {
     await sendEmail(email, 'Welcome to the Brotherhood — your member code inside',
       `<h2 style="color:#A855F7;margin:0 0 12px">Welcome${name ? `, ${esc(name)}` : ''}!</h2>
-       <p>Your <b>${tier.toUpperCase()}</b> membership is live: ${plan.credits} ${plan.service} details every month, priority booking, and rewards on every wash.</p>
+       <p>Your <b>${tier.toUpperCase()}</b> membership is live: ${esc(included)} every month, priority booking, and rewards on every wash.</p>
        <p>Your member code:</p>
        <p style="font-family:monospace;font-size:28px;color:#F5B942;letter-spacing:3px">${code}</p>
        <p style="color:#A9A4AF">Open the BLD app → "Log in with your code" → enter it once.</p>`);
   }
 
-  return { ok: true, code, membershipId, credits: plan.credits, service: plan.service, created };
+  return { ok: true, code, membershipId, credits, service: included, created };
 }
