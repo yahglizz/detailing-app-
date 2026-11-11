@@ -155,7 +155,7 @@ Deno.serve(async (req) => {
         return s + ((q.subtotal ?? q.total) - (q.payable ?? q.total));
       }, 0);
     const rewardsRetail = (applied ?? []).reduce((s, r) => s + r.retail_value, 0);
-    const months = monthsActive(String(m.period_start), new Date().toISOString().slice(0, 10));
+    const months = monthsActive(m.anchor, new Date().toISOString().slice(0, 10));
     const pricing = detailPricingOf(cfg);
     const def = pricing.membership[m.tier];
     const vehicleType = ((own as { vehicle_type?: string } | null)?.vehicle_type ?? 'sedan') as VehicleType;
@@ -163,7 +163,7 @@ Deno.serve(async (req) => {
     savings = computeSavings({ creditWashRetail: bookingSavings, rewardsRetail, months, monthlyPrice });
     // Visits used this billing month, off the booking quotes (cancelled/declined give them back).
     const today = easternToday();
-    const monthStart = billingMonthStart(String(m.period_start), today);
+    const monthStart = billingMonthStart(m.anchor, today);
     const { data: used } = await db.from('bookings').select('quote')
       .eq('membership_id', m.id).in('status', ['pending_payment', 'requested', 'confirmed', 'done'])
       .gte('created_at', easternMidnight(monthStart)); // 00:00 Eastern, as detail counts it
@@ -178,7 +178,7 @@ Deno.serve(async (req) => {
     plan = {
       tier: m.tier, vehicleType, monthlyPrice, discountPercent: def.discountPercent,
       stampsPerCar: def.stampsPerCar, topupBonusPercent: def.topupBonusPercent,
-      visits: def.visits, visitsLeft, periodResetsOn: nextAnniversary(String(m.period_start), today),
+      visits: def.visits, visitsLeft, periodResetsOn: nextAnniversary(m.anchor, today),
     };
   }
 

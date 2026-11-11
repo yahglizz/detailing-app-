@@ -106,7 +106,7 @@ async function memberOf(acct: Account, cfg: DetailPricing): Promise<Member | nul
   const m = acct.membership;
   if (!m) return null; // a balance-only account: guest prices, rank 0
   // the billing month starts at 00:00 Eastern on the anniversary day
-  const periodStart = easternMidnight(billingMonthStart(String(m.period_start), todayISO()));
+  const periodStart = easternMidnight(billingMonthStart(m.anchor, todayISO()));
   const [own, used, rew] = await Promise.all([
     db.from('memberships').select('vehicle_type').eq('id', m.id).single(),
     db.from('bookings').select('quote').eq('membership_id', m.id).in('status', LIVE)

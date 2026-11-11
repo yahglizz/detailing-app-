@@ -26,7 +26,9 @@ export function clientIp(req: Request): string {
 export interface Account {
   code: string;
   customerId: string;
-  membership: { id: string; tier: Tier; period_start: string } | null; // an ACTIVE one, or null
+  // an ACTIVE one, or null. anchor = the signup day (YYYY-MM-DD, UTC like sweep's grants): the
+  // fixed billing anchor. period_start is moved forward (and clamped) by sweep every month.
+  membership: { id: string; tier: Tier; period_start: string; anchor: string } | null;
   isTest: boolean; // an owner test account (tier switcher)
 }
 
@@ -49,10 +51,10 @@ export async function resolveCode(db: Db, raw: unknown, ip: string): Promise<Acc
 
   const code = String(raw ?? '').trim().toUpperCase();
   let customerId: string | null = null;
-  let own: { id: string; tier: Tier; active: boolean; period_start: string; is_test: boolean } | null = null;
+  let own: { id: string; tier: Tier; active: boolean; period_start: string; created_at: string; is_test: boolean } | null = null;
   if (CODE_RE.test(code)) {
     const { data: m } = await db.from('memberships')
-      .select('id, tier, active, period_start, customer_id, is_test').eq('code', code).maybeSingle();
+      .select('id, tier, active, period_start, created_at, customer_id, is_test').eq('code', code).maybeSingle();
     if (m) {
       own = m;
       customerId = m.customer_id;
@@ -69,15 +71,18 @@ export async function resolveCode(db: Db, raw: unknown, ip: string): Promise<Acc
   // The code's own membership if it's active, else any active one the customer holds (a
   // lapsed member who re-joined, or an account whose owner joined later). No active
   // membership = a plain balance account: the code still opens the balance.
-  let active: { id: string; tier: Tier; period_start: string } | null = own?.active ? own : null;
+  let active: { id: string; tier: Tier; period_start: string; created_at: string } | null = own?.active ? own : null;
   if (!active) {
-    const { data: m } = await db.from('memberships').select('id, tier, period_start')
+    const { data: m } = await db.from('memberships').select('id, tier, period_start, created_at')
       .eq('customer_id', customerId).eq('active', true).order('created_at', { ascending: false }).limit(1);
     active = m?.[0] ?? null;
   }
   return {
     code, customerId, isTest: !!own?.is_test,
-    membership: active && { id: active.id, tier: active.tier, period_start: active.period_start },
+    membership: active && {
+      id: active.id, tier: active.tier, period_start: active.period_start,
+      anchor: new Date(String(active.created_at)).toISOString().slice(0, 10),
+    },
   };
 }
 
