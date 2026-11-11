@@ -25,9 +25,7 @@ test('a valid body passes and is trimmed / normalised', () => {
   if (!r.ok) return;
   expect(r.value.name).toBe('Jordan Lee');
   expect(r.value.email).toBe('jordan@example.com');
-  expect(r.value.vehicleType).toBe('large');
-  expect(r.value.petHair).toBe(true);
-  expect(r.value.vehicle).toEqual({ year: '2021', make: 'Cadillac' });
+  expect(r.value.cars).toEqual([{ year: '2021', make: 'Cadillac', vehicleType: 'large', service: 'full', condition: 'moderate', petHair: true }]);
 });
 
 test.each(['name', 'phone', 'email', 'vehicle', 'street', 'zip', 'day', 'slot'])('missing %s', (k) => {
@@ -96,7 +94,7 @@ test('only year and brand are asked: no model, water or power needed, and extras
   const r = validateReserve({ ...good(), vehicle: { year: '2021', make: 'Toyota', model: 'Camry' }, water: false, power: false }, CFG, TODAY);
   expect(r.ok).toBe(true);
   if (!r.ok) return;
-  expect(r.value.vehicle).toEqual({ year: '2021', make: 'Toyota' });
+  expect(r.value.cars[0]).toEqual({ year: '2021', make: 'Toyota', vehicleType: 'large', service: 'full', condition: 'moderate', petHair: true });
   expect('water' in r.value).toBe(false);
   expect('power' in r.value).toBe(false);
   expect((validateReserve({ ...good(), vehicle: { year: '2021' } }, CFG, TODAY) as any).error).toBe('missing_fields');
@@ -120,4 +118,68 @@ test('long text is capped', () => {
 test('non-object body', () => {
   expect(validateReserve(null, CFG, TODAY).ok).toBe(false);
   expect(validateReserve('x', CFG, TODAY).ok).toBe(false);
+});
+
+const car = (over: object = {}) => ({ year: '2020', make: 'Honda', vehicleType: 'sedan', service: 'full', condition: 'light', petHair: false, ...over });
+const multi = (cars: unknown[], over: object = {}) => {
+  const { vehicle, vehicleType, service, condition, petHair, ...rest } = good() as any;
+  return { ...rest, cars, ...over };
+};
+const err = (b: unknown) => { const r = validateReserve(b, CFG, TODAY); return r.ok ? 'ok' : r.error; };
+
+test('accepts cars array of 2', () => {
+  const r = validateReserve(multi([car(), car({ make: 'Ford', service: 'deep' })]), CFG, TODAY);
+  expect(r.ok).toBe(true);
+  if (!r.ok) return;
+  expect(r.value.cars).toHaveLength(2);
+  expect(r.value.cars[1].make).toBe('Ford');
+});
+
+test('legacy single-car body maps to cars[0]', () => {
+  const r = validateReserve(good(), CFG, TODAY);
+  expect(r.ok && r.value.cars.length).toBe(1);
+});
+
+test('rejects 7 cars and empty list with bad_cars', () => {
+  expect(err(multi(Array.from({ length: 7 }, () => car())))).toBe('bad_cars');
+  expect(err(multi([]))).toBe('bad_cars');
+  expect(err(multi(Array.from({ length: 6 }, () => car())))).toBe('ok');
+});
+
+test('bad condition in car 2 -> bad_condition', () => {
+  expect(err(multi([car(), car({ condition: 'filthy' })]))).toBe('bad_condition');
+});
+
+test('per-car errors keep their codes', () => {
+  expect(err(multi([car({ service: 'x' })]))).toBe('bad_service');
+  expect(err(multi([car({ vehicleType: 'truck' })]))).toBe('bad_vehicle_type');
+  expect(err(multi([car({ year: '1850' })]))).toBe('bad_vehicle');
+  expect(err(multi([car({ make: '' })]))).toBe('missing_fields');
+  expect(err(multi([car({ petHair: 'yes' })]))).toBe('bad_answer');
+});
+
+test('memberCode uppercased, trimmed, capped, empty -> null', () => {
+  const v = (memberCode: unknown) => { const r = validateReserve({ ...good(), memberCode }, CFG, TODAY); return r.ok ? r.value.memberCode : 'fail'; };
+  expect(v('  bld-ab12 ')).toBe('BLD-AB12');
+  expect(v('x'.repeat(30))).toBe('X'.repeat(20));
+  expect(v('  ')).toBeNull();
+  expect(v(undefined)).toBeNull();
+});
+
+test('useBalance defaults false, true only for literal true', () => {
+  const u = (useBalance: unknown) => { const r = validateReserve({ ...good(), useBalance }, CFG, TODAY); return r.ok && r.value.useBalance; };
+  expect(u(undefined)).toBe(false);
+  expect(u('true')).toBe(false);
+  expect(u(1)).toBe(false);
+  expect(u(true)).toBe(true);
+});
+
+test('expectedTotal optional: non-negative integer or null', () => {
+  const e = (expectedTotal: unknown) => { const r = validateReserve({ ...good(), expectedTotal }, CFG, TODAY); return r.ok ? r.value.expectedTotal : 'fail'; };
+  expect(e(undefined)).toBeNull();
+  expect(e(150)).toBe(150);
+  expect(e(0)).toBe(0);
+  expect(e(-1)).toBeNull();
+  expect(e(10.5)).toBeNull();
+  expect(e('150')).toBeNull();
 });

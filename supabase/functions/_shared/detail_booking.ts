@@ -8,15 +8,25 @@ export const PHOTO_EXTS = ['jpg', 'jpeg', 'png', 'heic', 'webp'] as const;
 export const MAX_PHOTOS = 4;
 export const CONDITIONS = ['light', 'moderate', 'heavy'] as const;
 
-export interface ReserveInput {
-  name: string;
-  phone: string;
-  email: string;
-  vehicle: { year: string; make: string };
+export const MAX_CARS = 6;
+
+export interface ReserveCar {
+  year: string;
+  make: string;
   vehicleType: VehicleType;
   service: DetailService;
   condition: typeof CONDITIONS[number];
   petHair: boolean;
+}
+
+export interface ReserveInput {
+  name: string;
+  phone: string;
+  email: string;
+  cars: ReserveCar[];
+  memberCode: string | null;
+  useBalance: boolean;
+  expectedTotal: number | null;
   day: string;
   slot: string;
   street: string;
@@ -56,25 +66,32 @@ export function validateReserve(body: unknown, cfg: DetailPricing, today: string
   const zip = str(b.zip, 10);
   const day = str(b.day, 10);
   const slot = str(b.slot, 5);
-  const year = str(b.vehicle?.year, 4);
-  const make = str(b.vehicle?.make, 40);
-  if (!name || !phone || !email || !street || !zip || !day || !slot || !year || !make) {
-    return fail('missing_fields');
-  }
+  if (!name || !phone || !email || !street || !zip || !day || !slot) return fail('missing_fields');
 
-  if (!isService(b.service)) return fail('bad_service');
-  if (!isVehicle(b.vehicleType)) return fail('bad_vehicle_type');
-  if (!(CONDITIONS as readonly string[]).includes(b.condition)) return fail('bad_condition');
+  // Legacy body (top-level vehicle/service/...) with no `cars` becomes a one-car list.
+  const raw: unknown = b.cars === undefined
+    ? [{ ...b.vehicle, vehicleType: b.vehicleType, service: b.service, condition: b.condition, petHair: b.petHair }]
+    : b.cars;
+  if (!Array.isArray(raw) || raw.length < 1 || raw.length > MAX_CARS) return fail('bad_cars');
+  const cars: ReserveCar[] = [];
+  for (const c of raw) {
+    const o = (c && typeof c === 'object' ? c : {}) as Record<string, any>;
+    const year = str(o.year, 4);
+    const make = str(o.make, 40);
+    if (!year || !make) return fail('missing_fields');
+    if (!isService(o.service)) return fail('bad_service');
+    if (!isVehicle(o.vehicleType)) return fail('bad_vehicle_type');
+    if (!(CONDITIONS as readonly string[]).includes(o.condition)) return fail('bad_condition');
+    if (!/^(19|20)\d{2}$/.test(year)) return fail('bad_vehicle');
+    if (typeof o.petHair !== 'boolean') return fail('bad_answer');
+    cars.push({ year, make, vehicleType: o.vehicleType, service: o.service, condition: o.condition, petHair: o.petHair });
+  }
   if (!EMAIL.test(email)) return fail('bad_email');
   const digits = phone.replace(/\D/g, '');
   if (digits.length < 10 || digits.length > 15) return fail('bad_phone');
-  if (!/^(19|20)\d{2}$/.test(year)) return fail('bad_vehicle');
   if (!validDay(day) || day < today || day > addDays(today, cfg.bookingWindowDays)) return fail('bad_day');
   if (!ALL_SLOTS.includes(slot) || (opts.minSlot && day === today && slot < opts.minSlot)) return fail('bad_slot');
   if (!/^\d{5}$/.test(zip)) return fail('bad_zip');
-  if (typeof b.petHair !== 'boolean') {
-    return fail('bad_answer');
-  }
 
   const exts: unknown[] = b.photoExts === undefined ? [] : b.photoExts;
   if (!Array.isArray(exts) || exts.length > MAX_PHOTOS) return fail('bad_photos');
@@ -85,9 +102,10 @@ export function validateReserve(body: unknown, cfg: DetailPricing, today: string
     ok: true,
     value: {
       name, phone, email, street, zip, day, slot,
-      vehicle: { year, make },
-      vehicleType: b.vehicleType, service: b.service, condition: b.condition,
-      petHair: b.petHair,
+      cars,
+      memberCode: str(b.memberCode, 20).toUpperCase() || null,
+      useBalance: b.useBalance === true,
+      expectedTotal: Number.isInteger(b.expectedTotal) && b.expectedTotal >= 0 ? b.expectedTotal : null,
       notes: str(b.notes, 500), photoExts,
     },
   };
