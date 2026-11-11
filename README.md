@@ -1,20 +1,74 @@
 # Brotherly Love Detailing
 
-Mobile car detailing in Philadelphia — marketing site + booking app.
+Mobile car detailing in Delaware and the Philadelphia area — marketing site + booking app.
 
 ## What's in here
 
 | Path | What it is |
 |---|---|
 | `bld-app/` | The customer app (Expo / React Native — iPhone + Android, one codebase) |
-| `supabase/` | Backend: database migrations + edge functions |
+| `supabase/` | Backend: database migrations + edge functions (`detail` runs the website's starting-price booking) |
 | `docs/superpowers/specs/` | Design spec and the owner acceptance checklist |
 | `docs/superpowers/plans/` | Implementation plan |
 | `Brotherly Love Detailing.dc.html` | The marketing website |
 | `admin/` | The owner & management dashboard (static page; talks to the `admin` function) |
-| `assets/`, `uploads/` | Logos, hero video, image exports |
+| `assets/`, `uploads/` | Logos, hero video, image exports. `assets/booking.js` + `booking.css` are the website's pricing cards and booking flow |
 
-## The booking flow
+## Starting-price booking (website)
+
+The website sells five services at **"Starting at" prices that depend on the vehicle**, takes
+a small flat deposit, and the owner sets the real price in person after inspecting the vehicle.
+Design: [`docs/superpowers/specs/2026-11-10-bld-starting-prices-design.md`](docs/superpowers/specs/2026-11-10-bld-starting-prices-design.md).
+
+| Service | Sedan | SUV / Truck | Large SUV / 3-Row |
+|---|---:|---:|---:|
+| Exterior Wash | $40 | $50 | $60 |
+| Interior Refresh | $80 | $95 | $110 |
+| Interior Deep Clean | $150 | $175 | $200 |
+| Full Detail (Most Popular) | $175 | $205 | $235 |
+| Premium Full Detail | $260 | $295 | $335 |
+| **Booking deposit** | **$25** | **$35** | **$45** |
+
+- **One source of truth:** `catalog.config.detailPricing` (seeded by migration `0015`, edited by the
+  owner in the dashboard **Pricing > Starting prices** card). The pure maths lives in
+  `supabase/functions/_shared/detail_pricing.ts`; the website, the booking function and the
+  dashboard only display what it returns. Nothing in a browser computes a price.
+- **Deposit** = the vehicle's flat deposit, capped at the starting price, and it is **credited toward
+  the final bill** (never added on top). Example: Large SUV Full Detail = $235 starting, $45 today,
+  $190 balance.
+- **Customer flow:** Package > Vehicle > Address > Appointment > Review > Deposit > Confirmation
+  (`assets/booking.js`). It collects name, phone, email, vehicle year/make/model, vehicle type,
+  interior condition, pet hair, address + ZIP, water and electricity, optional special
+  instructions and up to 4 photos. Condition and pet hair are saved for the inspection and **never
+  change the price**. Water or electricity "No" warns the customer and flags the booking; it
+  doesn't block it.
+- **Server:** the `detail` edge function (`quote`, `availability`, `reserve`, `pay-demo`) validates
+  everything, re-computes the price, checks the day is open and not full and the slot is free,
+  and holds the slot for 45 minutes (`sweep` releases unpaid holds). Capacity, one-booking-per-slot
+  and abuse caps (5 per email, 10 per IP per hour) are enforced in a database trigger so racing
+  requests can't get past them. Customers can book up to `bookingWindowDays` (14) ahead.
+- **Payments are a labelled DEMO.** `app_config.payments_mode = 'demo'`; `pay-demo` works only
+  while that value is exactly `demo` and records `deposit_status = 'demo'`. **Nothing writes
+  `paid` yet** and no card is charged. The dashboard shows a "Demo deposit, no money taken" tag.
+  Real Stripe deposits for this flow are a separate, later task.
+- **After the inspection (dashboard, booking drawer):** review the customer's choices and photos,
+  set the final service price, add approved extras, record the customer's approval (with a note),
+  and mark the invoice paid (cash or card in person). The deposit is applied as a credit,
+  the balance is calculated, changing the numbers voids the approval, and **Mark paid stays
+  locked until approval is recorded**.
+- **Not built (owner decision, 2026-11-10):** travel fees / distance lookup, the $100 Exterior Wash
+  minimum, and any first-wash discount in the website quote. The Expo app and memberships still
+  use the old catalog (Outside $45 / Inside $60 / Full $120 x size multiplier), so **the app and
+  website show different prices until the app is moved over.** The site-wide "10% off your first
+  wash" promo bar and popup were not touched and no longer match the website's pricing.
+- **Test it:** `cd bld-app && npx jest` (price cells, deposits, invoice maths, validation) and
+  `BLD_OWNER_TOKEN=<owner key> node scripts/e2e-detail.mjs` (live: all 15 price cells, tampered
+  price ignored, slot/closed/full refusals, demo-only deposit, invoice rules).
+- **Still to configure:** the real business phone number on the site (it is a placeholder),
+  confirm the drafted package inclusions and durations in the dashboard, and flip on real
+  payments when a Stripe deposit path exists.
+
+## The booking flow (Expo app, unchanged)
 
 Customer taps **GET MY DETAIL** → picks cars, sizes (sedan/SUV/truck), and
 service (outside/inside/full) with extras → live price updates at the bottom →
@@ -38,6 +92,7 @@ Vercel project, `brotherly-love-detailing`; deploy with `vercel deploy --prod` f
 - **Customers:** profile, balance, cars, history, and **private reports** (note, damage,
   complaint, no-show, payment) with photos. Only staff ever see these.
 - **Leads:** every instant quote and quote request from the website.
+- **Starting-price bookings** show a **Demo deposit** tag and an *Inspection and invoice* panel (see "Starting-price booking").
 - **Owner only:** Members, Pricing (edits flow to the app, the website and Stripe at once),
   and Settings (team codes, Stripe).
 - **Login is OFF for now (pre-launch).** Anyone with the link gets in as the owner and the

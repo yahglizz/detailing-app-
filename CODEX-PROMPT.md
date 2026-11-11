@@ -3,7 +3,7 @@
 You are joining an existing project. Read this, then read the files listed under "Read first" before you change anything.
 
 ## What it is
-Brotherly Love Detailing is a mobile car detailing business in Philadelphia. The repo holds three things:
+Brotherly Love Detailing is a mobile car detailing business serving Delaware and the Philadelphia area. The repo holds three things:
 1. A customer booking app (Expo / React Native, iPhone and Android from one codebase).
 2. A marketing website (one static HTML file).
 3. A Supabase backend (database migrations and edge functions).
@@ -43,6 +43,13 @@ Expo ~57, React Native 0.86, React 19.2, React Navigation 7, supabase-js 2, Jest
 - Credits and stamps are append-only ledgers with no-negative-balance triggers.
 - Login is a 6-digit email code. There is no SMS anywhere. All notifications are email.
 - This project has its own Supabase project (`brotherly-love-detailing`). Never touch any other business's database.
+
+## Starting-price booking (website, 2026-11)
+- Five services priced by vehicle type (Sedan / SUV-Truck / Large SUV), flat deposits $25/$35/$45 credited to the final bill, owner sets the real price in person. Full tables and rules: README "Starting-price booking" and `docs/superpowers/specs/2026-11-10-bld-starting-prices-design.md`, plan in `docs/superpowers/plans/2026-11-11-bld-starting-prices.md`.
+- Prices live in `catalog.config.detailPricing`; maths in `supabase/functions/_shared/detail_pricing.ts` (Jest: `bld-app/__tests__/detail_*.test.ts`). The website (`assets/booking.js`) and dashboard never compute prices.
+- Backend: edge function `detail` (quote / availability / reserve / pay-demo), admin actions `detail_get`, `invoice_save`, `invoice_approve`, `invoice_pay`, `detail_pricing_get/save`, migration `0015`. Live proof: `scripts/e2e-detail.mjs`.
+- Payments for this flow are a **demo** (`app_config.payments_mode`). Nothing may write `deposit_status = 'paid'` without a confirmed Stripe payment.
+- No travel fees, no distance lookup, no $100 minimum, no first-wash discount in the website quote. The Expo app and memberships still use the old catalog.
 
 ## Run it
 ```bash
