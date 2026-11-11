@@ -63,6 +63,12 @@ const ERR = {
   bad_member: 'Enter a name, a valid email and a tier.',
   bad_name: 'Enter a name.',
   upload_failed: 'A photo didn’t upload. Check your connection and try again.',
+  not_approved: 'Record the customer’s approval first.',
+  already_paid: 'This invoice is already paid.',
+  bad_invoice: 'Check the price and extras. Whole dollars only, and every extra needs a name.',
+  note_required: 'Add a short note about how the customer approved (for example, “approved in person”).',
+  not_detail: 'This booking has no inspection invoice.',
+  too_many: 'Too many requests. Try again later.',
   server_error: 'Something went wrong on our side. Try again.',
 };
 function errText(e) {
@@ -121,7 +127,11 @@ const WINDOW = { morning: 'Morning', afternoon: 'Afternoon', either: 'Any time' 
 const SERVICE = { outside: 'Outside', inside: 'Inside', full: 'Full detail', ceramic: 'Ceramic', membership: 'Membership' };
 const SIZE = { sedan: 'Sedan', suv: 'SUV', truck: 'Truck/Van' };
 const EXTRA = { ceramic: 'Ceramic coating', headlight: 'Headlight restore', engine: 'Engine bay', pet: 'Pet hair/odor' };
-const STATUS = { requested: 'Awaiting', confirmed: 'Confirmed', done: 'Done', refunded: 'Cancelled', declined: 'Cancelled', pending_payment: 'Checking out' };
+const DETAIL_SERVICE = { exterior: 'Exterior Wash', refresh: 'Interior Refresh', deep: 'Interior Deep Clean', full: 'Full Detail', premium: 'Premium Full Detail' };
+const DETAIL_VEHICLE = { sedan: 'Sedan', suv: 'SUV / Truck', large: 'Large SUV / 3-Row' };
+const D_SERVICES = Object.keys(DETAIL_SERVICE);
+const D_VEHICLES = Object.keys(DETAIL_VEHICLE);
+const STATUS = { requested: 'Awaiting', confirmed: 'Confirmed', done: 'Done', paid: 'Paid', refunded: 'Cancelled', declined: 'Cancelled', pending_payment: 'Checking out' };
 const CATEGORIES = [['note', 'Note'], ['damage', 'Damage'], ['complaint', 'Complaint'], ['no_show', 'No-show'], ['payment', 'Payment issue'], ['other', 'Other']];
 const CAT_LABEL = Object.fromEntries(CATEGORIES);
 const TIERS = ['bronze', 'silver', 'gold'];
@@ -133,9 +143,11 @@ const fmtSlot = (s) => { if (!s) return ''; const h = +s.slice(0, 2); return `${
 const timeOf = (b) => (b.slot ? fmtSlot(b.slot) : WINDOW[b.window] || 'Any time');
 const money = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('en-US');
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
-const carLine = (c) => `${SERVICE[c.service] || c.service} · ${c.label ? `${c.label} (${SIZE[c.size] || c.size})` : SIZE[c.size] || c.size}`;
+const carLine = (c) => c.vehicle
+  ? `${DETAIL_SERVICE[c.service] || c.service} · ${DETAIL_VEHICLE[c.vehicle] || c.vehicle}`
+  : `${SERVICE[c.service] || c.service} · ${c.label ? `${c.label} (${SIZE[c.size] || c.size})` : SIZE[c.size] || c.size}`;
 const itemsSummary = (items = []) => (items.length === 1 ? carLine(items[0])
-  : `${items.length} cars · ${[...new Set(items.map((i) => SERVICE[i.service] || i.service))].join(', ')}`);
+  : `${items.length} cars · ${[...new Set(items.map((i) => SERVICE[i.service] || DETAIL_SERVICE[i.service] || i.service))].join(', ')}`);
 const initials = (s = '') => s.trim().split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '?';
 const ref = (id = '') => `BLD-${id.slice(0, 6).toUpperCase()}`;
 const localISO = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -441,7 +453,7 @@ function BookingRow({ b }) {
   return html`<tr tabindex="0" onClick=${open} onKeyDown=${(e) => e.key === 'Enter' && open()}>
     <td class="span"><div class="who">
       <div class=${'avatar' + (b.status === 'requested' ? ' alt' : '')}>${initials(b.customer.name || b.customer.email)}</div>
-      <div style="min-width:0"><b>${b.customer.name || b.customer.email} ${b.test && html`<span class="tag">TEST</span>`} <${Tier} tier=${b.tier} /></b>
+      <div style="min-width:0"><b>${b.customer.name || b.customer.email} ${b.test && html`<span class="tag">TEST</span>`} ${b.depositStatus === 'demo' && html`<span class="tag">DEMO DEPOSIT</span>`} <${Tier} tier=${b.tier} /></b>
         <small>${itemsSummary(b.items)} ${b.reports > 0 && html`<span class="flag"><${Icon} name="flag" size=${13} />${b.reports}</span>`}</small></div>
     </div></td>
     <td><div class="when"><b>${fmtDay(b.day)}</b><small>${timeOf(b)} · ${plural(b.items.length, 'car')}</small></div></td>
@@ -449,6 +461,99 @@ function BookingRow({ b }) {
     <td style="text-align:right"><${Pill} status=${b.status} /></td>
     <td class="hide-sm mono muted">${ref(b.id)}</td>
   </tr>`;
+}
+
+// ——— starting-price bookings: what the customer chose, the inspection invoice ———
+const YESNO = (v) => (v ? 'Yes' : 'No');
+function DetailPanel({ b, onChanged }) {
+  const [d, setD] = useState(null);
+  const [price, setPrice] = useState('');
+  const [extras, setExtras] = useState([]);
+  const [note, setNote] = useState('');
+  const [method, setMethod] = useState('cash');
+  const load = useCallback(() => api('detail_get', { id: b.id }).then((x) => {
+    setD(x); setPrice(String(x.invoice.servicePrice)); setExtras(x.invoice.extras || []); setNote(x.invoice.approvedNote || '');
+  }).catch(toastErr), [b.id]);
+  useEffect(() => { load(); }, [load]);
+  if (!d) return html`<div class="section"><${Loading} /></div>`;
+
+  const inv = d.invoice;
+  const info = d.detail;
+  const cleaned = extras.filter((e) => String(e.name || '').trim()).map((e) => ({ name: String(e.name).trim(), price: Number(e.price) || 0 }));
+  const dirty = Number(price) !== inv.servicePrice || JSON.stringify(cleaned) !== JSON.stringify(inv.extras || []);
+  // Display arithmetic only: the server recomputes and is the authority.
+  const total = (Number(price) || 0) + cleaned.reduce((s, e) => s + e.price, 0);
+  const credit = Math.min(d.depositCreditable, total);
+  const locked = inv.status === 'paid' || !['requested', 'confirmed', 'done'].includes(b.status);
+  const canPay = inv.status === 'approved' && !dirty && (b.status === 'confirmed' || b.status === 'done');
+  const setExtra = (i, k, v) => setExtras(extras.map((e, n) => (n === i ? { ...e, [k]: v } : e)));
+
+  const save = () => api('invoice_save', { id: b.id, servicePrice: Number(price), extras: cleaned })
+    .then(() => { toast('Price saved.'); return Promise.all([load(), onChanged()]); });
+  const approve = () => api('invoice_approve', { id: b.id, note })
+    .then(() => { toast('Customer approval recorded.'); return Promise.all([load(), onChanged()]); });
+  const pay = () => api('invoice_pay', { id: b.id, method })
+    .then((r) => { toast(r.balance > 0 ? `Marked paid · ${money(r.balance)} collected.` : 'Marked paid.'); return Promise.all([load(), onChanged()]); });
+
+  return html`
+    <div class="section"><h4>What the customer chose</h4>
+      <dl class="kv">
+        <dt>Phone</dt><dd><a href=${`tel:${info.phone}`}>${info.phone}</a></dd>
+        <dt>Vehicle</dt><dd>${[info.vehicle?.year, info.vehicle?.make, info.vehicle?.model].filter(Boolean).join(' ')}</dd>
+        <dt>Interior condition</dt><dd style="text-transform:capitalize">${info.condition}</dd>
+        <dt>Pet hair</dt><dd>${YESNO(info.petHair)}</dd>
+        <dt>Water on site</dt><dd>${YESNO(info.water)}</dd>
+        <dt>Power on site</dt><dd>${YESNO(info.power)}</dd>
+      </dl>
+      ${(!info.water || !info.power) && html`<div class="banner" style="margin-top:12px"><${Icon} name="alert" />
+        <div><b>${[!info.water && 'No water', !info.power && 'No power'].filter(Boolean).join(' · ')}</b> on site. Plan for it before you go.</div></div>`}
+      <p class="muted small" style="margin:12px 0 0">Condition and pet hair are for your inspection. They do not change the price.</p>
+      ${d.photos.length > 0 ? html`<div class="photo-grid" style="margin-top:12px">${d.photos.map((u) => html`
+        <a href=${u} target="_blank" rel="noopener"><img src=${u} alt="Customer vehicle photo" loading="lazy" /></a>`)}</div>`
+        : html`<p class="muted small" style="margin:12px 0 0">No photos sent.</p>`}
+    </div>
+
+    <div class="section"><h4>Inspection and invoice</h4>
+      <p class="muted small" style="margin:-4px 0 12px">Starting price was ${money(d.startingPrice || inv.servicePrice)}. Set the final price after inspecting the vehicle. Extras need the customer’s approval before you add them.</p>
+      <div class="stack" style="gap:12px">
+        <label class="field"><span>Final service price</span><div class="money-wrap"><input class="input money" inputmode="numeric" value=${price} disabled=${locked}
+          onInput=${(e) => setPrice(e.target.value.replace(/[^\d]/g, ''))} /></div></label>
+        ${extras.map((e, i) => html`<div class="inv-extra">
+          <label class="field"><span>Extra</span><input class="input" value=${e.name} placeholder="Name" disabled=${locked} onInput=${(ev) => setExtra(i, 'name', ev.target.value)} /></label>
+          <label class="field"><span>Price</span><div class="money-wrap"><input class="input money" inputmode="numeric" value=${e.price} disabled=${locked}
+            onInput=${(ev) => setExtra(i, 'price', ev.target.value.replace(/[^\d]/g, ''))} /></div></label>
+          <button type="button" class="icon-btn" aria-label="Remove extra" disabled=${locked} onClick=${() => setExtras(extras.filter((_, n) => n !== i))}><${Icon} name="x" size=${16} /></button>
+        </div>`)}
+        ${!locked && extras.length < 10 && html`<button type="button" class="btn sm" onClick=${() => setExtras([...extras, { name: '', price: '' }])}><${Icon} name="plus" size=${16} /> Add an approved extra</button>`}
+      </div>
+      <dl class="kv" style="margin-top:14px">
+        <dt>Total</dt><dd>${money(total)}</dd>
+        <dt>Deposit credit${d.depositStatus === 'demo' ? ' (demo)' : ''}</dt><dd>−${money(credit)}</dd>
+        <dt>Balance to collect</dt><dd class="big">${money(total - credit)}</dd>
+      </dl>
+      ${!locked && html`<div style="margin-top:12px"><${ActionButton} class="btn block" disabled=${!dirty} run=${save}><${Icon} name="check" size=${18} /> Save price<//></div>`}
+    </div>
+
+    <div class="section"><h4>Customer approval</h4>
+      ${inv.status === 'approved' || inv.status === 'paid'
+        ? html`<p style="margin:0"><b>Recorded</b> ${inv.approvedAt ? new Date(inv.approvedAt).toLocaleString() : ''}${inv.approvedNote ? html`<br /><span class="muted">${inv.approvedNote}</span>` : ''}</p>`
+        : html`<p class="muted small" style="margin:0 0 10px">Save the price, show it to the customer, then record that they approved it. Changing the numbers later clears the approval.</p>`}
+      ${!locked && inv.status !== 'paid' && html`<div class="stack" style="gap:10px;margin-top:10px">
+        <label class="field"><span>How they approved</span><input class="input" maxlength="200" value=${note} placeholder="For example: approved in person" onInput=${(e) => setNote(e.target.value)} /></label>
+        <${ActionButton} class="btn block" disabled=${dirty || !note.trim()} run=${approve}><${Icon} name="check" size=${18} /> ${inv.status === 'approved' ? 'Update approval' : 'Record customer approval'}<//>
+        ${dirty && html`<p class="muted small" style="margin:0">Save the price first.</p>`}
+      </div>`}
+    </div>
+
+    <div class="section"><h4>Payment</h4>
+      ${inv.status === 'paid'
+        ? html`<p style="margin:0"><b>Paid</b> by ${inv.paidMethod === 'card' ? 'card in person' : 'cash'} ${inv.paidAt ? new Date(inv.paidAt).toLocaleString() : ''}</p>`
+        : html`<label class="field"><span>Paid by</span><select class="input" value=${method} onChange=${(e) => setMethod(e.target.value)}>
+            <option value="cash">Cash</option><option value="card">Card in person</option></select></label>
+          <div style="margin-top:12px"><${ActionButton} class="btn primary block" disabled=${!canPay}
+            confirmText=${`Collect ${money(total - credit)} from the customer and mark this invoice paid?`} run=${pay}><${Icon} name="dollar" size=${18} /> Mark paid<//></div>
+          ${!canPay && html`<p class="muted small" style="margin:8px 0 0">${b.status === 'requested' ? 'Confirm a time first. ' : ''}${inv.status !== 'approved' ? 'Needs the customer’s recorded approval.' : dirty ? 'Save the price first.' : ''}</p>`}`}
+    </div>`;
 }
 
 function BookingDrawer({ id, me, reload, onClose }) {
@@ -462,7 +567,7 @@ function BookingDrawer({ id, me, reload, onClose }) {
   const panel = useRef(null);
 
   const fetchIt = useCallback(() => api('booking', { id }).then((x) => {
-    setB(x); setDay(x.day); setSlot(x.slot || ''); setCollect(x.owing > 0);
+    setB(x); setDay(x.day); setSlot(x.slot || ''); setCollect(x.owing > 0 && x.flow !== 'detail_v2');
     setAmount(x.owing ? String(x.owing) : ''); setMethod(x.remainderMethod === 'card' ? 'card' : 'cash');
   }).catch((e) => { toastErr(e); onClose(); }), [id]);
   useEffect(() => { fetchIt(); }, [fetchIt]);
@@ -491,7 +596,7 @@ function BookingDrawer({ id, me, reload, onClose }) {
         <div>
           <p class="eyebrow" style="margin-bottom:6px">${ref(b.id)} · booked ${ago(b.createdAt)}</p>
           <h2 class="title">${b.customer.name || b.customer.email}</h2>
-          <div class="chips" style="margin-top:10px;align-items:center"><${Pill} status=${b.status} /> <${Tier} tier=${b.tier} /> ${b.test && html`<span class="tag">TEST</span>`}</div>
+          <div class="chips" style="margin-top:10px;align-items:center"><${Pill} status=${b.status} /> <${Tier} tier=${b.tier} /> ${b.test && html`<span class="tag">TEST</span>`} ${b.depositStatus === 'demo' && html`<span class="tag" title="Payments are in demo mode: no card was charged">DEMO DEPOSIT, NO MONEY TAKEN</span>`}</div>
         </div>
         <button class="icon-btn" aria-label="Close" onClick=${onClose}><${Icon} name="x" /></button>
       </div>
@@ -523,8 +628,10 @@ function BookingDrawer({ id, me, reload, onClose }) {
           ${b.collected > 0 && html`<dt>Collected at detail</dt><dd>${money(b.collected)}</dd>`}
           <dt>Still due</dt><dd class="big">${money(b.owing)}</dd>
         </dl>
-        ${b.owing > 0 && html`<p class="muted small" style="margin:8px 0 0">Customer planned to pay the rest by ${b.remainderMethod}.</p>`}
+        ${b.owing > 0 && b.flow !== 'detail_v2' && html`<p class="muted small" style="margin:8px 0 0">Customer planned to pay the rest by ${b.remainderMethod}.</p>`}
       </div>
+
+      ${b.flow === 'detail_v2' && html`<${DetailPanel} b=${b} onChanged=${() => Promise.all([fetchIt(), reload()])} />`}
 
       ${isOpen(b) && html`<div class="section"><h4>${b.status === 'requested' ? 'Confirm a time' : 'Move this job'}</h4>
         <div class="row">
@@ -537,8 +644,8 @@ function BookingDrawer({ id, me, reload, onClose }) {
           <${Icon} name="check" size=${18} /> ${b.status === 'requested' ? 'Confirm & email customer' : 'Save new time & email customer'}<//></div>
       </div>
       <div class="section"><h4>Finish the job</h4>
-        ${b.owing > 0 && html`<label class="switch" style="margin-bottom:12px"><input type="checkbox" checked=${collect} onChange=${(e) => setCollect(e.target.checked)} /> Collected the balance</label>`}
-        ${b.owing > 0 && collect && html`<div class="row" style="margin-bottom:12px">
+        ${b.owing > 0 && b.flow !== 'detail_v2' && html`<label class="switch" style="margin-bottom:12px"><input type="checkbox" checked=${collect} onChange=${(e) => setCollect(e.target.checked)} /> Collected the balance</label>`}
+        ${b.owing > 0 && b.flow !== 'detail_v2' && collect && html`<div class="row" style="margin-bottom:12px">
           <label class="field"><span>Amount</span><div class="money-wrap"><input class="input money" inputmode="numeric" value=${amount} onInput=${(e) => setAmount(e.target.value.replace(/[^\d]/g, ''))} /></div></label>
           <label class="field"><span>Paid by</span><select class="input" value=${method} onChange=${(e) => setMethod(e.target.value)}>
             <option value="cash">Cash</option><option value="card">Card in person</option></select></label>
@@ -902,6 +1009,53 @@ const setPath = (o, p, v) => {
   return copy;
 };
 
+// ——— starting-price list (owner): 5 services x 3 vehicle types, deposits, copy ———
+function DetailPricing() {
+  const [orig, setOrig] = useState(null);
+  const [d, setD] = useState(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { api('detail_pricing_get').then((r) => { setOrig(r.detailPricing); setD(r.detailPricing); }).catch(toastErr); }, []);
+  if (!d) return html`<section class="card"><${Loading} /></section>`;
+  const dirty = JSON.stringify(d) !== JSON.stringify(orig);
+  const set = (path, v) => setD(setPath(d, path, v));
+  const money0 = (path, label) => html`<label class="field"><span>${label}</span><div class="money-wrap"><input class="input money" inputmode="numeric"
+    value=${getPath(d, path) ?? ''} onInput=${(e) => set(path, e.target.value === '' ? '' : Number(e.target.value.replace(/[^\d]/g, '')))} /></div></label>`;
+  const save = async () => {
+    setBusy(true);
+    try {
+      const clean = JSON.parse(JSON.stringify(d));
+      for (const k of D_SERVICES) clean.services[k].includes = clean.services[k].includes.map((x) => x.trim()).filter(Boolean);
+      const r = await api('detail_pricing_save', { detailPricing: clean });
+      setOrig(r.detailPricing); setD(r.detailPricing);
+      toast('Starting prices saved. The website uses them now.');
+    } catch (e) { toastErr(e); }
+    setBusy(false);
+  };
+  return html`<section class="card rise" style="--i:0"><h3 class="sub">Starting prices (website booking)</h3>
+    <p class="muted small" style="margin:-6px 0 14px">These drive the website cards, the booking form, deposits and your invoice. The inclusions and times were drafted for you. Check that they are right.</p>
+    <div class="stack" style="gap:18px">
+      <div><h4 class="sub" style="font-size:13px">Booking deposit by vehicle (credited toward the final bill)</h4>
+        <div class="price-grid">${D_VEHICLES.map((v) => money0(['deposits', v], DETAIL_VEHICLE[v]))}</div></div>
+      <label class="field" style="max-width:220px"><span>How many days ahead customers can book</span><input class="input" inputmode="numeric" value=${d.bookingWindowDays}
+        onInput=${(e) => set(['bookingWindowDays'], e.target.value === '' ? '' : Number(e.target.value.replace(/[^\d]/g, '')))} /></label>
+      ${D_SERVICES.map((k) => html`<div class="section" style="padding-bottom:0"><h4>${DETAIL_SERVICE[k]}</h4>
+        <div class="price-grid">${D_VEHICLES.map((v) => money0(['services', k, 'prices', v], DETAIL_VEHICLE[v]))}</div>
+        <div class="stack" style="gap:10px;margin-top:12px">
+          <div class="row">
+            <label class="field"><span>Name</span><input class="input" value=${d.services[k].name} onInput=${(e) => set(['services', k, 'name'], e.target.value)} /></label>
+            <label class="field"><span>Estimated time</span><input class="input" value=${d.services[k].duration} onInput=${(e) => set(['services', k, 'duration'], e.target.value)} /></label>
+          </div>
+          <label class="field"><span>Short description</span><input class="input" value=${d.services[k].blurb} onInput=${(e) => set(['services', k, 'blurb'], e.target.value)} /></label>
+          <label class="field"><span>What’s included (one per line)</span><textarea class="input" rows="5" value=${d.services[k].includes.join('\n')}
+            onInput=${(e) => set(['services', k, 'includes'], e.target.value.split('\n'))}></textarea></label>
+          <label class="switch"><input type="radio" name="dp-popular" checked=${d.services[k].popular}
+            onChange=${() => setD({ ...d, services: Object.fromEntries(D_SERVICES.map((s) => [s, { ...d.services[s], popular: s === k }])) })} /> Show “Most Popular” on this one</label>
+        </div></div>`)}
+      <div class="row"><button class="btn sm" disabled=${!dirty || busy} onClick=${() => setD(orig)}>Undo</button>
+        <button class="btn primary sm" disabled=${!dirty || busy} onClick=${save}>${busy ? 'Saving…' : 'Save starting prices'}</button></div>
+    </div></section>`;
+}
+
 function Pricing() {
   const [orig, setOrig] = useState(null);
   const [draft, setDraft] = useState(null);
@@ -936,7 +1090,8 @@ function Pricing() {
   return html`
     <${Head} eyebrow="Pricing" title="What a shine costs." lede="Change a number here and the app, the website and checkout all use it right away. No app update needed." />
     <div class="stack" style="gap:20px">
-      <section class="card rise" style="--i:1"><h3 class="sub">Details (per car, sedan price)</h3>
+      <${DetailPricing} />
+      <section class="card rise" style="--i:1"><h3 class="sub">Details (per car, sedan price) · app and members</h3>
         <div class="price-grid">${Object.keys(draft.services ?? {}).map((k) => html`${num(['services', k], SERVICE[k] || k)}`)}</div></section>
       <section class="card rise" style="--i:2"><h3 class="sub">Extras</h3>
         <div class="price-grid">${Object.keys(draft.extras ?? {}).map((k) => html`${num(['extras', k], EXTRA[k] || k)}`)}</div></section>

@@ -471,7 +471,10 @@ const handlers: Record<string, Handler> = {
       const { data } = await db.storage.from(PHOTOS).createSignedUrl(path, 300);
       if (data?.signedUrl) photos.push(data.signedUrl); // never-uploaded paths just drop out
     }
-    return json({ detail: { ...detail, photos: undefined }, photos, depositStatus: row.deposit_status, invoice: inv });
+    return json({
+      detail: { ...detail, photos: undefined }, photos, depositStatus: row.deposit_status,
+      depositCreditable: depositCreditOf(row), startingPrice: Number(row.quote?.startingPrice ?? 0), invoice: inv,
+    });
   },
 
   invoice_save: async (b) => {

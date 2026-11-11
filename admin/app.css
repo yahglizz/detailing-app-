@@ -296,6 +296,7 @@ a.chip { text-decoration: none; }
 .pill.requested { background: var(--warn-soft); color: var(--warn); }
 .pill.confirmed { background: var(--ok-soft); color: var(--ok); }
 .pill.done { background: var(--done-soft); color: var(--done); }
+.pill.paid { background: var(--ok-soft); color: var(--ok); }
 .pill.refunded, .pill.declined { background: var(--bad-soft); color: var(--bad); }
 .pill.pending_payment, .pill.idle { background: var(--idle-soft); color: var(--idle); }
 .pill.new { background: var(--brand-soft); color: var(--brand-ink); }
@@ -507,3 +508,8 @@ a.chip { text-decoration: none; }
   .drawer { padding: 20px 18px 40px; }
   .savebar { bottom: 80px; }
 }
+
+/* ——— starting-price bookings ——— */
+.photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.photo-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; border: 1px solid var(--line); display: block; }
+.inv-extra { display: grid; grid-template-columns: 1fr 120px auto; gap: 10px; align-items: end; }
