@@ -21,7 +21,7 @@ const saved = {
 
 describe('can()', () => {
   const ownerOnly = ['decline', 'members', 'member_add', 'member_tier', 'member_active', 'member_stamp',
-    'pricing_get', 'pricing_save', 'staff_list', 'staff_add', 'staff_remove', 'staff_reset',
+    'pricing_get', 'pricing_save', 'detail_pricing_get', 'detail_pricing_save', 'staff_list', 'staff_add', 'staff_remove', 'staff_reset',
     'stripe_status', 'stripe_connect'];
 
   it('owner may do every action', () => {
@@ -32,6 +32,16 @@ describe('can()', () => {
   });
   it('managers can run the day-to-day jobs', () => {
     for (const a of ['overview', 'confirm', 'done', 'set_day', 'report_add', 'leads']) expect(can('manager', a)).toBe(true);
+  });
+  it('managers can run the inspection invoice but not edit detail prices', () => {
+    for (const a of ['detail_get', 'invoice_save', 'invoice_approve', 'invoice_pay']) expect(can('manager', a)).toBe(true);
+    for (const a of ['detail_pricing_get', 'detail_pricing_save']) expect(can('manager', a)).toBe(false);
+  });
+  it('a price-list edit carries the detail pricing over untouched', () => {
+    const prev = { ...saved, detailPricing: { marker: 1 } } as any;
+    const r = validateCatalog({ services: { outside: 50 } }, prev);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect((r.config as any).detailPricing).toEqual({ marker: 1 });
   });
   it('unknown actions are refused for everyone', () => {
     expect(can('owner', 'drop_tables')).toBe(false);

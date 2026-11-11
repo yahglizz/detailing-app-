@@ -17,6 +17,7 @@ import { validateReserve } from '../_shared/detail_booking.ts';
 import {
   DEFAULT_DETAIL_PRICING, isService, isVehicle, quoteDetail, validateDetailPricing, type DetailPricing,
 } from '../_shared/detail_pricing.ts';
+import { clientIp } from '../_shared/codes.ts';
 import { adminLink, button, esc, ownerEmail, sendEmail } from '../_shared/notify.ts';
 
 const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
@@ -33,7 +34,13 @@ const bad = (error: string, status = 400) => json({ error }, status);
 type Obj = Record<string, any>;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const BUCKET = 'booking-photos';
-const MAX_PENDING_PER_EMAIL = 3; // ponytail: per-email cap on unpaid holds; add IP/captcha if abused
+// Abuse caps per rolling hour. Every attempt counts, whatever its status, so cancelling or
+// abandoning holds doesn't reset them. ponytail: no captcha / email verification yet.
+const MAX_PER_EMAIL = 5;
+const MAX_PER_IP = 10;
+const sha256 = async (t: string) =>
+  [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)))]
+    .map((b) => b.toString(16).padStart(2, '0')).join('');
 
 // The business runs on Eastern time; "today" is its day, not UTC's.
 const todayISO = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
@@ -53,7 +60,7 @@ async function pricing(): Promise<DetailPricing> {
   return DEFAULT_DETAIL_PRICING;
 }
 
-const handlers: Record<string, (b: Obj) => Promise<Response>> = {
+const handlers: Record<string, (b: Obj, req: Request) => Promise<Response>> = {
   config: async () => json({ pricing: await pricing(), slots: ALL_SLOTS, today: todayISO() }),
 
   quote: async (b) => {
@@ -81,7 +88,7 @@ const handlers: Record<string, (b: Obj) => Promise<Response>> = {
     return json(out);
   },
 
-  reserve: async (b) => {
+  reserve: async (b, req) => {
     const cfg = await pricing();
     const today = todayISO();
     const v = validateReserve(b, cfg, today);
@@ -100,16 +107,22 @@ const handlers: Record<string, (b: Obj) => Promise<Response>> = {
     if (takenErr) throw takenErr;
     if ((taken as string[] | null)?.includes(r.slot)) return bad('slot_taken', 409);
 
-    // customer row (keyed by email), same pattern as `book`
-    const { count: pending } = await db.from('bookings')
-      .select('id, customers!inner(email)', { count: 'exact', head: true })
-      .eq('flow', 'detail_v2').eq('status', 'pending_payment')
-      .eq('customers.email', r.email).gt('created_at', new Date(Date.now() - 3600e3).toISOString());
-    if ((pending ?? 0) >= MAX_PENDING_PER_EMAIL) return bad('too_many', 429);
+    // abuse caps, before anything is written
+    const since = new Date(Date.now() - 3600e3).toISOString();
+    const ipHash = await sha256(clientIp(req));
+    const [{ count: byEmail }, { count: byIp }] = await Promise.all([
+      db.from('bookings').select('id, customers!inner(email)', { count: 'exact', head: true })
+        .eq('flow', 'detail_v2').eq('customers.email', r.email).gt('created_at', since),
+      db.from('bookings').select('id', { count: 'exact', head: true })
+        .eq('flow', 'detail_v2').eq('detail->>ipHash', ipHash).gt('created_at', since),
+    ]);
+    if ((byEmail ?? 0) >= MAX_PER_EMAIL || (byIp ?? 0) >= MAX_PER_IP) return bad('too_many', 429);
+
+    // customer row keyed by email, same as `book`. An existing row is never renamed: anyone
+    // can type any email here, so the name they give lives on this booking (detail.name) only.
     await db.from('customers').upsert({ id: crypto.randomUUID(), email: r.email, name: r.name }, { onConflict: 'email', ignoreDuplicates: true });
     const { data: cust } = await db.from('customers').select('id').eq('email', r.email).single();
     if (!cust) return bad('server_error', 500);
-    await db.from('customers').update({ name: r.name }).eq('id', cust.id);
 
     const bookingId = crypto.randomUUID();
     const payKey = crypto.randomUUID().replaceAll('-', '');
@@ -121,7 +134,7 @@ const handlers: Record<string, (b: Obj) => Promise<Response>> = {
       status: 'pending_payment',
       deposit_status: 'pending',
       items: [{ service: r.service, vehicle: r.vehicleType }],
-      quote: { total: q.startingPrice, deposit: q.deposit, remainder: q.balance, balanceDue: q.balance, paidOnline: 0 },
+      quote: { startingPrice: q.startingPrice, total: q.startingPrice, deposit: q.deposit, remainder: q.balance, balanceDue: q.balance, paidOnline: 0 },
       address: `${r.street}, ${r.zip}`,
       preferred_day: r.day,
       time_slot: r.slot,
@@ -130,13 +143,16 @@ const handlers: Record<string, (b: Obj) => Promise<Response>> = {
       remainder_method: 'cash', // placeholder; invoice_pay records the real method
       confirm_token: crypto.randomUUID().replaceAll('-', '') + crypto.randomUUID().replaceAll('-', ''),
       detail: {
-        payKey, name: r.name, phone: r.phone, vehicle: r.vehicle, vehicleType: r.vehicleType, service: r.service,
+        payKey, ipHash, name: r.name, phone: r.phone, vehicle: r.vehicle, vehicleType: r.vehicleType, service: r.service,
         condition: r.condition, petHair: r.petHair, water: r.water, power: r.power, zip: r.zip, notes: r.notes, photos,
       },
     });
     if (insErr) {
       // the unique index closes the race two people can run on the same slot
       if (insErr.code === '23505') return bad('slot_taken', 409);
+      // the capacity trigger (migration 0015) is the atomic guarantee behind the checks above
+      if (insErr.message.includes('day_full')) return bad('day_full', 409);
+      if (insErr.message.includes('day_closed')) return bad('day_closed', 409);
       console.error('detail reserve insert failed', insErr.message);
       return bad('booking_insert_failed', 500);
     }
@@ -169,6 +185,9 @@ const handlers: Record<string, (b: Obj) => Promise<Response>> = {
   },
 };
 
+// Only the owner is emailed here. The customer sees the on-screen confirmation, and gets an
+// email when the owner confirms a time (`confirm`). That keeps this public endpoint from
+// sending mail to an address nobody has verified.
 // deno-lint-ignore no-explicit-any
 async function notify(row: any, cfg: DetailPricing) {
   const d = row.detail ?? {};
@@ -187,11 +206,6 @@ async function notify(row: any, cfg: DetailPricing) {
        <p>Interior: ${esc(d.condition)} · Pet hair: ${d.petHair ? 'yes' : 'no'}${flags.length ? `<br><b>${esc(flags.join('. '))}.</b>` : ''}</p>
        ${d.notes ? `<p>Notes: ${esc(d.notes)}</p>` : ''}
        ${button(adminLink(row.id), 'Open in dashboard')}`);
-    await sendEmail(row.customers?.email ?? '', 'We got your detail request',
-      `<h2 style="margin:0 0 8px">Thanks, ${esc(d.name)}. Your request is in.</h2>
-       <p>${esc(svc)} for your ${esc(car)} on ${esc(when)}. We'll confirm your exact time by email.</p>
-       <p>Starting price: ${money(q.total)}. Booking deposit: ${money(q.deposit)}, applied toward your final total.</p>
-       <p style="color:#A9A4AF">Prices shown are starting estimates. Final pricing is confirmed after an in-person vehicle inspection. Your booking deposit is applied toward your final service total. Any additional charges must be approved before work begins.</p>`);
   } catch (e) {
     console.error('detail notify failed', (e as Error).message); // the booking stands either way
   }
@@ -210,7 +224,7 @@ Deno.serve(async (req) => {
   const handler = Object.hasOwn(handlers, String(body.action)) ? handlers[String(body.action)] : null;
   if (!handler) return bad('unknown_action');
   try {
-    return await handler(body);
+    return await handler(body, req);
   } catch (e) {
     console.error('detail failed', body.action, (e as Error).message);
     return bad('server_error', 500);

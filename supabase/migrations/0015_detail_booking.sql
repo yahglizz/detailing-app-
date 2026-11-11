@@ -36,6 +36,24 @@ drop trigger if exists booking_invoices_updated_at on booking_invoices;
 create trigger booking_invoices_updated_at before update on booking_invoices
   for each row execute function set_updated_at();
 
+-- ——— capacity, enforced atomically. Two requests racing for a nearly full day would both
+-- pass the function's read-then-insert checks; this trigger serialises them per day. App
+-- bookings (`book`) don't take this lock; that older race is documented in book/index.ts. ———
+create or replace function enforce_detail_capacity() returns trigger language plpgsql as $$
+declare st record;
+begin
+  if new.flow is distinct from 'detail_v2' then return new; end if;
+  perform pg_advisory_xact_lock(hashtext('detail-day:' || new.preferred_day::text));
+  select * into st from day_states(new.preferred_day, new.preferred_day) limit 1;
+  if st.day is null then return new; end if;
+  if st.closed then raise exception 'day_closed'; end if;
+  if st.booked >= st.capacity then raise exception 'day_full'; end if;
+  return new;
+end $$;
+drop trigger if exists bookings_detail_capacity on bookings;
+create trigger bookings_detail_capacity before insert on bookings
+  for each row execute function enforce_detail_capacity();
+
 -- ——— customer vehicle photos: private; customers upload through signed URLs the
 -- detail function issues, the owner views through short-lived signed URLs ———
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)

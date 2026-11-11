@@ -183,8 +183,10 @@ A fresh reader checked this doc against the repo. Fixes and decisions:
   `address` = street + ZIP, `time_window` derived from the slot (before noon = morning, else
   afternoon), `remainder_method = 'cash'` as a placeholder that `invoice_pay` overwrites with
   the real method. `invoice_save` and `invoice_pay` write the final numbers back into `quote`.
-- **Phone and name.** No phone column exists (`customers` is keyed by email). Phone lives in
-  `bookings.detail`; `customers.name` is written. Owner email and dashboard read `detail.phone`.
+- **Phone and name.** No phone column exists (`customers` is keyed by email). Phone and the
+  name typed on this booking live in `bookings.detail`; an existing `customers` row is never
+  renamed (anyone can type any email), a new row gets the name. The dashboard shows
+  `detail.name` for these bookings. Owner email and dashboard read `detail.phone`.
 - **Sweep.** `detail_v2` rows are skipped by the 24h reminder and the 48h auto-refund (a demo
   deposit has nothing to refund and the owner confirms these by hand). Unpaid `pending_payment`
   detail rows get their own branch: declined after 45 minutes through the existing
@@ -203,6 +205,18 @@ A fresh reader checked this doc against the repo. Fixes and decisions:
   (whole numbers, all 15 cells, 3 deposits) and does not call `syncPlanPrices`.
 - **Test location.** Jest tests live in `bld-app/__tests__/` and import the shared module by
   relative path, as `pricing.test.ts` does.
+
+## Security review changes (2026-11-11)
+
+An automated review of the first `detail` function flagged three issues; all fixed before any deploy:
+
+- Existing customer names can't be overwritten by a new booking (see above).
+- Abuse caps: 5 requests per email and 10 per IP per rolling hour, counting every status. The
+  public endpoint sends no email to the customer; only the owner is emailed, and the customer
+  is emailed when the owner confirms a time. Email verification / captcha is not built.
+- Capacity is enforced atomically by a `bookings` insert trigger (advisory lock per day) in
+  migration 0015, behind the function's friendlier pre-checks. App bookings (`book`) don't take
+  that lock, so an app booking racing a website booking for the last opening is still possible.
 
 ## Calls made without the owner (check these)
 
