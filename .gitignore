@@ -4,3 +4,4 @@ bld-app/.env
 supabase/.temp/
 .superpowers/
 .vercel
+.local-data/

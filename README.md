@@ -76,6 +76,12 @@ Design: [`docs/superpowers/specs/2026-11-10-bld-starting-prices-design.md`](docs
   use the old catalog (Outside $45 / Inside $60 / Full $120 x size multiplier), so **the app and
   website show different prices until the app is moved over.** The site-wide "10% off your first
   wash" promo bar and popup were not touched and no longer match the website's pricing.
+- **Run it locally, no Supabase needed:** `node scripts/local-server.mjs`, then open
+  `http://localhost:8794/` (website) and `http://localhost:8794/admin` (dashboard, any staff code).
+  A stand-in backend answers the same `detail` and `admin` calls, so you can book, pay the demo
+  deposit, confirm, invoice and mark paid end to end. Prices come from the migration seed. Data is
+  kept in `.local-data/` (git-ignored; delete it to reset). It is **not** the production backend:
+  one JSON file, no real locking or emails or payments, localhost only, nothing live is touched.
 - **Test it:** `cd bld-app && npx jest` (price cells, deposits, invoice maths, validation) and
   `BLD_OWNER_TOKEN=<owner key> node scripts/e2e-detail.mjs` (live: all 15 price cells, tampered
   price ignored, slot/closed/full refusals, demo-only deposit, invoice rules).
