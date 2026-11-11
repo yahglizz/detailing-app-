@@ -360,7 +360,7 @@ const handlers: Record<string, (b: Obj, req: Request) => Promise<Response>> = {
   status: async (b) => {
     if (!UUID.test(String(b.bookingId)) || typeof b.payKey !== 'string' || !b.payKey) return bad('not_found', 404);
     const row = await loadRow(b.bookingId);
-    if (!row || row.flow !== 'detail_v2' || row.detail?.payKey !== b.payKey) return bad('not_found', 404);
+    if (!row || row.detail?.payKey !== b.payKey) return bad('not_found', 404); // loadRow already filters flow = detail_v2
     return json({ day: row.preferred_day ?? null, slot: row.time_slot ?? null, status: row.status });
   },
 
