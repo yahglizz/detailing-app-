@@ -211,7 +211,10 @@ A fresh reader checked this doc against the repo. Fixes and decisions:
 An automated review of the first `detail` function flagged three issues; all fixed before any deploy:
 
 - Existing customer names can't be overwritten by a new booking (see above).
-- Abuse caps: 5 requests per email and 10 per IP per rolling hour, counting every status. The
+- Abuse caps: 5 requests per email and 10 per IP per rolling hour, counting every status,
+  enforced atomically in the same insert trigger as capacity. The IP comes only from
+  `cf-connecting-ip`; if that header is ever absent the IP cap is skipped (to verify at
+  go-live: stored `ipHash` values must differ between callers). The
   public endpoint sends no email to the customer; only the owner is emailed, and the customer
   is emailed when the owner confirms a time. Email verification / captcha is not built.
 - Capacity is enforced atomically by a `bookings` insert trigger (advisory lock per day) in

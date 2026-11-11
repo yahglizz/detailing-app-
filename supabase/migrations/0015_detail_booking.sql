@@ -36,18 +36,39 @@ drop trigger if exists booking_invoices_updated_at on booking_invoices;
 create trigger booking_invoices_updated_at before update on booking_invoices
   for each row execute function set_updated_at();
 
--- ——— capacity, enforced atomically. Two requests racing for a nearly full day would both
--- pass the function's read-then-insert checks; this trigger serialises them per day. App
--- bookings (`book`) don't take this lock; that older race is documented in book/index.ts. ———
+-- ——— capacity and abuse caps, enforced atomically. Two requests racing for a nearly full
+-- day, or for the same email/IP's hourly allowance, would both pass the function's
+-- read-then-insert checks; this trigger serialises them (advisory locks, always taken in the
+-- same order: day, email, IP, so they can't deadlock). Caps count every status per rolling
+-- hour: 5 per email, 10 per IP. App bookings (`book`) don't take the day lock; that older
+-- race is documented in book/index.ts. ———
 create or replace function enforce_detail_capacity() returns trigger language plpgsql as $$
-declare st record;
+declare st record; em text; ip text; n int;
 begin
   if new.flow is distinct from 'detail_v2' then return new; end if;
+
   perform pg_advisory_xact_lock(hashtext('detail-day:' || new.preferred_day::text));
   select * into st from day_states(new.preferred_day, new.preferred_day) limit 1;
-  if st.day is null then return new; end if;
-  if st.closed then raise exception 'day_closed'; end if;
-  if st.booked >= st.capacity then raise exception 'day_full'; end if;
+  if st.day is not null then
+    if st.closed then raise exception 'day_closed'; end if;
+    if st.booked >= st.capacity then raise exception 'day_full'; end if;
+  end if;
+
+  select email into em from customers where id = new.customer_id;
+  if em is not null then
+    perform pg_advisory_xact_lock(hashtext('detail-email:' || em));
+    select count(*) into n from bookings b join customers c on c.id = b.customer_id
+      where b.flow = 'detail_v2' and c.email = em and b.created_at > now() - interval '1 hour';
+    if n >= 5 then raise exception 'too_many'; end if;
+  end if;
+
+  ip := new.detail->>'ipHash';
+  if ip is not null then
+    perform pg_advisory_xact_lock(hashtext('detail-ip:' || ip));
+    select count(*) into n from bookings b
+      where b.flow = 'detail_v2' and b.detail->>'ipHash' = ip and b.created_at > now() - interval '1 hour';
+    if n >= 10 then raise exception 'too_many'; end if;
+  end if;
   return new;
 end $$;
 drop trigger if exists bookings_detail_capacity on bookings;

@@ -9,12 +9,13 @@ const EVERYONE = [
   'calendar', 'set_day', 'set_schedule',
   'customers', 'customer', 'report_add', 'photo_upload_url', 'report_delete',
   'leads', 'lead_status',
+  'detail_get', 'invoice_save', 'invoice_approve', 'invoice_pay',
 ] as const;
 
 const OWNER_ONLY = [
   'decline',
   'members', 'member_add', 'member_tier', 'member_active', 'member_stamp',
-  'pricing_get', 'pricing_save',
+  'pricing_get', 'pricing_save', 'detail_pricing_get', 'detail_pricing_save',
   'staff_list', 'staff_add', 'staff_remove', 'staff_reset',
   'stripe_status', 'stripe_connect',
 ] as const;

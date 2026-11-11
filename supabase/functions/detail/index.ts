@@ -17,7 +17,6 @@ import { validateReserve } from '../_shared/detail_booking.ts';
 import {
   DEFAULT_DETAIL_PRICING, isService, isVehicle, quoteDetail, validateDetailPricing, type DetailPricing,
 } from '../_shared/detail_pricing.ts';
-import { clientIp } from '../_shared/codes.ts';
 import { adminLink, button, esc, ownerEmail, sendEmail } from '../_shared/notify.ts';
 
 const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
@@ -34,10 +33,8 @@ const bad = (error: string, status = 400) => json({ error }, status);
 type Obj = Record<string, any>;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const BUCKET = 'booking-photos';
-// Abuse caps per rolling hour. Every attempt counts, whatever its status, so cancelling or
-// abandoning holds doesn't reset them. ponytail: no captcha / email verification yet.
-const MAX_PER_EMAIL = 5;
-const MAX_PER_IP = 10;
+// Abuse caps (5 per email, 10 per IP per hour, every status) live in the bookings insert
+// trigger in migration 0015, where they are atomic. ponytail: no captcha / email verification yet.
 const sha256 = async (t: string) =>
   [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)))]
     .map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -107,16 +104,10 @@ const handlers: Record<string, (b: Obj, req: Request) => Promise<Response>> = {
     if (takenErr) throw takenErr;
     if ((taken as string[] | null)?.includes(r.slot)) return bad('slot_taken', 409);
 
-    // abuse caps, before anything is written
-    const since = new Date(Date.now() - 3600e3).toISOString();
-    const ipHash = await sha256(clientIp(req));
-    const [{ count: byEmail }, { count: byIp }] = await Promise.all([
-      db.from('bookings').select('id, customers!inner(email)', { count: 'exact', head: true })
-        .eq('flow', 'detail_v2').eq('customers.email', r.email).gt('created_at', since),
-      db.from('bookings').select('id', { count: 'exact', head: true })
-        .eq('flow', 'detail_v2').eq('detail->>ipHash', ipHash).gt('created_at', since),
-    ]);
-    if ((byEmail ?? 0) >= MAX_PER_EMAIL || (byIp ?? 0) >= MAX_PER_IP) return bad('too_many', 429);
+    // Only Cloudflare's header is trusted for the IP (the platform overwrites it); without it
+    // the per-IP cap is skipped and the per-email cap still applies.
+    const cfIp = req.headers.get('cf-connecting-ip');
+    const ipHash = cfIp ? await sha256(cfIp) : null;
 
     // customer row keyed by email, same as `book`. An existing row is never renamed: anyone
     // can type any email here, so the name they give lives on this booking (detail.name) only.
@@ -153,6 +144,7 @@ const handlers: Record<string, (b: Obj, req: Request) => Promise<Response>> = {
       // the capacity trigger (migration 0015) is the atomic guarantee behind the checks above
       if (insErr.message.includes('day_full')) return bad('day_full', 409);
       if (insErr.message.includes('day_closed')) return bad('day_closed', 409);
+      if (insErr.message.includes('too_many')) return bad('too_many', 429);
       console.error('detail reserve insert failed', insErr.message);
       return bad('booking_insert_failed', 500);
     }

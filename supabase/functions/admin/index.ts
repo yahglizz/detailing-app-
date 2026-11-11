@@ -12,6 +12,7 @@
 // staff code is the auth.
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { can, validateCatalog, type Role } from '../_shared/admin_rules.ts';
+import { DEFAULT_DETAIL_PRICING, invoiceTotals, validateDetailPricing } from '../_shared/detail_pricing.ts';
 import { clientIp, rateLimited, recordMiss } from '../_shared/codes.ts';
 import { confirmBooking, declineBooking, markDone, type ActionResult } from '../_shared/owner_actions.ts';
 import { provisionMember } from '../_shared/member_provision.ts';
@@ -107,7 +108,8 @@ async function saveCatalog(config: Obj) {
 
 // ——— bookings, shaped for the dashboard ———
 const BOOKING_COLS = `id, preferred_day, time_slot, time_window, status, items, quote, address, notes,
-  remainder_method, pay_mode, membership_id, scheduled_note, created_at, customer_id,
+  remainder_method, pay_mode, membership_id, scheduled_note, created_at, customer_id, flow, deposit_status,
+  detail->name, detail->phone,
   customers(id, name, email, customer_reports(count)),
   payments(kind, amount_cents, provider, status, created_at)`;
 
@@ -122,7 +124,8 @@ function shape(b: Obj) {
     id: b.id, day: b.preferred_day, slot: b.time_slot, window: b.time_window, status: b.status,
     when: b.scheduled_note, address: b.address, notes: b.notes, remainderMethod: b.remainder_method,
     payMode: b.pay_mode, createdAt: b.created_at, items: b.items,
-    customer: { id: c.id, name: c.name, email: c.email },
+    customer: { id: c.id, name: b.name || c.name, email: c.email }, // detail bookings carry the name typed on that booking
+    flow: b.flow ?? null, depositStatus: b.deposit_status ?? null, phone: b.phone ?? null,
     reports: c.customer_reports?.[0]?.count ?? 0,
     total: Number(q.total ?? 0), payable: Number(q.payable ?? q.total ?? 0),
     paidOnline: Number(q.paidOnline ?? q.deposit ?? 0), walletUsed: Number(q.walletUsed ?? 0),
@@ -130,6 +133,70 @@ function shape(b: Obj) {
     balanceDue, collected, owing: voided ? 0 : Math.max(0, balanceDue - collected),
     tier: q.tier ?? null, member: !!b.membership_id, test: !!q.test,
     payments: pays.map((p) => ({ kind: p.kind, amount: p.amount_cents / 100, provider: p.provider, at: p.created_at })),
+  };
+}
+
+// ——— starting-price booking helpers ———
+const PHOTOS = 'booking-photos';
+const INVOICE_OPEN = ['requested', 'confirmed', 'done'];
+
+async function detailRow(id: unknown): Promise<Obj | Response> {
+  if (!UUID.test(String(id))) return bad('bad_id');
+  const { data, error } = await db.from('bookings')
+    .select('id, status, flow, deposit_status, quote, detail').eq('id', id).maybeSingle();
+  if (error) throw error;
+  if (!data) return bad('not_found', 404);
+  if (data.flow !== 'detail_v2') return bad('not_detail');
+  return data;
+}
+
+// The deposit only counts as credit once it is paid, or demo (labelled demo everywhere).
+const depositCreditOf = (row: Obj) =>
+  ['paid', 'demo'].includes(row.deposit_status) ? Number(row.quote?.deposit ?? 0) : 0;
+
+function cleanExtras(x: unknown): { name: string; price: number }[] | null {
+  if (x === undefined || x === null) return [];
+  if (!Array.isArray(x) || x.length > 10) return null;
+  const out = [];
+  for (const e of x) {
+    const name = String(e?.name ?? '').trim().slice(0, 60);
+    if (!name) return null;
+    out.push({ name, price: Number(e?.price) }); // invoiceTotals validates the number
+  }
+  return out;
+}
+
+// Keep the numbers every existing dashboard view reads (bookings.quote) equal to the invoice.
+async function mirrorQuote(row: Obj, total: number, balance: number) {
+  await db.from('bookings').update({ quote: { ...row.quote, total, balanceDue: balance, remainder: balance } }).eq('id', row.id);
+}
+
+// The invoice row, created from the starting price the first time it is needed.
+async function ensureInvoice(row: Obj) {
+  const have = await db.from('booking_invoices').select('booking_id').eq('booking_id', row.id).maybeSingle();
+  if (have.data) return;
+  const price = Number(row.quote?.startingPrice ?? row.quote?.total ?? 0);
+  const t = invoiceTotals({ servicePrice: price, extras: [], depositCredit: depositCreditOf(row) });
+  await db.from('booking_invoices').upsert(
+    { booking_id: row.id, service_price: price, extras: [], deposit_credit: t.credit, total: t.total, balance: t.balance },
+    { onConflict: 'booking_id', ignoreDuplicates: true },
+  );
+}
+
+async function invoiceFor(row: Obj) {
+  const { data } = await db.from('booking_invoices').select('*').eq('booking_id', row.id).maybeSingle();
+  if (data) {
+    return {
+      servicePrice: data.service_price, extras: data.extras, depositCredit: data.deposit_credit, total: data.total,
+      balance: data.balance, status: data.status, approvedAt: data.customer_approved_at, approvedNote: data.approved_note,
+      paidAt: data.paid_at, paidMethod: data.paid_method, saved: true,
+    };
+  }
+  const price = Number(row.quote?.startingPrice ?? row.quote?.total ?? 0);
+  const t = invoiceTotals({ servicePrice: price, extras: [], depositCredit: depositCreditOf(row) });
+  return {
+    servicePrice: price, extras: [], depositCredit: t.credit, total: t.total, balance: t.balance,
+    status: 'draft', approvedAt: null, approvedNote: null, paidAt: null, paidMethod: null, saved: false,
   };
 }
 
@@ -391,6 +458,108 @@ const handlers: Record<string, Handler> = {
       ok: true, config: r.config, warning: sync.warning,
       stripeUpdated: sync.stripe ? r.changedPlanPrices : [],
     });
+  },
+
+  // ——— starting-price bookings: inspection, invoice, deposit credit ———
+  detail_get: async (b) => {
+    const row = await detailRow(b.id);
+    if (row instanceof Response) return row;
+    const inv = await invoiceFor(row);
+    const { payKey: _k, ipHash: _i, ...detail } = (row.detail ?? {}) as Obj;
+    const photos: string[] = [];
+    for (const path of (detail.photos ?? []) as string[]) {
+      const { data } = await db.storage.from(PHOTOS).createSignedUrl(path, 300);
+      if (data?.signedUrl) photos.push(data.signedUrl); // never-uploaded paths just drop out
+    }
+    return json({ detail: { ...detail, photos: undefined }, photos, depositStatus: row.deposit_status, invoice: inv });
+  },
+
+  invoice_save: async (b) => {
+    const row = await detailRow(b.id);
+    if (row instanceof Response) return row;
+    if (row.status === 'paid') return bad('already_paid', 409);
+    if (!INVOICE_OPEN.includes(row.status)) return bad('not_open', 409);
+    const extras = cleanExtras(b.extras);
+    if (!extras) return bad('bad_invoice');
+    let t;
+    try {
+      t = invoiceTotals({ servicePrice: Number(b.servicePrice), extras, depositCredit: depositCreditOf(row) });
+    } catch {
+      return bad('bad_invoice');
+    }
+    const prev = (await db.from('booking_invoices').select('*').eq('booking_id', row.id).maybeSingle()).data;
+    const same = prev && prev.service_price === Number(b.servicePrice) && JSON.stringify(prev.extras) === JSON.stringify(extras);
+    if (!same) {
+      // changed numbers void any earlier approval: the customer approved something else
+      const { error } = await db.from('booking_invoices').upsert({
+        booking_id: row.id, service_price: Number(b.servicePrice), extras, deposit_credit: t.credit, total: t.total,
+        balance: t.balance, status: 'draft', customer_approved_at: null, approved_note: null,
+      });
+      if (error) throw error;
+      await mirrorQuote(row, t.total, t.balance);
+    }
+    return json(await invoiceFor(await detailRow(row.id) as Obj));
+  },
+
+  invoice_approve: async (b) => {
+    const row = await detailRow(b.id);
+    if (row instanceof Response) return row;
+    if (row.status === 'paid') return bad('already_paid', 409);
+    if (!INVOICE_OPEN.includes(row.status)) return bad('not_open', 409);
+    const note = String(b.note ?? '').trim().slice(0, 200);
+    if (!note) return bad('note_required');
+    await ensureInvoice(row);
+    const { data: won, error } = await db.from('booking_invoices')
+      .update({ status: 'approved', customer_approved_at: new Date().toISOString(), approved_note: note })
+      .eq('booking_id', row.id).neq('status', 'paid').select('booking_id');
+    if (error) throw error;
+    if (!won?.length) return bad('already_paid', 409);
+    return json(await invoiceFor(await detailRow(row.id) as Obj));
+  },
+
+  invoice_pay: async (b) => {
+    const row = await detailRow(b.id);
+    if (row instanceof Response) return row;
+    const method = String(b.method ?? '');
+    if (method !== 'cash' && method !== 'card') return bad('bad_method');
+    if (row.status === 'paid') return bad('already_paid', 409);
+    if (row.status !== 'confirmed' && row.status !== 'done') return bad('not_open', 409);
+    const inv = (await db.from('booking_invoices').select('*').eq('booking_id', row.id).maybeSingle()).data;
+    if (!inv || inv.status !== 'approved') return bad('not_approved', 409);
+    let t;
+    try {
+      t = invoiceTotals({ servicePrice: inv.service_price, extras: inv.extras, depositCredit: depositCreditOf(row) });
+    } catch {
+      return bad('bad_invoice');
+    }
+    // one winner: only an approved invoice can become paid
+    const { data: won, error } = await db.from('booking_invoices')
+      .update({ status: 'paid', paid_at: new Date().toISOString(), paid_method: method,
+        deposit_credit: t.credit, total: t.total, balance: t.balance })
+      .eq('booking_id', row.id).eq('status', 'approved').select('booking_id');
+    if (error) throw error;
+    if (!won?.length) return bad('not_approved', 409);
+    if (t.balance > 0) {
+      await db.from('payments').insert({
+        booking_id: row.id, kind: 'remainder', amount_cents: t.balance * 100, status: 'succeeded',
+        provider: method === 'cash' ? 'cash' : 'card_in_person',
+      });
+    }
+    await mirrorQuote(row, t.total, t.balance);
+    await db.from('bookings').update({ status: 'paid', remainder_method: method }).eq('id', row.id);
+    return json({ ok: true, ...t });
+  },
+
+  detail_pricing_get: async () => {
+    const v = validateDetailPricing((await catalog()).detailPricing);
+    return json({ detailPricing: v.ok ? v.value : DEFAULT_DETAIL_PRICING, savedConfigValid: v.ok });
+  },
+
+  detail_pricing_save: async (b) => {
+    const v = validateDetailPricing(b.detailPricing);
+    if (!v.ok) return bad(v.error);
+    await saveCatalog({ ...(await catalog()), detailPricing: v.value });
+    return json({ ok: true, detailPricing: v.value });
   },
 
   // ——— staff (owner) ———
