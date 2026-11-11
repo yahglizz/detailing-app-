@@ -31,6 +31,10 @@ export interface MembershipTierConfig {
   visits: Partial<Record<DetailService, number>>;
   perks: string[];
   prices: Record<VehicleType, number>;
+  rank: number;              // VIP bumping order: 1 bronze, 2 silver, 3 gold (unique)
+  stampsPerCar: number;      // reward stamps earned per car when a job is paid
+  topupBonusPercent: number; // bonus added to a prepaid top-up
+  discountPercent: number;   // % off whatever a visit doesn't cover
 }
 
 export interface DetailPricing {
@@ -98,6 +102,7 @@ export const DEFAULT_DETAIL_PRICING: DetailPricing = {
       visits: { exterior: 2 },
       perks: ['Priority booking over non-members', '10% off any other service', 'Cancel anytime'],
       prices: { sedan: 65, suv: 80, large: 95 },
+      rank: 1, stampsPerCar: 1, topupBonusPercent: 5, discountPercent: 10,
     },
     silver: {
       name: 'Silver',
@@ -105,6 +110,7 @@ export const DEFAULT_DETAIL_PRICING: DetailPricing = {
       visits: { exterior: 2, refresh: 1 },
       perks: ['Priority booking ahead of Bronze', '15% off any other service', 'Cancel anytime'],
       prices: { sedan: 125, suv: 150, large: 180 },
+      rank: 2, stampsPerCar: 2, topupBonusPercent: 10, discountPercent: 15,
     },
     gold: {
       name: 'Gold',
@@ -112,6 +118,7 @@ export const DEFAULT_DETAIL_PRICING: DetailPricing = {
       visits: { full: 1, exterior: 2 },
       perks: ['First priority booking', '20% off any other service', 'Cancel anytime'],
       prices: { sedan: 190, suv: 230, large: 265 },
+      rank: 3, stampsPerCar: 3, topupBonusPercent: 15, discountPercent: 20,
     },
   },
 };
@@ -141,12 +148,124 @@ export function quoteDetail(cfg: DetailPricing, s: DetailService, v: VehicleType
 export const isTier = (x: unknown): x is MemberTier =>
   typeof x === 'string' && (TIERS as readonly string[]).includes(x);
 
+// sedan < suv < large. Saved-car 'truck' is mapped to 'suv' by the caller before it gets here.
+export function vehicleRank(v: VehicleType): 0 | 1 | 2 {
+  if (!isVehicle(v)) throw new Error('bad_service_or_vehicle');
+  return VEHICLES.indexOf(v) as 0 | 1 | 2;
+}
+
+// ——— several cars in one visit ———
+export const MAX_CARS = 6;
+export type CarLine = { service: DetailService; vehicleType: VehicleType };
+
+// Each car priced on its own; deposit = each car's deposit (capped at that car's price) summed.
+export function quoteCars(cfg: DetailPricing, cars: CarLine[]) {
+  if (!Array.isArray(cars) || cars.length < 1 || cars.length > MAX_CARS) throw new Error('bad_cars');
+  const lines = cars.map((c) => ({
+    service: c.service, vehicleType: c.vehicleType,
+    startingPrice: startingPrice(cfg, c.service, c.vehicleType),
+    deposit: depositFor(cfg, c.service, c.vehicleType),
+  }));
+  return {
+    lines,
+    subtotal: lines.reduce((n, l) => n + l.startingPrice, 0),
+    deposit: lines.reduce((n, l) => n + l.deposit, 0),
+  };
+}
+
+// ——— member price ———
+export type RewardKey = 'tireShine' | 'miniSpray' | 'percent25' | 'freeWash';
+export type MemberCtx = {
+  tier: MemberTier;
+  planVehicle: VehicleType;
+  visitsLeft: Partial<Record<DetailService, number>>; // this billing month
+  reward: RewardKey | null;                           // oldest issued, unused reward
+};
+
+// Order: included visits, then the reward, then the tier's % off what is still payable.
+// 1. A visit covers a car of its service up to the plan's vehicle size; a bigger car pays only the
+//    difference to the plan-size price. More cars than visits: the most expensive is covered first.
+// 2. percent25 = 25% off; freeWash = the cheapest uncovered car free; tireShine/miniSpray are done
+//    at the job (no price change). A reward is never spent on a booking that is already free.
+// 3. Tier discountPercent off each car's remaining price.
+// Discounts are applied per car (Math.round each step) so the car lines add up to `payable`.
+export function memberQuote(cfg: DetailPricing, cars: CarLine[], m: MemberCtx) {
+  if (!m || !isTier(m.tier) || !isVehicle(m.planVehicle)) throw new Error('bad_member');
+  const q = quoteCars(cfg, cars);
+  const lines = q.lines.map((l) => ({ ...l, covered: false, payable: l.startingPrice }));
+  const off = (n: number, pct: number) => n - Math.round((n * pct) / 100);
+
+  const visitsUsed: Partial<Record<DetailService, number>> = {};
+  for (const s of SERVICES) {
+    const left = m.visitsLeft?.[s];
+    if (!Number.isInteger(left) || (left as number) < 1) continue;
+    const idx = lines.map((l, i) => i).filter((i) => lines[i].service === s)
+      .sort((a, b) => lines[b].startingPrice - lines[a].startingPrice) // stable: ties keep car order
+      .slice(0, left as number);
+    for (const i of idx) {
+      const l = lines[i];
+      l.covered = true;
+      l.payable = vehicleRank(l.vehicleType) <= vehicleRank(m.planVehicle)
+        ? 0
+        : Math.max(0, l.startingPrice - startingPrice(cfg, s, m.planVehicle));
+    }
+    if (idx.length) visitsUsed[s] = idx.length;
+  }
+
+  const sum = () => lines.reduce((n, l) => n + l.payable, 0);
+  let rewardUsed = false;
+  if (m.reward && sum() > 0) {
+    if (m.reward === 'percent25') {
+      for (const l of lines) l.payable = off(l.payable, 25);
+      rewardUsed = true;
+    } else if (m.reward === 'freeWash') {
+      const free = lines.filter((l) => !l.covered && l.payable > 0)
+        .sort((a, b) => a.payable - b.payable)[0];
+      if (free) { free.payable = 0; rewardUsed = true; }
+    } else if (m.reward === 'tireShine' || m.reward === 'miniSpray') {
+      rewardUsed = true;
+    }
+  }
+
+  const pct = cfg.membership[m.tier].discountPercent;
+  let memberDiscount = 0;
+  for (const l of lines) {
+    const after = off(l.payable, pct);
+    memberDiscount += l.payable - after;
+    l.payable = after;
+  }
+
+  const payable = sum();
+  const deposit = Math.min(payable, lines.reduce((n, l) => n + (l.payable > 0 ? l.deposit : 0), 0));
+  return { lines, subtotal: q.subtotal, payable, deposit, visitsUsed, rewardUsed, memberDiscount, savings: q.subtotal - payable };
+}
+
+// The start (ISO day) of the member's current billing month: the monthly anniversary of
+// period_start, clamped to the month's last day (Jan 31 -> Feb 28). Visits reset on this day.
+// periodStart may be a timestamp; only its date part is used.
+export function billingMonthStart(periodStart: string, today: string): string {
+  const parse = (x: string) => {
+    const r = /^(\d{4})-(\d{2})-(\d{2})/.exec(typeof x === 'string' ? x : '');
+    const d = r && new Date(Date.UTC(+r[1], +r[2] - 1, +r[3]));
+    if (!r || !d || d.getUTCMonth() !== +r[2] - 1 || d.getUTCDate() !== +r[3]) throw new Error('bad_date');
+    return { y: +r[1], m: +r[2] - 1, d: +r[3] };
+  };
+  const p = parse(periodStart), t = parse(today);
+  const iso = (y: number, m: number, d: number) => new Date(Date.UTC(y, m, d)).toISOString().slice(0, 10);
+  if (iso(t.y, t.m, t.d) <= iso(p.y, p.m, p.d)) return iso(p.y, p.m, p.d);
+  const anniv = (y: number, m: number) => Math.min(p.d, new Date(Date.UTC(y, m + 1, 0)).getUTCDate());
+  if (anniv(t.y, t.m) <= t.d) return iso(t.y, t.m, anniv(t.y, t.m));
+  const py = t.m === 0 ? t.y - 1 : t.y, pm = t.m === 0 ? 11 : t.m - 1;
+  return iso(py, pm, anniv(py, pm));
+}
+
 // What the website shows for the plans: per vehicle type the monthly price, what the same visits
 // cost one at a time (worth) and the saving (never negative). All derived here, none typed in.
 export function membershipView(cfg: DetailPricing) {
   const out = {} as Record<MemberTier, {
     name: string; tagline: string; perks: string[]; includes: string[];
     prices: Record<VehicleType, { price: number; worth: number; save: number }>;
+    rank: number; stampsPerCar: number; topupBonusPercent: number; discountPercent: number;
   }>;
   for (const t of TIERS) {
     const m = cfg.membership[t];
@@ -160,6 +279,7 @@ export function membershipView(cfg: DetailPricing) {
       name: m.name, tagline: m.tagline, perks: m.perks,
       includes: entries.map((s) => `${m.visits[s]} × ${cfg.services[s].name}`),
       prices,
+      rank: m.rank, stampsPerCar: m.stampsPerCar, topupBonusPercent: m.topupBonusPercent, discountPercent: m.discountPercent,
     };
   }
   return out;
@@ -170,6 +290,10 @@ const whole = (n: unknown, min: number, max: number): n is number =>
   typeof n === 'number' && Number.isInteger(n) && n >= min && n <= max;
 const text = (s: unknown, max: number): s is string =>
   typeof s === 'string' && s.trim().length > 0 && s.length <= max;
+
+const PLAN_NUMBERS = [
+  ['rank', 1, 3], ['stampsPerCar', 1, 10], ['topupBonusPercent', 0, 50], ['discountPercent', 0, 50],
+] as const;
 
 export type PricingResult = { ok: true; value: DetailPricing } | { ok: false; error: string };
 
@@ -235,8 +359,20 @@ export function validateDetailPricing(next: unknown): PricingResult {
       if (!whole(m.prices?.[v], 1, 10000)) return bad(`membership.${t}.prices.${v}`);
       prices[v] = m.prices[v];
     }
-    membership[t] = { name: m.name.trim(), tagline: m.tagline.trim(), visits, perks: m.perks.map((p: string) => p.trim()), prices };
+    // Plan numbers. Missing (a config saved before they existed) = the default for this tier,
+    // so the live config keeps validating until the migration writes them.
+    const num = {} as Record<typeof PLAN_NUMBERS[number][0], number>;
+    for (const [k, min, max] of PLAN_NUMBERS) {
+      const x = m[k] === undefined ? DEFAULT_DETAIL_PRICING.membership[t][k] : m[k];
+      if (!whole(x, min, max)) return bad(`membership.${t}.${k}`);
+      num[k] = x;
+    }
+    membership[t] = {
+      name: m.name.trim(), tagline: m.tagline.trim(), visits, perks: m.perks.map((p: string) => p.trim()), prices,
+      rank: num.rank, stampsPerCar: num.stampsPerCar, topupBonusPercent: num.topupBonusPercent, discountPercent: num.discountPercent,
+    };
   }
+  if (new Set(TIERS.map((t) => membership[t].rank)).size !== TIERS.length) return bad('membership.rank');
   return { ok: true, value: { vehicleTypes, deposits, bookingWindowDays: n.bookingWindowDays, services, membership } };
 }
 
@@ -257,5 +393,28 @@ export function invoiceTotals(i: { servicePrice: number; extras: InvoiceExtra[];
   }
   const credit = Math.min(i.depositCredit, total);
   // refundDue: deposit that was taken but isn't needed because the final total is below it
+  return { total, credit, balance: total - credit, refundDue: i.depositCredit - credit };
+}
+
+// Per-car invoice. A car covered by an included visit stays $0 whatever its price; every other
+// car plus the extras (extras on covered cars too) get the member % off, rounded once on the total.
+// Then the deposit is credited as in invoiceTotals. Throws 'bad_invoice' on any bad number.
+export function invoiceTotalsLines(i: {
+  lines: { price: number; covered: boolean }[]; extras: InvoiceExtra[]; memberPercent: number; depositCredit: number;
+}) {
+  if (!i || !Array.isArray(i.lines) || i.lines.length < 1 || i.lines.length > MAX_CARS || !Array.isArray(i.extras)
+    || !whole(i.memberPercent, 0, 100) || !whole(i.depositCredit, 0, 10000)) throw new Error('bad_invoice');
+  let gross = 0;
+  for (const l of i.lines) {
+    if (!l || !whole(l.price, 0, 10000) || typeof l.covered !== 'boolean') throw new Error('bad_invoice');
+    if (!l.covered) gross += l.price;
+  }
+  for (const e of i.extras) {
+    if (!e || !whole(e.price, 0, 10000)) throw new Error('bad_invoice');
+    gross += e.price;
+  }
+  // integer maths: gross*(100-p) is exact, so x.5 always rounds up
+  const total = Math.round((gross * (100 - i.memberPercent)) / 100);
+  const credit = Math.min(i.depositCredit, total);
   return { total, credit, balance: total - credit, refundDue: i.depositCredit - credit };
 }
