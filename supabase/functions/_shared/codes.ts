@@ -16,7 +16,8 @@ const PER_IP = 10;
 const ALL_IPS = 300;
 
 export function clientIp(req: Request): string {
-  // Only Cloudflare's header: the platform sets it and overwrites any client value.
+  // Only Cloudflare's header: the platform sets it and overwrites any client value (verified
+  // present on the live functions, 2026-11-11, so the shared bucket below is only a fallback).
   // x-forwarded-for / x-real-ip can be forged to dodge the code-guessing rate limit, so a
   // request without cf-connecting-ip shares one strict 'unknown' bucket instead.
   return req.headers.get('cf-connecting-ip') ?? 'unknown';

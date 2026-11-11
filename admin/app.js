@@ -66,6 +66,7 @@ const ERR = {
   already_paid: 'This invoice is already paid.',
   bad_invoice: 'Check the price and extras. Whole dollars only, and every extra needs a name.',
   insufficient_balance: 'Their balance no longer covers this. Take cash or card.',
+  balance_not_allowed: 'This booking wasn’t made with their member code, so their balance can’t pay for it. Take cash or card.',
   bad_vehicle: 'Pick a vehicle type.',
   not_detail: 'This booking has no inspection invoice.',
   too_many: 'Too many requests. Try again later.',

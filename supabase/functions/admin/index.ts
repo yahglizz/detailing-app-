@@ -519,7 +519,8 @@ const handlers: Record<string, Handler> = {
     const { payKey: _k, ipHash: _i, ...detail } = (row.detail ?? {}) as Obj;
     const [inv, wallet, mem] = await Promise.all([
       invoiceFor(row),
-      row.customer_id ? walletBalance(db, row.customer_id) : 0,
+      // only code-made bookings may pay from balance (see detail_invoice_pay), so only they show it
+      row.customer_id && row.detail?.viaCode === true ? walletBalance(db, row.customer_id) : 0,
       row.membership_id
         ? db.from('memberships').select('tier, is_test').eq('id', row.membership_id).maybeSingle().then((r: Obj) => r.data)
         : null,
@@ -585,7 +586,7 @@ const handlers: Record<string, Handler> = {
     // %, and for 'balance' the wallet debit; a short balance raises insufficient_balance.
     const { data, error } = await db.rpc('detail_invoice_pay', { p_booking: row.id, p_method: method });
     if (error) {
-      for (const code of ['insufficient_balance', 'already_paid', 'not_open', 'not_found', 'bad_method']) {
+      for (const code of ['insufficient_balance', 'balance_not_allowed', 'already_paid', 'not_open', 'not_found', 'bad_method']) {
         if (String(error.message).includes(code)) return bad(code, code === 'not_found' ? 404 : code === 'bad_method' ? 400 : 409);
       }
       throw error;

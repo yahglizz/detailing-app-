@@ -184,6 +184,11 @@ begin
   v_credit := least(v_deposit, v_total);
   v_balance := v_total - v_credit;
 
+  -- Only a booking made with the customer's own member/account code may spend their balance:
+  -- a guest can type anyone's email, which lands the booking on that customer's row.
+  if p_method = 'balance' and coalesce((b.detail->>'viaCode')::boolean, false) is not true then
+    raise exception 'balance_not_allowed';
+  end if;
   if p_method = 'balance' and v_balance > 0 then
     begin
       insert into wallet_ledger (customer_id, delta, reason, booking_id)

@@ -293,6 +293,9 @@ const handlers: Record<string, (b: Obj, req: Request) => Promise<Response>> = {
       detail: {
         payKey, ipHash, name: r.name, phone: r.phone, cars: r.cars, zip: r.zip, notes: r.notes, photos,
         ...(acct?.isTest ? { test: true } : {}),
+        // Booked with a member/account code: the only bookings whose balance may pay at the job
+        // (a guest can type anyone's email, so the customer row alone proves nothing).
+        ...(acct ? { viaCode: true } : {}),
         // first car in the old single-car fields, for dashboard code that predates cars[]
         vehicle: { year: first.year, make: first.make }, vehicleType: first.vehicleType, service: first.service,
         condition: first.condition, petHair: first.petHair,
@@ -388,7 +391,7 @@ async function notifyBumped(bumpedId: string, day: string, movedTo: string | nul
     const email = row?.customers?.email;
     if (email) {
       await sendEmail(email, 'Your detail time moved',
-        `<p>Hi ${esc(row.detail?.name)}, your detail on ${esc(day)} moved to ${to ? esc(to) : "a new time. We'll call to set it"}.</p>
+        `<p>Hi, your Brotherly Love Detailing appointment on ${esc(day)} moved to ${to ? esc(to) : "a new time. We'll call to set it"}.</p>
          <p>Questions? Just reply to this email.</p>`);
     }
     await sendEmail(ownerEmail(), 'VIP booking moved a customer',
