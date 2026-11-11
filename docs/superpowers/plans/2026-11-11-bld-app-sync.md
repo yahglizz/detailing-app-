@@ -22,7 +22,7 @@
 ## Global Constraints
 
 - **Project:** Supabase project `fiaadogbkvjcddehnymj` only. Never touch `eqblpbeqothkpyqiafzs`.
-- **Money:** whole dollars, `Math.round` at each step. The client never sends a price that is trusted.
+- **Money:** whole dollars; member % and reward % rounded once on the total, same formula in quote and invoice (see spec). The client never sends a price that is trusted.
 - **Cars:** 1–6 per booking. One time slot per booking. Deposit = sum of `depositFor` per car.
 - **Vehicle order:** `sedan < suv < large`. Saved-car `truck` reads as `suv`.
 - **Plan config** lives only in `detailPricing.membership.<tier>` with fields:

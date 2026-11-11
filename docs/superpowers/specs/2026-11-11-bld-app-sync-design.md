@@ -58,7 +58,7 @@ The website, `detail` edge function and dashboard were rebuilt around starting p
   2. Issued reward (oldest unused): `percent25` = 25% off what is still payable; `freeWash` = the cheapest uncovered line free; `tireShine`/`miniSpray` = no price change (done at the job).
   3. Tier `discountPercent` off what is still payable.
   4. Returns `{payable, visitsUsed: {service: n}, rewardUsed, memberDiscount, savings}`. Deposit for a member = sum of line deposits of lines still payable, capped at `payable`; 0 when payable is 0.
-- Rounding: whole dollars, `Math.round` at each step (same as today).
+- Rounding: whole dollars. Member % off and the 25% reward are applied together and rounded ONCE on the total (half up), identically in the quote (`memberQuote`) and the job invoice (`invoiceTotalsLines` / `detail_invoice_pay`), so the price quoted is the price billed (decided during the build; supersedes "round at each step").
 - The device never sends a price; the server prices, and `reserve` refuses with `price_changed` (+ new quote) when the client's `expectedTotal` differs (same pattern as old `book`).
 
 ### Visits accounting
