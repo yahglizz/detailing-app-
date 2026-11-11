@@ -241,6 +241,10 @@ function carsOf(detail: Obj): Obj[] {
 // ——— actions ———
 type Handler = (body: Obj, me: Staff) => Promise<Response>;
 
+const REWARD_LABELS: Record<string, string> = {
+  tireShine: 'Free tire shine', miniSpray: 'Free interior mini-spray', percent25: '25% off', freeWash: 'Free wash',
+};
+const rewardOf = (k: unknown) => (typeof k === 'string' && REWARD_LABELS[k] ? { key: k, label: REWARD_LABELS[k] } : null);
 const handlers: Record<string, Handler> = {
   me: async (_b, me) => json({ id: me.id, name: me.name, role: me.role, open: !!me.open }),
 
@@ -541,6 +545,7 @@ const handlers: Record<string, Handler> = {
       depositCreditable: depositCreditOf(row), startingPrice: Number(row.quote?.startingPrice ?? 0), invoice: inv,
       cars: carsOf(detail), wallet,
       member: mem ? { tier: mem.tier, test: !!mem.is_test || detail.test === true } : null,
+      reward: rewardOf(row.quote?.reward),
       bump: detail.bumpedFrom ? { from: detail.bumpedFrom, at: detail.bumpedAt ?? null } : null,
     });
   },

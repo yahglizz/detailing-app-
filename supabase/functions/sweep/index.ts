@@ -46,7 +46,7 @@ Deno.serve(async () => {
   }
 
   // Starting-price bookings nobody paid the (demo) deposit for: free the slot after 45 minutes,
-  // and undo any VIP bump the hold made (detail_unbump, migration 0017; 0 if it wasn't declined).
+  // and undo any VIP bump the hold made (detail_unbump, migration 0017; '[]' if it wasn't declined).
   // A moved booking whose old time is taken meanwhile keeps its new time; it hasn't been told
   // (that waits for the VIP's deposit), so tell it and the owner now. = detail's undoBumps.
   const { data: abandoned } = await db.from('bookings').select('id, detail')
@@ -55,8 +55,24 @@ Deno.serve(async () => {
     try {
       await declinePending(db, b.id);
       settled++;
-      const { error } = await db.rpc('detail_unbump', { p_booking: b.id });
+      const { data: back, error } = await db.rpc('detail_unbump', { p_booking: b.id });
       if (error) throw error;
+      for (const id of (Array.isArray(back) ? back : []) as string[]) {
+        try {
+          const { data: r } = await db.from('bookings').select('preferred_day, time_slot, detail, customers(email)').eq('id', id).maybeSingle();
+          if (!r) continue;
+          const at = r.time_slot ? clock(String(r.time_slot)) : 'your original time';
+          const em = (r.customers as unknown as { email?: string } | null)?.email;
+          if (em) {
+            await sendEmail(em, 'Your original detail time is back',
+              `<p>Good news: your Brotherly Love Detailing appointment on ${esc(r.preferred_day)} is back at ${esc(at)}.</p>`);
+          }
+          await sendEmail(ownerEmail(), 'Bumped booking restored',
+            `<p>${esc(r.detail?.name)} is back at ${esc(at)} on ${esc(r.preferred_day)} (the VIP hold expired).</p>`);
+        } catch (e2) {
+          console.error('sweep restore notify failed', id, (e2 as Error).message);
+        }
+      }
       const { data: kept, error: e2 } = await db.from('bookings')
         .select('preferred_day, time_slot, detail, customers(email)')
         .eq('detail->>bumpedBy', b.id).in('status', ['pending_payment', 'requested']).is('detail->>bumpNotified', null);

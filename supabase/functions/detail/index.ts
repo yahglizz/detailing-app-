@@ -9,6 +9,7 @@
 //   reserve { ...request }                  -> { bookingId, payKey, quote, uploads, escalated, paidFromBalance }
 //   pay-demo { bookingId, payKey }          -> { ok, demo: true, day, slot }
 //   release { bookingId, payKey }           -> { ok }   (frees an unpaid hold)
+//   status { bookingId, payKey }            -> { day, slot, status }
 //
 // Every number is computed here from catalog.config.detailPricing; anything price-shaped in a
 // request body is ignored (expectedTotal is only compared). A member code (app only) gives the
@@ -138,20 +139,20 @@ async function memberOf(acct: Account, cfg: DetailPricing): Promise<Member | nul
 function bookingQuote(cfg: DetailPricing, cars: CarLine[], mem: Member | null) {
   const shape = (o: {
     lines: unknown[]; subtotal: number; payable: number; deposit: number; memberPercent: number; rewardPercent: number;
-    visitsUsed: Obj; rewardId: string | null; tier: string | null;
+    visitsUsed: Obj; rewardId: string | null; reward: string | null; tier: string | null;
   }) => ({
     lines: o.lines, subtotal: o.subtotal, total: o.payable, payable: o.payable, deposit: o.deposit,
-    memberPercent: o.memberPercent, rewardPercent: o.rewardPercent, visitsUsed: o.visitsUsed, rewardId: o.rewardId,
+    memberPercent: o.memberPercent, rewardPercent: o.rewardPercent, visitsUsed: o.visitsUsed, rewardId: o.rewardId, reward: o.reward,
     startingPrice: o.subtotal, remainder: o.payable, balanceDue: o.payable, // nothing is paid until the deposit step
     balance: o.payable - o.deposit, paidOnline: 0, // `balance` = estimated after deposit (website display)
     tier: o.tier,
   });
   if (!mem) {
     const q = quoteCars(cfg, cars);
-    return shape({ ...q, payable: q.subtotal, memberPercent: 0, rewardPercent: 0, visitsUsed: {}, rewardId: null, tier: null });
+    return shape({ ...q, payable: q.subtotal, memberPercent: 0, rewardPercent: 0, visitsUsed: {}, rewardId: null, reward: null, tier: null });
   }
   const mq = memberQuote(cfg, cars, mem.ctx);
-  return shape({ ...mq, rewardId: mq.rewardUsed ? mem.rewardId : null, tier: mem.ctx.tier });
+  return shape({ ...mq, rewardId: mq.rewardUsed ? mem.rewardId : null, reward: mq.rewardUsed ? mem.ctx.reward ?? null : null, tier: mem.ctx.tier });
 }
 
 // Database errors from detail_reserve and the capacity trigger -> HTTP.
@@ -355,6 +356,14 @@ const handlers: Record<string, (b: Obj, req: Request) => Promise<Response>> = {
     return json({ ok: true });
   },
 
+  // Where the booking is now (a VIP bump may have moved it since the customer picked).
+  status: async (b) => {
+    if (!UUID.test(String(b.bookingId)) || typeof b.payKey !== 'string' || !b.payKey) return bad('not_found', 404);
+    const row = await loadRow(b.bookingId);
+    if (!row || row.flow !== 'detail_v2' || row.detail?.payKey !== b.payKey) return bad('not_found', 404);
+    return json({ day: row.preferred_day ?? null, slot: row.time_slot ?? null, status: row.status });
+  },
+
   'pay-demo': async (b) => {
     const { data: mode } = await db.from('app_config').select('value').eq('key', 'payments_mode').maybeSingle();
     if (String(mode?.value ?? '') !== 'demo') return bad('payments_not_demo', 503); // fail closed
@@ -408,14 +417,34 @@ async function notifyBumped(bumpedId: string, vipName: unknown) {
   }
 }
 
+// A bump was undone: the customer's original time is back. Never fails the caller.
+async function notifyRestored(id: string) {
+  try {
+    const row = await loadRow(id);
+    if (!row) return;
+    const day = String(row.preferred_day);
+    const at = row.time_slot ? clock(String(row.time_slot)) : 'your original time';
+    const email = row.customers?.email;
+    if (email) {
+      await sendEmail(email, 'Your original detail time is back',
+        `<p>Good news: your Brotherly Love Detailing appointment on ${esc(day)} is back at ${esc(at)}.</p>`);
+    }
+    await sendEmail(ownerEmail(), 'Bumped booking restored',
+      `<p>${esc(row.detail?.name)} is back at ${esc(at)} on ${esc(day)} (the VIP hold that moved them was released).</p>`);
+  } catch (e) {
+    console.error('restore notify failed', id, (e as Error).message);
+  }
+}
+
 // A VIP hold was released before its deposit: put the bookings it moved back (detail_unbump,
 // migration 0017). One whose old time was taken meanwhile keeps its new time and hasn't been
 // told yet (that waits for the VIP's deposit), so tell it now. Never fails the release.
 // sweep/index.ts does the same for holds that expire.
 async function undoBumps(vipId: string, vipName: unknown) {
   try {
-    const { error } = await db.rpc('detail_unbump', { p_booking: vipId });
+    const { data: back, error } = await db.rpc('detail_unbump', { p_booking: vipId });
     if (error) throw error;
+    for (const id of (Array.isArray(back) ? back : []) as string[]) await notifyRestored(String(id));
     const { data: kept, error: e2 } = await db.from('bookings').select('id')
       .eq('detail->>bumpedBy', vipId).in('status', ['pending_payment', 'requested']).is('detail->>bumpNotified', null);
     if (e2) throw e2;

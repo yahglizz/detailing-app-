@@ -208,16 +208,18 @@ grant execute on function detail_pay_demo(uuid, text) to service_role;
 -- (pending_payment|requested, same day) goes back to its old time if that time is free, and
 -- loses the bump marks. One whose old time is taken by now keeps the time it was moved to.
 -- Same day lock as detail_reserve, so nothing can take the old time halfway through.
--- Returns the number restored (0 when p_booking is still live). Service role only.
+-- Returns a jsonb array of the restored booking ids ('[]' when none / p_booking still live) so the
+-- caller can tell each customer. Service role only.
+drop function if exists detail_unbump(uuid);
 create or replace function detail_unbump(p_booking uuid)
-returns int language plpgsql security definer set search_path = public as $$
-declare v_day date; h record; v_n int := 0;
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_day date; h record; v_n jsonb := '[]'::jsonb;
 begin
   select preferred_day into v_day from bookings where id = p_booking;
-  if v_day is null then return 0; end if;
+  if v_day is null then return '[]'::jsonb; end if;
   perform pg_advisory_xact_lock(hashtext('detail-day:' || v_day::text));
   if not exists (select 1 from bookings where id = p_booking and status in ('declined', 'refunded')) then
-    return 0;
+    return '[]'::jsonb;
   end if;
   for h in select b.id, b.detail->>'bumpedFrom' as slot from bookings b
       where b.detail->>'bumpedBy' = p_booking::text and b.preferred_day = v_day
@@ -233,7 +235,7 @@ begin
           bumped_from = null,
           detail = detail - 'bumpedFrom' - 'bumpedAt' - 'bumpedBy' - 'bumpNotified'
         where id = h.id;
-      v_n := v_n + 1;
+      v_n := v_n || to_jsonb(h.id::text);
     end if;
   end loop;
   return v_n;

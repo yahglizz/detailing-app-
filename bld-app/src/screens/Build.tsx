@@ -259,6 +259,9 @@ export default function Build({ navigation }: Props) {
         if (paid.data.day) when = { day: paid.data.day, slot: paid.data.slot ?? null };
       }
       hold.current = null;
+      // final check: a VIP may have moved the booking since (e.g. during the photo upload)
+      const now = await detail<{ day: string; slot: string | null }>({ action: 'status', bookingId: data.bookingId, payKey: data.payKey }).catch(() => null);
+      if (now?.data?.day) when = { day: now.data.day, slot: now.data.slot ?? null };
       if (profile) await refresh();
       if (!mounted.current) return;
       navigation.reset({ index: 0, routes: [{ name: 'Booked', params: {

@@ -534,6 +534,7 @@ function DetailJob({ b, me, onChanged, onCancel }) {
       <div class="when-card"><div><div class="when-big">${fmtLongDay(b.day)}</div><div class="when-sub">${timeOf(b)}</div></div>
         <span class=${'pill ' + b.status}>${asked ? 'Requested' : confirmed ? 'Confirmed' : STATUS[b.status] || b.status}</span></div>
       ${(tier || isTest) && html`<div class="chips" style="margin-top:10px">${tier && html`<${Tier} tier=${tier} />`} ${isTest && html`<span class="tag">TEST</span>`}</div>`}
+      ${d.reward && html`<div class="banner info" style="margin-top:10px"><${Icon} name="check" /><div>${d.reward.key === 'tireShine' || d.reward.key === 'miniSpray' ? html`<b>Reward: ${d.reward.label}</b> — include it at this job` : html`Reward applied: ${d.reward.label}`}</div></div>`}
       ${d.bump && html`<div class="banner info" style="margin-top:10px"><${Icon} name="alert" /><div>Moved from ${fmtSlot(d.bump.from)} by a VIP booking.</div></div>`}
       ${asked && !changing && html`<div class="stack" style="gap:8px;margin-top:12px">
         <${ActionButton} class="btn primary block big" run=${confirmTime}><${Icon} name="check" size=${20} /> Confirm this time<//>
