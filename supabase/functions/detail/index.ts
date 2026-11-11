@@ -1,23 +1,32 @@
-// Public booking API for the website's starting-price flow (flow = 'detail_v2').
+// Public booking API for the website and the app (flow = 'detail_v2'). 1–6 cars per booking.
 // POST { action, ... }:
-//   config                         -> { pricing, slots, today }
-//   quote { service, vehicleType } -> { startingPrice, deposit, balance }
-//   availability { from?, to? }    -> { days, slots, today, windowDays }
-//   availability { day }           -> same, plus { taken: ["10:00", ...] }
-//   reserve { ...request }         -> { bookingId, payKey, quote, uploads }
-//   pay-demo { bookingId, payKey } -> { ok, demo: true }
-//   release { bookingId, payKey }  -> { ok }   (frees an unpaid hold)
+//   config                                  -> { pricing, membership, slots, today }
+//   quote { cars: [{service, vehicleType}], memberCode? }
+//                                           -> { lines, subtotal, deposit, member? }
+//   quote { service, vehicleType }          -> { startingPrice, deposit, balance }   (old single-car shape)
+//   availability { from?, to? }             -> { days, slots, today, windowDays }
+//   availability { day }                    -> same, plus { taken: ["10:00", ...], holders: {"10:00": rank}, minSlot }
+//   reserve { ...request }                  -> { bookingId, payKey, quote, uploads, escalated, paidFromBalance }
+//   pay-demo { bookingId, payKey }          -> { ok, demo: true }
+//   release { bookingId, payKey }           -> { ok }   (frees an unpaid hold)
 //
 // Every number is computed here from catalog.config.detailPricing; anything price-shaped in a
-// request body is ignored. Payments are demo-only: pay-demo works only while
-// app_config.payments_mode is exactly 'demo' and records deposit_status 'demo', never 'paid'.
+// request body is ignored (expectedTotal is only compared). A member code (app only) gives the
+// member's price, VIP rank and the prepaid balance; without one nobody can spend a balance.
+// Payments are demo-only: pay-demo works only while app_config.payments_mode is exactly 'demo'
+// and records deposit_status 'demo', never 'paid'. A balance-paid deposit is real money and is
+// taken inside detail_reserve (migration 0017) together with the insert and any VIP bump.
 // Deployed with verify_jwt=false (browsers preflight without a JWT), like `admin`.
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { ALL_SLOTS } from '../_shared/bump.ts';
 import { validateReserve } from '../_shared/detail_booking.ts';
 import {
-  DEFAULT_DETAIL_PRICING, isService, isVehicle, membershipView, quoteDetail, validateDetailPricing, type DetailPricing,
+  billingMonthStart, DEFAULT_DETAIL_PRICING, isService, isVehicle, MAX_CARS, memberQuote, membershipView, quoteCars,
+  quoteDetail, SERVICES, validateDetailPricing,
+  type CarLine, type DetailPricing, type DetailService, type MemberCtx, type RewardKey,
 } from '../_shared/detail_pricing.ts';
+import { clientIp, resolveCode, type Account } from '../_shared/codes.ts';
+import { walletBalance } from '../_shared/wallet.ts';
 import { adminLink, button, esc, ownerEmail, sendEmail } from '../_shared/notify.ts';
 
 const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
@@ -34,6 +43,9 @@ const bad = (error: string, status = 400) => json({ error }, status);
 type Obj = Record<string, any>;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const BUCKET = 'booking-photos';
+const REWARDS: RewardKey[] = ['tireShine', 'miniSpray', 'percent25', 'freeWash'];
+// Bookings that hold a visit (declined/refunded give it back, so an abandoned hold frees it).
+const LIVE = ['pending_payment', 'requested', 'confirmed', 'done'];
 // Abuse caps (5 per email, 10 per IP per hour, every status) live in the bookings insert
 // trigger in migration 0015, where they are atomic. ponytail: no captcha / email verification yet.
 // Keyed hash of the caller's IP, so stored values can't be brute-forced back to addresses.
@@ -71,16 +83,112 @@ async function pricing(): Promise<DetailPricing> {
   return DEFAULT_DETAIL_PRICING;
 }
 
+// A code in the body -> the account, an error response, or null (no code = guest).
+async function account(code: unknown, req: Request): Promise<Account | Response | null> {
+  if (typeof code !== 'string' || !code.trim()) return null;
+  const a = await resolveCode(db, code, clientIp(req));
+  if (a === 'rate_limited') return bad('rate_limited', 429);
+  if (a === 'invalid_code') return bad('invalid_code', 404);
+  return a;
+}
+
+// An active member's pricing context: plan vehicle size, visits left this billing month (plan
+// visits minus the visits recorded on this membership's live bookings since the anniversary),
+// and the oldest issued reward. Fails closed: a read error throws instead of granting visits.
+// ponytail: visits aren't locked, so one member racing two bookings at once could use a visit
+// twice; add a check inside detail_reserve if that ever matters.
+type Member = { ctx: MemberCtx; membershipId: string; rank: number; rewardId: string | null };
+async function memberOf(acct: Account, cfg: DetailPricing): Promise<Member | null> {
+  const m = acct.membership;
+  if (!m) return null; // a balance-only account: guest prices, rank 0
+  const [own, used, rew] = await Promise.all([
+    db.from('memberships').select('vehicle_type').eq('id', m.id).single(),
+    db.from('bookings').select('quote').eq('membership_id', m.id).in('status', LIVE)
+      .gte('created_at', billingMonthStart(String(m.period_start), todayISO())),
+    db.from('redemptions').select('id, reward').eq('membership_id', m.id).eq('status', 'issued')
+      .order('created_at').limit(1),
+  ]);
+  if (own.error || used.error || rew.error) throw new Error('member lookup failed');
+  const plan = cfg.membership[m.tier];
+  const visitsLeft: Partial<Record<DetailService, number>> = {};
+  for (const s of SERVICES) {
+    if (!plan.visits[s]) continue;
+    const n = ((used.data ?? []) as Obj[]).reduce((t, b) => {
+      const u = b.quote?.visitsUsed;
+      return t + (u && typeof u === 'object' && Number.isInteger(u[s]) ? u[s] : 0);
+    }, 0);
+    visitsLeft[s] = Math.max(0, (plan.visits[s] as number) - n);
+  }
+  const r = rew.data?.[0] as { id: string; reward: string } | undefined;
+  const reward = r && (REWARDS as string[]).includes(r.reward) ? r.reward as RewardKey : null;
+  return {
+    ctx: { tier: m.tier, planVehicle: isVehicle(own.data?.vehicle_type) ? own.data.vehicle_type : 'sedan', visitsLeft, reward },
+    membershipId: m.id, rank: plan.rank, rewardId: reward ? r!.id : null,
+  };
+}
+
+// The quote stored on the booking (and returned by reserve). detail_invoice_pay reads lines
+// (covered/credit), memberPercent and rewardPercent from it to build the job invoice.
+// `balance` is for the website build that is live before the multi-car one ships.
+function bookingQuote(cfg: DetailPricing, cars: CarLine[], mem: Member | null) {
+  const shape = (o: {
+    lines: unknown[]; subtotal: number; payable: number; deposit: number; memberPercent: number; rewardPercent: number;
+    visitsUsed: Obj; rewardId: string | null; tier: string | null;
+  }) => ({
+    lines: o.lines, subtotal: o.subtotal, total: o.payable, payable: o.payable, deposit: o.deposit,
+    memberPercent: o.memberPercent, rewardPercent: o.rewardPercent, visitsUsed: o.visitsUsed, rewardId: o.rewardId,
+    startingPrice: o.subtotal, remainder: o.payable - o.deposit, balanceDue: o.payable - o.deposit,
+    balance: o.payable - o.deposit, paidOnline: 0, tier: o.tier,
+  });
+  if (!mem) {
+    const q = quoteCars(cfg, cars);
+    return shape({ ...q, payable: q.subtotal, memberPercent: 0, rewardPercent: 0, visitsUsed: {}, rewardId: null, tier: null });
+  }
+  const mq = memberQuote(cfg, cars, mem.ctx);
+  return shape({ ...mq, rewardId: mq.rewardUsed ? mem.rewardId : null, tier: mem.ctx.tier });
+}
+
+// Database errors from detail_reserve and the capacity trigger -> HTTP.
+const RESERVE_ERRORS: [string, string, number][] = [
+  ['slot_taken', 'slot_taken', 409], ['insufficient_balance', 'balance_changed', 409],
+  ['day_full', 'day_full', 409], ['day_closed', 'day_closed', 409], ['too_many', 'too_many', 429],
+];
+
+const loadRow = async (id: string) => (await db.from('bookings')
+  .select('id, status, deposit_status, membership_id, preferred_day, time_slot, quote, address, detail, customers(email, name)')
+  .eq('id', id).eq('flow', 'detail_v2').maybeSingle()).data as Obj | null;
+
 const handlers: Record<string, (b: Obj, req: Request) => Promise<Response>> = {
   config: async () => {
     const p = await pricing();
     return json({ pricing: p, membership: membershipView(p), slots: ALL_SLOTS, today: todayISO() });
   },
 
-  quote: async (b) => {
-    if (!isService(b.service)) return bad('bad_service');
-    if (!isVehicle(b.vehicleType)) return bad('bad_vehicle_type');
-    return json(quoteDetail(await pricing(), b.service, b.vehicleType));
+  quote: async (b, req) => {
+    const cfg = await pricing();
+    if (b.cars === undefined) { // old single-car shape
+      if (!isService(b.service)) return bad('bad_service');
+      if (!isVehicle(b.vehicleType)) return bad('bad_vehicle_type');
+      return json(quoteDetail(cfg, b.service, b.vehicleType));
+    }
+    if (!Array.isArray(b.cars) || b.cars.length < 1 || b.cars.length > MAX_CARS) return bad('bad_cars');
+    const cars: CarLine[] = [];
+    for (const c of b.cars) {
+      if (!isService(c?.service)) return bad('bad_service');
+      if (!isVehicle(c?.vehicleType)) return bad('bad_vehicle_type');
+      cars.push({ service: c.service, vehicleType: c.vehicleType });
+    }
+    const out: Obj = quoteCars(cfg, cars);
+    const acct = await account(b.memberCode, req);
+    if (acct instanceof Response) return acct;
+    const mem = acct && await memberOf(acct, cfg);
+    if (mem) {
+      out.member = {
+        ...memberQuote(cfg, cars, mem.ctx),
+        tier: mem.ctx.tier, planVehicle: mem.ctx.planVehicle, visitsLeft: mem.ctx.visitsLeft, reward: mem.ctx.reward,
+      };
+    }
+    return json(out);
   },
 
   availability: async (b) => {
@@ -99,9 +207,20 @@ const handlers: Record<string, (b: Obj, req: Request) => Promise<Response>> = {
     };
     if (b.day !== undefined) {
       if (!isoOk(b.day) || b.day < today || b.day > last) return bad('bad_day');
-      const { data: taken, error: tErr } = await db.rpc('booked_slots', { day: b.day });
-      if (tErr) throw tErr;
-      out.taken = taken ?? [];
+      const [taken, states] = await Promise.all([
+        db.rpc('booked_slots', { day: b.day }),
+        db.rpc('slot_states', { day: b.day }),
+      ]);
+      if (taken.error) throw taken.error;
+      if (states.error) throw states.error;
+      out.taken = taken.data ?? [];
+      // slot -> the holder's VIP rank (0 = guest), so the app can show which slots a member can take.
+      // ponytail: anchored and owner-confirmed holders show their rank too; reserve refuses them (slot_taken).
+      const holders: Record<string, number> = {};
+      for (const s of (states.data ?? []) as { slot: string; rank: number | null }[]) {
+        holders[s.slot] = Math.max(holders[s.slot] ?? 0, s.rank ?? 0);
+      }
+      out.holders = holders;
       out.minSlot = minSlotFor(b.day);
     }
     return json(out);
@@ -113,42 +232,51 @@ const handlers: Record<string, (b: Obj, req: Request) => Promise<Response>> = {
     const v = validateReserve(b, cfg, today, { minSlot: minSlotFor(today) });
     if (!v.ok) return bad(v.error);
     const r = v.value;
-    const q = quoteDetail(cfg, r.service, r.vehicleType); // server price, never the client's
 
-    // day open and not full; slot not taken by ANY booking (app rows included)
-    const { data: dayRows, error: dayErr } = await db.rpc('day_states', { from_day: r.day, to_day: r.day });
-    if (dayErr) throw dayErr;
-    const st = dayRows?.[0] as { capacity: number; booked: number; closed: boolean } | undefined;
-    if (!st) return bad('bad_day');
-    if (st.closed) return bad('day_closed', 409);
-    if (st.booked >= st.capacity) return bad('day_full', 409);
-    const { data: taken, error: takenErr } = await db.rpc('booked_slots', { day: r.day });
-    if (takenErr) throw takenErr;
-    if ((taken as string[] | null)?.includes(r.slot)) return bad('slot_taken', 409);
+    // A code makes this the code holder's booking (their customer row, balance, member price).
+    // The email typed is then ignored; name and phone stay on the booking.
+    const acct = await account(r.memberCode, req);
+    if (acct instanceof Response) return acct;
+    const mem = acct && await memberOf(acct, cfg);
+    const cars: CarLine[] = r.cars.map((c) => ({ service: c.service, vehicleType: c.vehicleType }));
+    const quote = bookingQuote(cfg, cars, mem); // server price, never the client's
+    if (r.expectedTotal !== null && r.expectedTotal !== quote.payable) return json({ error: 'price_changed', quote }, 409);
 
-    // Only Cloudflare's header is trusted for the IP (the platform overwrites it); without it
-    // the per-IP cap is skipped and the per-email cap still applies.
+    // Only Cloudflare's header is trusted for the IP hash (the platform overwrites it); without
+    // it the per-IP cap is skipped and the per-email cap still applies.
     const cfIp = req.headers.get('cf-connecting-ip');
     const ipHash = cfIp ? await ipHashOf(cfIp) : null;
 
-    // customer row keyed by email, same as `book`. An existing row is never renamed: anyone
-    // can type any email here, so the name they give lives on this booking (detail.name) only.
-    await db.from('customers').upsert({ id: crypto.randomUUID(), email: r.email, name: r.name }, { onConflict: 'email', ignoreDuplicates: true });
-    const { data: cust } = await db.from('customers').select('id').eq('email', r.email).single();
-    if (!cust) return bad('server_error', 500);
+    let customerId: string;
+    if (acct) {
+      customerId = acct.customerId;
+    } else {
+      // customer row keyed by email, same as `book`. An existing row is never renamed: anyone
+      // can type any email here, so the name they give lives on this booking (detail.name) only.
+      await db.from('customers').upsert({ id: crypto.randomUUID(), email: r.email, name: r.name }, { onConflict: 'email', ignoreDuplicates: true });
+      const { data: cust } = await db.from('customers').select('id').eq('email', r.email).single();
+      if (!cust) return bad('server_error', 500);
+      customerId = cust.id;
+    }
+
+    // Balance only with a code (a guest's email proves nothing). Short balance = the normal
+    // demo-deposit step; a balance spent in the meantime is caught in detail_reserve.
+    const debit = acct && r.useBalance && quote.deposit > 0 && await walletBalance(db, customerId) >= quote.deposit
+      ? quote.deposit : 0;
 
     const bookingId = crypto.randomUUID();
     const payKey = crypto.randomUUID().replaceAll('-', '');
     const photos = r.photoExts.map((ext) => `${bookingId}/${crypto.randomUUID()}.${ext === 'jpeg' ? 'jpg' : ext}`);
-    const { error: insErr } = await db.from('bookings').insert({
+    const first = r.cars[0];
+    const row = {
       id: bookingId,
-      customer_id: cust.id,
+      customer_id: customerId,
       flow: 'detail_v2',
-      anchored: true, // the app's priority-bump rules must never move a website booking
+      anchored: false, // VIP bumping may move it until the owner confirms the time
       status: 'pending_payment',
       deposit_status: 'pending',
-      items: [{ service: r.service, vehicle: r.vehicleType }],
-      quote: { startingPrice: q.startingPrice, total: q.startingPrice, deposit: q.deposit, remainder: q.balance, balanceDue: q.balance, paidOnline: 0 },
+      items: r.cars.map((c) => ({ service: c.service, vehicle: c.vehicleType })),
+      quote,
       address: `${r.street}, ${r.zip}`,
       preferred_day: r.day,
       time_slot: r.slot,
@@ -156,29 +284,45 @@ const handlers: Record<string, (b: Obj, req: Request) => Promise<Response>> = {
       notes: r.notes,
       remainder_method: 'cash', // placeholder; invoice_pay records the real method
       confirm_token: crypto.randomUUID().replaceAll('-', '') + crypto.randomUUID().replaceAll('-', ''),
+      membership_id: mem?.membershipId ?? null,
+      rank: mem?.rank ?? 0,
       detail: {
-        payKey, ipHash, name: r.name, phone: r.phone, vehicle: r.vehicle, vehicleType: r.vehicleType, service: r.service,
-        condition: r.condition, petHair: r.petHair, zip: r.zip, notes: r.notes, photos,
+        payKey, ipHash, name: r.name, phone: r.phone, cars: r.cars, zip: r.zip, notes: r.notes, photos,
+        ...(acct?.isTest ? { test: true } : {}),
+        // first car in the old single-car fields, for dashboard code that predates cars[]
+        vehicle: { year: first.year, make: first.make }, vehicleType: first.vehicleType, service: first.service,
+        condition: first.condition, petHair: first.petHair,
       },
-    });
-    if (insErr) {
-      // the unique index closes the race two people can run on the same slot
-      if (insErr.code === '23505') return bad('slot_taken', 409);
-      // the capacity trigger (migration 0015) is the atomic guarantee behind the checks above
-      if (insErr.message.includes('day_full')) return bad('day_full', 409);
-      if (insErr.message.includes('day_closed')) return bad('day_closed', 409);
-      if (insErr.message.includes('too_many')) return bad('too_many', 429);
-      console.error('detail reserve insert failed', insErr.message);
+    };
+
+    const { data: res, error: rpcErr } = await db.rpc('detail_reserve', { p_row: row, p_rank: row.rank, p_wallet_debit: debit });
+    if (rpcErr) {
+      const msg = rpcErr.message ?? '';
+      // the reward the price used was spent elsewhere (balance path only): send the new price
+      if (msg.includes('price_changed')) {
+        return json({ error: 'price_changed', quote: bookingQuote(cfg, cars, acct && await memberOf(acct, cfg)) }, 409);
+      }
+      // the advisory lock should make the unique slot index unreachable; belt and braces
+      if (rpcErr.code === '23505') return bad('slot_taken', 409);
+      const hit = RESERVE_ERRORS.find(([k]) => msg.includes(k));
+      if (hit) return bad(hit[1], hit[2]);
+      console.error('detail reserve failed', msg);
       return bad('booking_insert_failed', 500);
     }
 
+    const paidFromBalance = debit > 0;
+    if (paidFromBalance) { // the deposit step is done: tell the owner now
+      const saved = await loadRow(bookingId);
+      if (saved) await notify(saved, cfg);
+    }
+
     // Same order and length as the request's photoExts (null where signing failed), so the
-    // browser pairs each file with its own URL.
+    // client pairs each file with its own URL.
     const uploads = await Promise.all(photos.map(async (path) => {
       const { data, error } = await db.storage.from(BUCKET).createSignedUploadUrl(path);
       return !error && data ? { path, signedUrl: data.signedUrl } : null;
     }));
-    return json({ bookingId, payKey, quote: q, uploads });
+    return json({ bookingId, payKey, quote, uploads, escalated: !!res?.escalated, paidFromBalance });
   },
 
   // The customer closed the dialog on the deposit step: free their held time right away.
@@ -193,18 +337,33 @@ const handlers: Record<string, (b: Obj, req: Request) => Promise<Response>> = {
     const { data: mode } = await db.from('app_config').select('value').eq('key', 'payments_mode').maybeSingle();
     if (String(mode?.value ?? '') !== 'demo') return bad('payments_not_demo', 503); // fail closed
     if (!UUID.test(String(b.bookingId)) || typeof b.payKey !== 'string' || !b.payKey) return bad('not_found', 404);
-    const { data: row } = await db.from('bookings')
-      .select('id, status, preferred_day, time_slot, quote, address, detail, customers(email, name)')
-      .eq('id', b.bookingId).eq('flow', 'detail_v2').maybeSingle();
+    const row = await loadRow(b.bookingId);
     if (!row || row.detail?.payKey !== b.payKey) return bad('not_found', 404);
+    if (row.status !== 'pending_payment') return bad('not_pending', 409);
+
+    // The deposit step completes here, so the reward the price used is spent now. Gone
+    // (spent on another booking meanwhile) = the price no longer holds; the booking stays put.
+    const rewardId = typeof row.quote?.rewardId === 'string' ? row.quote.rewardId : null;
+    if (rewardId) {
+      const { data: claimed } = await db.from('redemptions').update({ status: 'applied', booking_id: row.id })
+        .eq('id', rewardId).eq('status', 'issued').eq('membership_id', row.membership_id).select('id');
+      if (!claimed?.length) return bad('price_changed', 409);
+    }
 
     // one transition, ever: only a pending_payment row can become requested
     const { data: won } = await db.from('bookings')
       .update({ status: 'requested', deposit_status: 'demo' })
       .eq('id', row.id).eq('status', 'pending_payment').select('id');
-    if (!won?.length) return bad('not_pending', 409);
+    if (!won?.length) {
+      // released or swept between the read and here: hand the reward back
+      if (rewardId) {
+        await db.from('redemptions').update({ status: 'issued', booking_id: null })
+          .eq('id', rewardId).eq('booking_id', row.id).eq('status', 'applied');
+      }
+      return bad('not_pending', 409);
+    }
 
-    await notify(row, await pricing());
+    await notify({ ...row, status: 'requested', deposit_status: 'demo' }, await pricing());
     return json({ ok: true, demo: true });
   },
 };
@@ -212,21 +371,37 @@ const handlers: Record<string, (b: Obj, req: Request) => Promise<Response>> = {
 // Only the owner is emailed here. The customer sees the on-screen confirmation, and gets an
 // email when the owner confirms a time (`confirm`). That keeps this public endpoint from
 // sending mail to an address nobody has verified.
-// deno-lint-ignore no-explicit-any
-async function notify(row: any, cfg: DetailPricing) {
+async function notify(row: Obj, cfg: DetailPricing) {
   const d = row.detail ?? {};
   const q = row.quote ?? {};
-  const svc = cfg.services[d.service as keyof DetailPricing['services']]?.name ?? d.service;
-  const veh = cfg.vehicleTypes[d.vehicleType as keyof DetailPricing['vehicleTypes']] ?? d.vehicleType;
-  const car = `${d.vehicle?.year ?? ''} ${d.vehicle?.make ?? ''}`.trim();
-  const when = `${row.preferred_day}${row.time_slot ? ` at ${row.time_slot}` : ''}`;
+  // rows saved before cars[] existed carry one car in the old fields
+  const cars: Obj[] = Array.isArray(d.cars) ? d.cars : [{
+    year: d.vehicle?.year, make: d.vehicle?.make, service: d.service, vehicleType: d.vehicleType,
+    condition: d.condition, petHair: d.petHair,
+  }];
+  const lines: Obj[] = Array.isArray(q.lines) ? q.lines : [{ startingPrice: q.startingPrice }];
+  const svc = (s: string) => cfg.services[s as DetailService]?.name ?? s;
+  const veh = (v: string) => cfg.vehicleTypes[v as keyof DetailPricing['vehicleTypes']] ?? v;
+  const carRows = cars.map((c, i) => {
+    const l = lines[i] ?? {};
+    const price = l.covered ? 'included' : money(l.payable ?? l.startingPrice);
+    return `${esc(`${c.year ?? ''} ${c.make ?? ''}`.trim())} · ${esc(svc(c.service))} · ${esc(veh(c.vehicleType))} — ${price}` +
+      `<br><span style="color:#888">Interior: ${esc(c.condition)} · Pet hair: ${c.petHair ? 'yes' : 'no'}</span>`;
+  }).join('<br>');
+  const tier = typeof q.tier === 'string' ? cfg.membership[q.tier as keyof DetailPricing['membership']]?.name ?? q.tier : null;
+  const when = row.time_slot ? `${row.preferred_day} at ${row.time_slot}` : `${row.preferred_day}, no time yet`;
+  const paid = row.deposit_status === 'paid';
+  const deposit = q.deposit > 0
+    ? `Deposit ${money(q.deposit)} ${paid ? '<b>paid from balance</b>' : '(<b>demo, no money taken</b>)'}.`
+    : 'No deposit (fully covered).';
   try {
-    await sendEmail(ownerEmail(), `New detail request: ${svc}, ${when}`,
+    await sendEmail(ownerEmail(), `${d.test ? '[TEST] ' : ''}New detail request: ${cars.length} car${cars.length > 1 ? 's' : ''}, ${when}`,
       `<h2 style="margin:0 0 8px">New detail request</h2>
-       <p><b>${esc(d.name)}</b> · ${esc(d.phone)} · ${esc(row.customers?.email)}</p>
-       <p>${esc(svc)} · ${esc(veh)}<br>${esc(car)}<br>${esc(when)}<br>${esc(row.address)}</p>
-       <p>Starting at ${money(q.total)}. Deposit ${money(q.deposit)} (<b>demo, no money taken</b>).</p>
-       <p>Interior: ${esc(d.condition)} · Pet hair: ${d.petHair ? 'yes' : 'no'}</p>
+       <p><b>${esc(d.name)}</b> · ${esc(d.phone)} · ${esc(row.customers?.email)}${tier ? ` · <b>${esc(tier)} member</b>` : ''}</p>
+       <p>${carRows}</p>
+       <p>${esc(when)}<br>${esc(row.address)}</p>
+       ${row.time_slot ? '' : '<p><b>Same-tier VIP clash: pick a time with the customer.</b></p>'}
+       <p>${tier ? `Member price ${money(q.payable ?? q.total)} (starting ${money(q.subtotal ?? q.total)})` : `Starting at ${money(q.total)}`}. ${deposit}</p>
        ${d.notes ? `<p>Notes: ${esc(d.notes)}</p>` : ''}
        ${button(adminLink(row.id), 'Open in dashboard')}`);
   } catch (e) {
