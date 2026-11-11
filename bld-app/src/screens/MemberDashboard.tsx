@@ -125,7 +125,7 @@ export default function MemberDashboard({ navigation }: Props) {
               </View>
             ))}
             <View style={s.statRow}>
-              <View style={s.stat}><Text style={s.statLabel}>SAVED SO FAR</Text><Text style={s.statNumber}>${p.savings}</Text><Text style={s.statHint}>Since joining</Text></View>
+              <View style={s.stat}><Text style={s.statLabel}>SAVED SO FAR</Text><Text style={s.statNumber}>${Math.max(0, p.savings)}</Text><Text style={s.statHint}>Since joining</Text></View>
               <View style={s.stat}><Text style={s.statLabel}>YOUR STAMPS</Text><Text style={s.statNumber}>{p.stamps}</Text><Text style={s.statHint}>{perCar} per car detailed</Text></View>
             </View>
           </View>
