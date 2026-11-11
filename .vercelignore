@@ -9,3 +9,6 @@ uploads
 **/.claude-flow
 node_modules
 README.md
+.local-data
+CODEX-PROMPT.md
+.superpowers

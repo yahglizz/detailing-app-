@@ -115,8 +115,8 @@ const detail = {
     return [200, { ok: true, demo: true }];
   },
   release: (b) => {
-    const x = bookings.get(b.bookingId); if (!x || x.payKey !== b.payKey) return [404, { error: 'not_found' }];
-    if (x.status === 'pending_payment') { x.status = 'declined'; save(); }
+    const x = bookings.get(b.bookingId); // a wrong key is a harmless no-op, same as the real function
+    if (x && x.payKey === b.payKey && x.status === 'pending_payment') { x.status = 'declined'; save(); }
     return [200, { ok: true }];
   },
 };
