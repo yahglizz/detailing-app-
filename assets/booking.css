@@ -1,0 +1,135 @@
+/* Starting-price pricing cards and the booking flow. Tokens come from ui/buttons.css (:root). */
+
+/* ——— pricing section ——— */
+.pr-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:16px}
+.pr-card{grid-column:span 2;position:relative;display:flex;flex-direction:column;gap:0;padding:28px}
+.pr-card:nth-child(n+4){grid-column:span 3}
+.pr-card.is-pop{border-color:var(--violet-deep);background:linear-gradient(180deg,#1a1222 0%,var(--surface) 60%)}
+.pr-pop-tag{position:absolute;top:-12px;left:24px;display:inline-flex;align-items:center;gap:6px;background:var(--violet-deep);color:#fff;border:1px solid var(--violet);border-radius:999px;padding:5px 12px;font:700 12px/1 'Hanken Grotesk',sans-serif;letter-spacing:.06em;text-transform:uppercase}
+.pr-pop-tag[hidden]{display:none}
+.pr-pop-tag .i{width:14px;height:14px}
+.pr-card h3{font-size:22px}
+.pr-blurb{font-size:14px;margin-top:6px;min-height:42px}
+.pr-price{display:flex;flex-direction:column;gap:6px;margin:20px 0 4px}
+.pr-price small{font:600 12px/1 'Hanken Grotesk',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.pr-amt{font:800 52px/1 'League Spartan',sans-serif;color:var(--text);letter-spacing:-.02em}
+.pr-feats{display:grid;gap:10px;margin:18px 0 20px;padding-top:18px;border-top:1px solid var(--line)}
+.pr-feats li{display:flex;gap:10px;align-items:flex-start;font-size:14px;color:var(--text)}
+.pr-feats .i{color:var(--violet);margin-top:1px;width:18px;height:18px}
+.pr-meta{display:flex;align-items:center;gap:8px;font-size:13px;margin-top:auto;padding-bottom:16px}
+.pr-meta .i{width:16px;height:16px;color:var(--violet)}
+.pr-card .btn{width:100%}
+.pr-note{margin-top:28px;padding:18px 20px;border:1px solid var(--line);border-radius:10px;background:#0D0C10;font-size:14px;display:flex;gap:12px;align-items:flex-start}
+.pr-note .i{color:var(--violet);margin-top:2px}
+
+/* ——— booking dialog ——— */
+#bk-scrim{position:fixed;inset:0;z-index:10000;background:rgba(4,4,8,.8);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+#bk[hidden],#bk-scrim[hidden]{display:none}
+#bk{position:fixed;z-index:10001;inset:0;display:flex;flex-direction:column;background:var(--bg);color:var(--muted)}
+.bk-top{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 20px;border-bottom:1px solid var(--line);background:#0D0C10}
+.bk-brand{font:800 14px/1 'League Spartan',sans-serif;letter-spacing:.08em;color:var(--text);text-transform:uppercase}
+.bk-prog{display:flex;gap:6px;list-style:none;flex-wrap:wrap}
+.bk-prog li{display:flex;align-items:center;gap:8px;font:600 12px/1 'Hanken Grotesk',sans-serif;letter-spacing:.04em;color:var(--muted);padding:6px 10px;border-radius:999px;border:1px solid transparent}
+.bk-prog li b{display:grid;place-items:center;width:20px;height:20px;border-radius:50%;border:1px solid var(--line);font-size:11px;color:var(--muted)}
+.bk-prog li.is-done b{background:var(--violet-deep);border-color:var(--violet);color:#fff}
+.bk-prog li[aria-current=step]{color:var(--text);border-color:var(--line);background:var(--surface)}
+.bk-prog li[aria-current=step] b{border-color:var(--violet);color:var(--text)}
+.bk-stepcount{display:none;font:600 13px/1 'Hanken Grotesk',sans-serif;color:var(--text)}
+.bk-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.bk-body{max-width:1100px;margin:0 auto;padding:36px 24px 48px;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:40px;align-items:start}
+.bk-main h2{font-size:clamp(28px,4vw,38px);margin-bottom:8px}
+.bk-main h2:focus{outline:none}
+.bk-sub{font-size:15px;margin-bottom:24px}
+.bk-fields{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.bk-fields .full{grid-column:1/-1}
+.bk-group{margin-top:22px}
+.bk-group:first-child{margin-top:0}
+.bk-fields .field{margin:0}
+.bk-fields .field input[aria-invalid=true],.bk-fields .field textarea[aria-invalid=true]{border-color:var(--danger)}
+.bk-fe{color:var(--danger);font-size:13px;margin-top:6px}
+.bk-opts{display:grid;gap:10px}
+.bk-opts.cols3{grid-template-columns:repeat(3,1fr)}
+.bk-opt{display:flex;flex-direction:column;gap:4px;text-align:left;padding:14px 16px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--text);font:600 15px/1.25 'Hanken Grotesk',sans-serif;cursor:pointer;min-height:56px;transition:border-color 160ms ease,background-color 160ms ease}
+.bk-opt small{font:400 13px/1.3 'Hanken Grotesk',sans-serif;color:var(--muted)}
+.bk-opt:hover:not(:disabled){border-color:#655b6e}
+.bk-opt[aria-checked=true],.bk-opt[aria-pressed=true]{border-color:var(--violet);background:#261735}
+.bk-opt:disabled{opacity:.4;cursor:not-allowed}
+.bk-opt .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.bk-opt .row span{font:800 20px/1 'League Spartan',sans-serif}
+.bk-pop{font:700 11px/1 'Hanken Grotesk',sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--violet)}
+.bk-yn{display:flex;gap:10px}
+.bk-yn .bk-opt{flex:1;align-items:center;justify-content:center;min-height:48px}
+.bk-note{display:flex;gap:10px;align-items:flex-start;margin-top:10px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:#0D0C10;font-size:13px}
+.bk-note .i{width:16px;height:16px;color:var(--violet);margin-top:2px}
+.bk-days{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px}
+.bk-day{align-items:center;text-align:center;padding:10px 6px;min-height:64px}
+.bk-day b{font:800 22px/1 'League Spartan',sans-serif;color:var(--text)}
+.bk-day small{text-transform:uppercase;letter-spacing:.08em;font-size:11px}
+.bk-slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px}
+.bk-slots .bk-opt{align-items:center;min-height:48px}
+.bk-files{display:grid;gap:8px;margin-top:10px}
+.bk-file{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:8px 8px 8px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface);font-size:14px;color:var(--text)}
+.bk-file span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bk-review{display:grid;grid-template-columns:auto 1fr auto;gap:0;border:1px solid var(--line);border-radius:10px;background:var(--surface);overflow:hidden}
+.bk-review > *{padding:12px 16px;border-top:1px solid var(--line);font-size:14px}
+.bk-review > :nth-child(-n+3){border-top:0}
+.bk-review .k{color:var(--muted)}
+.bk-review .v{color:var(--text);font-weight:600;word-break:break-word}
+.bk-review button{background:none;border:0;color:var(--violet);font:600 13px/1 'Hanken Grotesk',sans-serif;cursor:pointer;min-height:44px;padding:0 8px}
+.bk-price{margin-top:20px;border:1px solid var(--violet-deep);border-radius:10px;background:#1a1222;padding:20px}
+.bk-price .r{display:flex;justify-content:space-between;align-items:baseline;gap:16px;margin:8px 0;color:var(--muted);font-size:15px}
+.bk-price .r b{color:var(--text);font-weight:700}
+.bk-price .r.big{margin-top:0}
+.bk-price .r.big b{font:800 40px/1 'League Spartan',sans-serif}
+.bk-price .r.due{border-top:1px solid #3b2b4e;padding-top:14px;margin-top:14px;color:var(--text)}
+.bk-price .r.due b{color:var(--violet);font:800 24px/1 'League Spartan',sans-serif}
+.bk-price.is-busy .r b{opacity:.45}
+.bk-legal{font-size:13px;line-height:1.5;margin-top:16px}
+.bk-demo{display:inline-flex;align-items:center;gap:8px;margin-bottom:16px;padding:8px 12px;border:1px dashed var(--violet);border-radius:8px;color:var(--text);font:700 13px/1 'Hanken Grotesk',sans-serif;letter-spacing:.04em;text-transform:uppercase;background:#1a1222}
+.bk-err{margin-top:18px;padding:12px 14px;border:1px solid var(--danger);border-radius:10px;color:var(--text);background:rgba(249,112,102,.08);font-size:14px}
+.bk-err:empty{display:none}
+.bk-nav{display:flex;justify-content:space-between;gap:12px;margin-top:28px}
+.bk-nav .btn-primary{margin-left:auto;min-width:180px}
+.bk-sum{position:sticky;top:24px;border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:22px}
+.bk-sum h3{font-size:13px;font-family:'Hanken Grotesk',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin-bottom:14px}
+.bk-sum .line{display:flex;justify-content:space-between;gap:12px;font-size:14px;margin:8px 0}
+.bk-sum .line b{color:var(--text);text-align:right;font-weight:600}
+.bk-sum .tot{margin-top:16px;padding-top:16px;border-top:1px solid var(--line)}
+.bk-sum .tot .big{font:800 44px/1 'League Spartan',sans-serif;color:var(--text);margin:4px 0 12px;letter-spacing:-.02em}
+.bk-sum .tot small{font:600 12px/1 'Hanken Grotesk',sans-serif;letter-spacing:.14em;text-transform:uppercase}
+.bk-sum .fine{margin-top:14px;text-align:left}
+.bk-bar{display:none}
+.bk-done{text-align:center;padding:12px 0}
+.bk-done .ok-mark{display:inline-grid;place-items:center;width:56px;height:56px;border-radius:50%;background:#1c3a2a;color:var(--ok);margin-bottom:16px}
+.bk-done .ok-mark .i{width:28px;height:28px}
+.bk-ref{font:700 14px/1 ui-monospace,Menlo,monospace;letter-spacing:.1em;color:var(--text);margin:8px 0 24px}
+.bk-spin{width:18px;height:18px;border-radius:50%;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;animation:bkspin .7s linear infinite}
+@keyframes bkspin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:no-preference){.bk-step{animation:bkin .25s ease both}@keyframes bkin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}}
+@media (prefers-reduced-motion:reduce){.bk-spin{animation-duration:2s}}
+
+@media (max-width:900px){
+  .pr-grid{grid-template-columns:1fr 1fr}
+  .pr-card,.pr-card:nth-child(n+4){grid-column:auto}
+  .pr-card:last-child{grid-column:1/-1}
+  .bk-body{grid-template-columns:1fr;padding:24px 20px 140px;gap:0}
+  .bk-sum{display:none}
+  .bk-bar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:2;align-items:center;justify-content:space-between;gap:12px;padding:12px 20px calc(12px + env(safe-area-inset-bottom));background:#0D0C10;border-top:1px solid var(--line)}
+  .bk-bar div{display:flex;flex-direction:column;gap:4px}
+  .bk-bar small{font:600 11px/1 'Hanken Grotesk',sans-serif;letter-spacing:.12em;text-transform:uppercase}
+  .bk-bar b{font:800 24px/1 'League Spartan',sans-serif;color:var(--text)}
+  .bk-bar .dep b{color:var(--violet);text-align:right}
+  .bk-bar .dep{align-items:flex-end}
+  .bk-prog{display:none}
+  .bk-stepcount{display:block}
+}
+@media (max-width:600px){
+  .pr-grid{grid-template-columns:1fr}
+  .pr-card:last-child{grid-column:auto}
+  .pr-amt{font-size:46px}
+  .bk-fields{grid-template-columns:1fr}
+  .bk-opts.cols3{grid-template-columns:1fr}
+  .bk-nav .btn-primary{min-width:0;flex:1}
+  .bk-review{grid-template-columns:auto 1fr}
+  .bk-review button{display:none}
+}

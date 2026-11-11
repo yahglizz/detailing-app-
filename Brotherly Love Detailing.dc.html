@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/ui/buttons.css">
+<link rel="stylesheet" href="assets/booking.css">
 <style>
 /* Obsidian + one violet accent. Tokens come from assets/ui/buttons.css (:root). */
 *{box-sizing:border-box;margin:0;padding:0}
@@ -319,8 +320,8 @@ h1 em{font-style:normal;color:var(--violet)}
         <span><b>BROTHERLY LOVE</b><small>MINISTRY DETAILING</small></span>
       </a>
       <div class="nav-links">
-        <a href="#services">Services</a>
-        <a href="#packages">Packages</a>
+        <a href="#services">Pricing</a>
+        <a href="#packages">Membership</a>
         <a href="#gallery">Gallery</a>
         <a href="#reviews">Reviews</a>
         <a href="#quote">Contact</a>
@@ -340,8 +341,8 @@ h1 em{font-style:normal;color:var(--violet)}
         <h1 class="rv rv2"><span class="h1-pre">Philadelphia's</span>Brotherly <em>Standard</em> of Clean</h1>
         <p class="lede rv rv3">Premium mobile detailing built on faith and integrity.</p>
         <div class="cta-row rv rv4">
-          <button type="button" class="btn btn-primary btn-lg" onClick="{{ openModal }}">Book Your Detail</button>
-          <a href="#packages" class="btn btn-secondary btn-lg">View Packages</a>
+          <button type="button" class="btn btn-primary btn-lg" data-bk-open>Book Your Detail</button>
+          <a href="#services" class="btn btn-secondary btn-lg">See Pricing</a>
         </div>
       </div>
     </div>
@@ -364,7 +365,7 @@ h1 em{font-style:normal;color:var(--violet)}
           <li><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-calendar"></use></svg></span>Choose day and time</li>
           <li><span class="ic"><svg class="i" aria-hidden="true"><use href="#i-lock"></use></svg></span>Small deposit locks it in</li>
         </ol>
-        <button type="button" class="btn btn-primary btn-lg" onClick="{{ openModal }}">Book Your Detail <svg class="i" aria-hidden="true"><use href="#i-arrow-right"></use></svg></button>
+        <button type="button" class="btn btn-primary btn-lg" data-bk-open>Book Your Detail <svg class="i" aria-hidden="true"><use href="#i-arrow-right"></use></svg></button>
       </div>
       <div class="app-phone">
         <video ref="{{ videoRef }}" src="assets/app-showcase.mp4" autoplay muted loop playsinline aria-label="Booking app preview"></video>
@@ -376,21 +377,58 @@ h1 em{font-style:normal;color:var(--violet)}
   <section id="services" class="sec">
     <div class="wrap">
       <div class="sec-head">
-        <p class="eyebrow">Services</p>
-        <h2>Everything your ride needs</h2>
+        <p class="eyebrow">Pricing</p>
+        <h2>Simple starting prices</h2>
+        <p class="lede">Pick a package, tell us about your vehicle, and reserve your time with a small deposit. We come to you in Delaware and the Philadelphia area.</p>
       </div>
-      <div class="sv-grid">
-        <article class="card sv-card"><img src="assets/services/svc-exterior.jpg" alt="" loading="lazy" /><div class="sv-body"><h3>Exterior Wash &amp; Wax</h3><p>Hand wash, wheels, protective wax.</p><div class="sv-foot"><span class="sv-price">from<span class="sv-amt" id="bld-price-outside">$45</span></span><button type="button" class="btn btn-secondary btn-sm sv-book" data-name="Exterior Wash &amp; Wax"><span class="lbl-add"><svg class="i" aria-hidden="true"><use href="#i-plus"></use></svg>Add</span><span class="lbl-added"><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg>Added</span></button></div></div></article>
-        <article class="card sv-card"><img src="assets/services/svc-interior.jpg" alt="" loading="lazy" /><div class="sv-body"><h3>Interior Detail</h3><p>Vacuum, steam clean, protect.</p><div class="sv-foot"><span class="sv-price">from<span class="sv-amt" id="bld-price-inside">$60</span></span><button type="button" class="btn btn-secondary btn-sm sv-book" data-name="Interior Detail"><span class="lbl-add"><svg class="i" aria-hidden="true"><use href="#i-plus"></use></svg>Add</span><span class="lbl-added"><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg>Added</span></button></div></div></article>
-        <article class="card sv-card"><img src="assets/services/svc-full.jpg" alt="" loading="lazy" /><div class="sv-body"><h3>Full Detail</h3><p>Inside and out, top to bottom.</p><div class="sv-foot"><span class="sv-price">from<span class="sv-amt" id="bld-price-full">$120</span></span><button type="button" class="btn btn-secondary btn-sm sv-book" data-name="Full Detail"><span class="lbl-add"><svg class="i" aria-hidden="true"><use href="#i-plus"></use></svg>Add</span><span class="lbl-added"><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg>Added</span></button></div></div></article>
-        <article class="card sv-card"><img src="assets/services/svc-ceramic.jpg" alt="" loading="lazy" /><div class="sv-body"><h3>Ceramic Coating</h3><p>Long-term, glossy paint protection.</p><div class="sv-foot"><span class="sv-price">from<span class="sv-amt" id="bld-price-ceramic">$199</span></span><button type="button" class="btn btn-secondary btn-sm sv-book" data-name="Ceramic Coating"><span class="lbl-add"><svg class="i" aria-hidden="true"><use href="#i-plus"></use></svg>Add</span><span class="lbl-added"><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg>Added</span></button></div></div></article>
-        <article class="card sv-card"><img src="assets/services/svc-headlight.jpg" alt="" loading="lazy" /><div class="sv-body"><h3>Headlight Restoration</h3><p>Clear haze for brighter nights.</p><div class="sv-foot"><span class="sv-price">from<span class="sv-amt">$40</span></span><button type="button" class="btn btn-secondary btn-sm sv-book" data-name="Headlight Restoration"><span class="lbl-add"><svg class="i" aria-hidden="true"><use href="#i-plus"></use></svg>Add</span><span class="lbl-added"><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg>Added</span></button></div></div></article>
-        <article class="card sv-card"><img src="assets/services/svc-engine.jpg" alt="" loading="lazy" /><div class="sv-body"><h3>Engine Bay &amp; Extras</h3><p>Engine bay, pet hair, odor.</p><div class="sv-foot"><span class="sv-price">from<span class="sv-amt">$35</span></span><button type="button" class="btn btn-secondary btn-sm sv-book" data-name="Engine Bay &amp; Extras"><span class="lbl-add"><svg class="i" aria-hidden="true"><use href="#i-plus"></use></svg>Add</span><span class="lbl-added"><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg>Added</span></button></div></div></article>
+      <div class="pr-grid">
+        <article class="card pr-card" data-pr-card="exterior">
+          <span class="pr-pop-tag" hidden><svg class="i i-fill" aria-hidden="true"><use href="#i-star"></use></svg>Most Popular</span>
+          <h3 class="pr-name">Exterior Wash</h3>
+          <p class="pr-blurb">A careful hand wash that leaves the outside clean and glossy.</p>
+          <div class="pr-price"><small>Starting at</small><span class="pr-amt">$40</span></div>
+          <ul class="pr-feats"><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>Hand wash and dry</span></li><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>Wheels and tires cleaned</span></li><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>Exterior windows</span></li><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>Tire dressing</span></li></ul>
+          <p class="pr-meta"><svg class="i" aria-hidden="true"><use href="#i-clock"></use></svg><span class="pr-dur">Estimated 45 to 60 minutes</span></p>
+          <button type="button" class="btn btn-secondary" data-bk-open data-service="exterior">Book Now</button>
+        </article>
+        <article class="card pr-card" data-pr-card="refresh">
+          <span class="pr-pop-tag" hidden><svg class="i i-fill" aria-hidden="true"><use href="#i-star"></use></svg>Most Popular</span>
+          <h3 class="pr-name">Interior Refresh</h3>
+          <p class="pr-blurb">A light clean to reset the cabin between details.</p>
+          <div class="pr-price"><small>Starting at</small><span class="pr-amt">$80</span></div>
+          <ul class="pr-feats"><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>Full vacuum</span></li><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>Dash, console and door panels wiped</span></li><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>Interior windows</span></li><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>Floor mats cleaned</span></li><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>Trash removed</span></li></ul>
+          <p class="pr-meta"><svg class="i" aria-hidden="true"><use href="#i-clock"></use></svg><span class="pr-dur">Estimated 1 to 1.5 hours</span></p>
+          <button type="button" class="btn btn-secondary" data-bk-open data-service="refresh">Book Now</button>
+        </article>
+        <article class="card pr-card" data-pr-card="deep">
+          <span class="pr-pop-tag" hidden><svg class="i i-fill" aria-hidden="true"><use href="#i-star"></use></svg>Most Popular</span>
+          <h3 class="pr-name">Interior Deep Clean</h3>
+          <p class="pr-blurb">Top-to-bottom interior cleaning for built-up dirt, stains and odor.</p>
+          <div class="pr-price"><small>Starting at</small><span class="pr-amt">$150</span></div>
+          <ul class="pr-feats"><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>Deep vacuum including seams and vents</span></li><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>Seat and carpet shampoo</span></li><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>Steam clean of trim and cupholders</span></li><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>Leather cleaned and conditioned</span></li><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>Interior windows</span></li></ul>
+          <p class="pr-meta"><svg class="i" aria-hidden="true"><use href="#i-clock"></use></svg><span class="pr-dur">Estimated 2.5 to 3.5 hours</span></p>
+          <button type="button" class="btn btn-secondary" data-bk-open data-service="deep">Book Now</button>
+        </article>
+        <article class="card pr-card is-pop" data-pr-card="full">
+          <span class="pr-pop-tag"><svg class="i i-fill" aria-hidden="true"><use href="#i-star"></use></svg>Most Popular</span>
+          <h3 class="pr-name">Full Detail</h3>
+          <p class="pr-blurb">Inside and out, top to bottom. Our most booked service.</p>
+          <div class="pr-price"><small>Starting at</small><span class="pr-amt">$175</span></div>
+          <ul class="pr-feats"><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>Exterior hand wash and wheels</span></li><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>Full interior deep clean</span></li><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>Spray wax or sealant</span></li><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>Windows inside and out</span></li><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>Tire dressing</span></li></ul>
+          <p class="pr-meta"><svg class="i" aria-hidden="true"><use href="#i-clock"></use></svg><span class="pr-dur">Estimated 3.5 to 4.5 hours</span></p>
+          <button type="button" class="btn btn-primary" data-bk-open data-service="full">Book Now</button>
+        </article>
+        <article class="card pr-card" data-pr-card="premium">
+          <span class="pr-pop-tag" hidden><svg class="i i-fill" aria-hidden="true"><use href="#i-star"></use></svg>Most Popular</span>
+          <h3 class="pr-name">Premium Full Detail</h3>
+          <p class="pr-blurb">The most thorough service, with paint decontamination and longer-lasting protection.</p>
+          <div class="pr-price"><small>Starting at</small><span class="pr-amt">$260</span></div>
+          <ul class="pr-feats"><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>Everything in Full Detail</span></li><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>Clay bar paint decontamination</span></li><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>Hand-applied paint sealant</span></li><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>Engine bay cleaned</span></li><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>Headlight cleaning</span></li></ul>
+          <p class="pr-meta"><svg class="i" aria-hidden="true"><use href="#i-clock"></use></svg><span class="pr-dur">Estimated 5 to 6.5 hours</span></p>
+          <button type="button" class="btn btn-secondary" data-bk-open data-service="premium">Book Now</button>
+        </article>
       </div>
-      <div class="sv-bar">
-        <p><svg class="i" aria-hidden="true"><use href="#i-lock"></use></svg>Deposit today. Rest at the detail.</p>
-        <button type="button" class="btn btn-primary btn-lg" data-sv-open><svg class="i" aria-hidden="true"><use href="#i-cart"></use></svg>View cart <span class="count" data-sv-count data-n="0"></span></button>
-      </div>
+      <div class="pr-note"><svg class="i" aria-hidden="true"><use href="#i-shield"></use></svg><p>Prices shown are starting estimates. Final pricing is confirmed after an in-person vehicle inspection. Your booking deposit is applied toward your final service total. Any additional charges must be approved before work begins.</p></div>
     </div>
   </section>
 
@@ -398,35 +436,9 @@ h1 em{font-style:normal;color:var(--violet)}
   <section id="packages" class="sec sec-alt">
     <div class="wrap">
       <div class="sec-head center">
-        <p class="eyebrow">Packages</p>
-        <h2>Simple, honest pricing</h2>
+        <p class="eyebrow">Membership</p>
+        <h2>Save with a membership</h2>
       </div>
-      <div class="pk-toggle">
-        <div class="seg" role="group" aria-label="Pricing">
-          <button type="button" class="{{ oneTimeCls }}" aria-pressed="{{ oneTimePressed }}" onClick="{{ setOneTime }}">One-Time</button>
-          <button type="button" class="{{ memberCls }}" aria-pressed="{{ isMember }}" onClick="{{ setMember }}">Member</button>
-        </div>
-        <span class="{{ saveCls }}">Save up to 20%</span>
-      </div>
-      <div class="pk-grid">
-        <sc-for list="{{ plans }}" as="plan" hint-placeholder-count="3">
-          <article class="{{ plan.cardCls }}">
-            <sc-if value="{{ plan.isPopular }}" hint-placeholder-val="{{ false }}">
-              <span class="tag pk-pop"><svg class="i i-fill" aria-hidden="true"><use href="#i-star"></use></svg>Most Popular</span>
-            </sc-if>
-            <h3>{{ plan.name }}</h3>
-            <p>{{ plan.tagline }}</p>
-            <div class="pk-price"><span class="pk-amt">${{ plan.priceStr }}</span><span class="pk-unit">{{ plan.unitLabel }}</span></div>
-            <ul class="feats">
-              <sc-for list="{{ plan.features }}" as="feat" hint-placeholder-count="4">
-                <li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg>{{ feat }}</li>
-              </sc-for>
-            </ul>
-            <button type="button" class="{{ plan.ctaCls }}" onClick="{{ openModal }}">Book This Wash</button>
-          </article>
-        </sc-for>
-      </div>
-
       <!-- MEMBERSHIP -->
       <div class="card mb">
         <div>
@@ -493,11 +505,11 @@ h1 em{font-style:normal;color:var(--violet)}
       <div>
         <p class="eyebrow">Instant quote</p>
         <h2>Your price in seconds</h2>
-        <p class="lede">New customers save 10% on the first wash.</p>
+        <p class="lede">Starting prices for your vehicle. We confirm the final price in person after inspecting it.</p>
         <div class="contact">
           <a class="btn btn-secondary" href="tel:+12155550123"><svg class="i" aria-hidden="true"><use href="#i-phone"></use></svg>(215) 555-0123</a>
           <a class="btn btn-secondary" href="mailto:hello@brotherlylovedetailing.com"><svg class="i" aria-hidden="true"><use href="#i-mail"></use></svg>Email us</a>
-          <span class="tag"><svg class="i" aria-hidden="true"><use href="#i-pin"></use></svg>PA · NJ · DE</span>
+          <span class="tag"><svg class="i" aria-hidden="true"><use href="#i-pin"></use></svg>Delaware &amp; Philadelphia area</span>
         </div>
       </div>
 
@@ -510,19 +522,20 @@ h1 em{font-style:normal;color:var(--violet)}
         <fieldset>
           <legend>Service</legend>
           <div id="iq-service" class="chips" data-pick role="group" aria-label="Service">
-            <button type="button" class="chip" aria-pressed="false" data-v="outside">Exterior</button>
-            <button type="button" class="chip" aria-pressed="false" data-v="inside">Interior</button>
+            <button type="button" class="chip" aria-pressed="false" data-v="exterior">Exterior Wash</button>
+            <button type="button" class="chip" aria-pressed="false" data-v="refresh">Interior Refresh</button>
+            <button type="button" class="chip" aria-pressed="false" data-v="deep">Interior Deep Clean</button>
             <button type="button" class="chip" aria-pressed="false" data-v="full">Full Detail</button>
-            <button type="button" class="chip" aria-pressed="false" data-v="ceramic">Ceramic</button>
+            <button type="button" class="chip" aria-pressed="false" data-v="premium">Premium Full Detail</button>
             <button type="button" class="chip" aria-pressed="false" data-v="membership">Membership</button>
           </div>
         </fieldset>
         <fieldset>
-          <legend>Vehicle size</legend>
-          <div id="iq-size" class="seg seg-wide" data-pick role="group" aria-label="Vehicle size">
+          <legend>Vehicle type</legend>
+          <div id="iq-size" class="seg seg-wide" data-pick role="group" aria-label="Vehicle type">
             <button type="button" class="is-selected" aria-pressed="true" data-v="sedan">Sedan</button>
-            <button type="button" aria-pressed="false" data-v="suv">SUV</button>
-            <button type="button" aria-pressed="false" data-v="truck">Truck</button>
+            <button type="button" aria-pressed="false" data-v="suv">SUV / Truck</button>
+            <button type="button" aria-pressed="false" data-v="large">Large SUV</button>
           </div>
         </fieldset>
         <button id="iq-go" type="button" class="btn btn-primary btn-lg"><svg class="i" aria-hidden="true"><use href="#i-bolt"></use></svg>Get my instant price</button>
@@ -530,8 +543,8 @@ h1 em{font-style:normal;color:var(--violet)}
         <div id="iq-result" class="q-res" style="display:none" aria-live="polite">
           <div id="iq-price"></div>
           <div id="iq-actions" class="q-actions" style="display:flex">
-            <button id="iq-accept" type="button" class="btn btn-secondary"><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg>Accept offer</button>
-            <button id="iq-decline" type="button" class="btn btn-ghost">Decline</button>
+            <button id="iq-book" type="button" class="btn btn-primary" data-bk-open><svg class="i" aria-hidden="true"><use href="#i-calendar"></use></svg>Book this</button>
+            <button id="iq-accept" type="button" class="btn btn-secondary"><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg>Send me this quote</button>
           </div>
         </div>
         <div id="iq-done" class="q-done" style="display:none" aria-live="polite"></div>
@@ -585,11 +598,11 @@ h1 em{font-style:normal;color:var(--violet)}
       </div>
       <div class="ft-col">
         <h3>Explore</h3>
-        <a href="#services">Services</a><a href="#packages">Packages</a><a href="#gallery">Gallery</a><a href="#reviews">Reviews</a><button type="button" onClick="{{ openModal }}">Request a Quote</button>
+        <a href="#services">Pricing</a><a href="#packages">Membership</a><a href="#gallery">Gallery</a><a href="#reviews">Reviews</a><button type="button" onClick="{{ openModal }}">Request a Quote</button>
       </div>
       <div class="ft-col">
         <h3>Contact</h3>
-        <a href="tel:+12155550123">(215) 555-0123</a><a href="mailto:hello@brotherlylovedetailing.com">hello@brotherlylovedetailing.com</a><span>PA · NJ · DE Tri-State</span>
+        <a href="tel:+12155550123">(215) 555-0123</a><a href="mailto:hello@brotherlylovedetailing.com">hello@brotherlylovedetailing.com</a><span>Delaware &amp; Philadelphia area</span>
       </div>
     </div>
     <div class="wrap"><div class="ft-base">© 2026 Brotherly Love Ministry Detailing</div></div>
@@ -598,103 +611,30 @@ h1 em{font-style:normal;color:var(--violet)}
 </div>
 </x-dc>
 
-<!-- cart + checkout (visual only). Static markup outside <x-dc> so the template runtime never re-renders it. -->
-<button type="button" id="sv-fab" class="btn btn-secondary btn-lg" aria-label="Open cart"><svg class="i" aria-hidden="true"><use href="#i-cart"/></svg>Cart <span class="count" id="sv-fab-n" data-n="0"></span></button>
-<div id="sv-scrim"></div>
-<aside id="sv-cart" class="sv-panel" role="dialog" aria-modal="true" aria-label="Your cart">
-  <div class="sv-h"><span>Your cart</span><button type="button" class="btn btn-icon" data-close aria-label="Close cart"><svg class="i" aria-hidden="true"><use href="#i-close"/></svg></button></div>
-  <div class="sv-items" id="sv-items"></div>
-  <div class="sv-sum">
-    <div class="sv-row"><span>Estimated total</span><span id="sv-c-total">$0</span></div>
-    <div class="sv-row due"><span>Deposit due now (25%)</span><span id="sv-c-dep">$0</span></div>
-    <button type="button" class="btn btn-primary btn-lg" id="sv-checkout">Check out <svg class="i" aria-hidden="true"><use href="#i-arrow-right"/></svg></button>
-    <div class="sv-note">Only a deposit today. Pay the rest at the detail.</div>
+<!-- Starting-price booking flow (assets/booking.js). Static markup outside <x-dc> so the template runtime never re-renders it. -->
+<div id="bk-scrim" hidden></div>
+<div id="bk" role="dialog" aria-modal="true" aria-labelledby="bk-title" hidden>
+  <div class="bk-top">
+    <span class="bk-brand">Book a detail</span>
+    <ol class="bk-prog" id="bk-prog" aria-label="Progress"></ol>
+    <span class="bk-stepcount" id="bk-stepcount" aria-live="polite"></span>
+    <button type="button" class="btn btn-icon" data-close aria-label="Close booking"><svg class="i" aria-hidden="true"><use href="#i-close"/></svg></button>
   </div>
-</aside>
-<div id="sv-co" class="sv-panel" role="dialog" aria-modal="true" aria-label="Checkout">
-  <div class="sv-h"><span>Checkout</span><button type="button" class="btn btn-icon" data-close aria-label="Close checkout"><svg class="i" aria-hidden="true"><use href="#i-close"/></svg></button></div>
-  <div class="sv-co-grid">
-    <div class="sv-form">
-      <div class="field"><label for="sv-name">Name</label><input id="sv-name" autocomplete="name" placeholder="Your name"></div>
-      <div class="field"><label for="sv-phone">Phone</label><input id="sv-phone" type="tel" autocomplete="tel" placeholder="(215) 555-0123"></div>
-      <div class="field full"><label for="sv-email">Email</label><input id="sv-email" type="email" autocomplete="email" placeholder="you@email.com"></div>
-      <fieldset class="full"><legend>Vehicle size</legend><div class="seg seg-wide" data-pick role="group" aria-label="Vehicle size"><button type="button" class="is-selected" aria-pressed="true">Sedan</button><button type="button" aria-pressed="false">SUV</button><button type="button" aria-pressed="false">Truck</button></div></fieldset>
-      <fieldset class="full"><legend>Window</legend><div class="chips" data-pick role="group" aria-label="Time window"><button type="button" class="chip is-selected" aria-pressed="true"><svg class="i" aria-hidden="true"><use href="#i-clock"/></svg> Morning</button><button type="button" class="chip" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-clock"/></svg> Afternoon</button></div></fieldset>
-      <div class="field"><label for="sv-date">Date</label><input type="date" id="sv-date"></div>
-      <div class="field"><label for="sv-zip">Zip</label><input id="sv-zip" inputmode="numeric" autocomplete="postal-code" placeholder="19104"></div>
-      <div class="field full"><label for="sv-addr">Address</label><input id="sv-addr" autocomplete="street-address" placeholder="Where should we come?"></div>
-    </div>
-    <div class="sv-aside">
-      <div id="sv-co-lines"></div>
-      <div class="sv-row"><span>Estimated total</span><span id="sv-o-total">$0</span></div>
-      <div class="sv-row"><span>Balance at the detail</span><span id="sv-o-bal">$0</span></div>
-      <div class="sv-row due"><span>Deposit today</span><span id="sv-o-dep">$0</span></div>
-      <button type="button" class="btn btn-primary btn-lg" id="sv-pay"><svg class="i" aria-hidden="true"><use href="#i-lock"/></svg>Pay deposit</button>
-      <div class="sv-note" id="sv-pay-note" aria-live="polite">Final price is confirmed by vehicle size. Card payment connects at launch.</div>
+  <div class="bk-scroll">
+    <div class="bk-body">
+      <div class="bk-main" id="bk-main">
+        <h2 id="bk-title" tabindex="-1"></h2>
+        <div id="bk-step"></div>
+        <div class="bk-err" id="bk-err" role="alert"></div>
+        <div class="bk-nav" id="bk-nav"></div>
+      </div>
+      <aside class="bk-sum" id="bk-sum" aria-label="Booking summary"></aside>
     </div>
   </div>
+  <div class="bk-bar" id="bk-bar"></div>
 </div>
+<script src="assets/booking.js"></script>
 <script>
-(function(){
-  var DEPOSIT=0.25; // ponytail: hardcoded 25%; read catalog.config.depositPercent when payments are wired
-  var cart=[], lastFocus=null;
-  var $=function(s){return document.querySelector(s)};
-  var money=function(n){return '$'+(n%1?n.toFixed(2):n)};
-  var esc=function(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})};
-  var icon=function(id){return '<svg class="i" aria-hidden="true"><use href="#i-'+id+'"/></svg>'};
-  function priceOf(btn){var el=btn.closest('.sv-card').querySelector('.sv-amt');return el?parseFloat(el.textContent.replace(/[^0-9.]/g,''))||0:0}
-  function totals(){var t=0,n=0;cart.forEach(function(i){t+=i.price*i.qty;n+=i.qty});return{t:t,n:n,d:Math.round(t*DEPOSIT*100)/100}}
-  function render(){
-    var T=totals();
-    $('#sv-fab').style.display=T.n?'inline-flex':'none';
-    $('#sv-fab-n').setAttribute('data-n',T.n);
-    document.querySelectorAll('[data-sv-count]').forEach(function(c){c.setAttribute('data-n',T.n)});
-    $('#sv-items').innerHTML=cart.length?cart.map(function(i,k){
-      return '<div class="sv-it"><div><b>'+esc(i.name)+'</b><small>from '+money(i.price)+'</small>'+
-        '<div class="stepper" role="group" aria-label="Quantity for '+esc(i.name)+'">'+
-        '<button type="button" data-d="-1" data-k="'+k+'" aria-label="Decrease quantity">'+icon('minus')+'</button>'+
-        '<output>'+i.qty+'</output>'+
-        '<button type="button" data-d="1" data-k="'+k+'" aria-label="Increase quantity">'+icon('plus')+'</button></div></div>'+
-        '<b>'+money(i.price*i.qty)+'</b></div>';
-    }).join(''):'<div class="sv-empty">Your cart is empty.<br>Pick a service to start.</div>';
-    ['#sv-c-total','#sv-o-total'].forEach(function(s){$(s).textContent=money(T.t)});
-    ['#sv-c-dep','#sv-o-dep'].forEach(function(s){$(s).textContent=money(T.d)});
-    $('#sv-o-bal').textContent=money(T.t-T.d);
-    $('#sv-co-lines').innerHTML=cart.map(function(i){return '<div class="sv-row"><span>'+esc(i.name)+' x '+i.qty+'</span><span>'+money(i.price*i.qty)+'</span></div>'}).join('');
-    $('#sv-checkout').disabled=!T.n;
-  }
-  function show(id){
-    if(!lastFocus)lastFocus=document.activeElement;
-    $('#sv-scrim').style.display='block';$('#sv-cart').style.display='none';$('#sv-co').style.display='none';
-    $(id).style.display='flex';var x=$(id).querySelector('[data-close]');if(x)x.focus();
-  }
-  function closeAll(){
-    $('#sv-scrim').style.display='none';$('#sv-cart').style.display='none';$('#sv-co').style.display='none';
-    if(lastFocus&&lastFocus.focus)lastFocus.focus();lastFocus=null;
-  }
-  // Delegated on document: the service cards are rendered by the template runtime after
-  // this script runs, so direct listeners would bind to nodes that get replaced.
-  document.addEventListener('click',function(e){
-    var t=e.target;if(!t||!t.closest)return;
-    var b=t.closest('#services .sv-book');
-    if(b){
-      var name=b.getAttribute('data-name'),f=cart.filter(function(i){return i.name===name})[0];
-      if(f)f.qty++;else cart.push({name:name,price:priceOf(b),qty:1});
-      b.classList.add('is-added');
-      setTimeout(function(){b.classList.remove('is-added')},1400);
-      render();lastFocus=b;show('#sv-cart');return;
-    }
-    if(t.closest('[data-sv-open]')||t.closest('#sv-fab')){lastFocus=t.closest('button');show('#sv-cart');return;}
-    var q=t.closest('#sv-items [data-k]');
-    if(q){var k=+q.getAttribute('data-k');cart[k].qty+=parseInt(q.getAttribute('data-d'),10);if(cart[k].qty<1)cart.splice(k,1);render();return;}
-    if(t.closest('[data-close]')||t.id==='sv-scrim'){closeAll();return;}
-    if(t.closest('#sv-checkout')){if(cart.length)show('#sv-co');return;}
-    if(t.closest('#sv-pay')){$('#sv-pay-note').textContent='Visual preview only. Payment is not connected yet.';return;}
-  });
-  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&$('#sv-scrim').style.display==='block')closeAll()});
-  var d=$('#sv-date');if(d)d.min=new Date().toISOString().slice(0,10);
-  render();
-})();
 // Single-select button groups (.seg / .chip) marked data-pick.
 document.addEventListener('click',function(e){
   var b=e.target&&e.target.closest?e.target.closest('[data-pick] button'):null;if(!b)return;
@@ -876,41 +816,29 @@ class Component extends DCLogic {
   }
   var reduced = function(){ return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); };
 
-  // --- Instant quote (live catalog prices, first-wash discount, lead capture) ---
-  var IQ_FB = { services:{outside:45,inside:60,full:120}, extras:{ceramic:199}, sizeMultipliers:{sedan:1,suv:1.25,truck:1.5}, plans:{bronze:{price:79}} };
-  function iqCfg(){ return window.__BLD_CFG || IQ_FB; }
-  var IQ_SVC = { outside:'Exterior Wash & Wax', inside:'Interior Detail', full:'Full Detail', ceramic:'Ceramic Coating', membership:'Membership' };
-  var IQ_SIZE = { sedan:'Sedan', suv:'SUV', truck:'Truck' };
+  // --- Instant quote: starting prices come from the server (detail function), never computed here ---
+  var IQ_SVC = { exterior:'Exterior Wash', refresh:'Interior Refresh', deep:'Interior Deep Clean', full:'Full Detail', premium:'Premium Full Detail', membership:'Membership' };
+  var IQ_SIZE = { sedan:'Sedan', suv:'SUV / Truck', large:'Large SUV / 3-Row' };
   // Service and size are button groups now; the selected button carries the value.
   function iqPick(id){ var b = document.querySelector('#' + id + ' .is-selected'); return b ? b.getAttribute('data-v') : ''; }
-  function iqPrice(svc, size){
-    var c = iqCfg();
-    if (svc === 'ceramic') return Math.round((c.extras && c.extras.ceramic) || IQ_FB.extras.ceramic);
-    if (svc === 'outside' || svc === 'inside' || svc === 'full'){
-      var base = (c.services && c.services[svc]) || IQ_FB.services[svc];
-      var mult = (c.sizeMultipliers && c.sizeMultipliers[size]) || IQ_FB.sizeMultipliers[size] || 1;
-      return Math.round(base * mult);
-    }
-    return null;
-  }
-  function iqInsert(accepted, p, d){
+  function iqInsert(accepted, p){
     var svc = iqPick('iq-service');
     var body = {
       name: document.getElementById('iq-name').value.trim() || null,
       phone: document.getElementById('iq-phone').value.trim() || null,
       email: document.getElementById('iq-email').value.trim() || null,
       service: svc || null, size: iqPick('iq-size') || null,
-      quoted_price: p, discounted_price: d, accepted: accepted
+      quoted_price: p, discounted_price: p, accepted: accepted
     };
     return window.__BLD_LEAD(body);
   }
   var OK_MARK = '<span class="ok-mark"><svg class="i" aria-hidden="true"><use href="#i-check"/></svg></span>';
   // Event delegation on document — robust to the sc- runtime rendering the quote card
   // after this script runs (direct addEventListener at load would miss late nodes).
-  var IQ_CUR = { p: null, d: null };
+  var IQ_CUR = { p: null };
   document.addEventListener('click', function(ev){
     var t = ev.target;
-    var el = (t && t.closest) ? t.closest('#iq-go,#iq-accept,#iq-decline') : null;
+    var el = (t && t.closest) ? t.closest('#iq-go,#iq-accept') : null;
     if (!el || !el.id) return;
     var g = function(id){ return document.getElementById(id); };
     var errEl = g('iq-error'), resEl = g('iq-result'), priceEl = g('iq-price'), actEl = g('iq-actions'), doneEl = g('iq-done');
@@ -922,35 +850,33 @@ class Component extends DCLogic {
       var svc = iqPick('iq-service'), size = iqPick('iq-size') || 'sedan';
       if (!svc){ showErr('Pick a service to see your price.'); return; }
       if (svc === 'membership'){
-        var mp = (iqCfg().plans && iqCfg().plans.bronze && iqCfg().plans.bronze.price) || 79;
+        var bc = window.__BLD_CFG, mp = (bc && bc.plans && bc.plans.bronze && bc.plans.bronze.price) || 79;
         priceEl.innerHTML = '<div class="q-meta">Membership</div><div class="q-now" style="margin-top:6px">$' + mp + '<span class="pk-unit"> /mo and up</span></div>' +
           '<a href="#packages" class="btn btn-ghost" style="margin-top:8px;padding-left:0">View plans <svg class="i" aria-hidden="true"><use href="#i-arrow-right"/></svg></a>';
         actEl.style.display = 'none'; resEl.style.display = 'block'; return;
       }
-      var off = bldOff(); var p = iqPrice(svc, size); var d = Math.round(p * (1 - off / 100)); IQ_CUR = { p: p, d: d };
-      priceEl.innerHTML =
-        '<div class="q-meta">' + IQ_SVC[svc] + ' · ' + IQ_SIZE[size] + '</div>' +
-        '<div style="margin-top:6px"><span class="q-now">$' + d + '</span><span class="q-was">$' + p + '</span></div>' +
-        '<div class="q-off">' + off + '% off your first wash applied</div>';
-      actEl.style.display = 'flex'; resEl.style.display = 'block';
+      if (!window.__BLD_QUOTE){ showErr('The price list is still loading. Try again in a moment.'); return; }
+      el.disabled = true;
+      window.__BLD_QUOTE(svc, size).then(function(q){
+        IQ_CUR = { p: q.startingPrice };
+        priceEl.innerHTML =
+          '<div class="q-meta">' + IQ_SVC[svc] + ' · ' + IQ_SIZE[size] + '</div>' +
+          '<div style="margin-top:6px"><span class="q-meta" style="margin-right:8px">Starting at</span><span class="q-now">$' + q.startingPrice + '</span></div>' +
+          '<div class="q-off">Booking deposit $' + q.deposit + ', credited toward your final total. Final price is confirmed in person.</div>';
+        var bk = g('iq-book'); if (bk) bk.setAttribute('data-service', svc);
+        actEl.style.display = 'flex'; resEl.style.display = 'block';
+      }).catch(function(){ showErr('We couldn’t load that price. Try again in a moment.'); })
+        .then(function(){ el.disabled = false; });
       return;
     }
 
     if (el.id === 'iq-accept'){
       var name = g('iq-name').value.trim(), phone = g('iq-phone').value.trim();
-      if (!name || !phone){ showErr('Add your name and phone so we can lock in your time.'); return; }
-      showErr(''); iqInsert(true, IQ_CUR.p, IQ_CUR.d);
+      if (!name || !phone){ showErr('Add your name and phone so we can follow up.'); return; }
+      showErr(''); iqInsert(true, IQ_CUR.p);
       resEl.style.display = 'none'; doneEl.style.display = 'block';
-      doneEl.innerHTML = OK_MARK + '<h3>You’re locked in!</h3>' +
-        '<p>We’ll text you shortly to set your time. Your ' + bldOff() + '% first-wash price is saved.</p>';
-      return;
-    }
-
-    if (el.id === 'iq-decline'){
-      iqInsert(false, IQ_CUR.p, IQ_CUR.d);
-      resEl.style.display = 'none'; doneEl.style.display = 'block';
-      doneEl.innerHTML = '<h3>No worries.</h3>' +
-        '<p>Your ' + bldOff() + '% off the first wash still stands. Text us at (215) 555-0123.</p>';
+      doneEl.innerHTML = OK_MARK + '<h3>Quote saved.</h3>' +
+        '<p>We’ll reach out to confirm the details. The final price is confirmed in person after we inspect your vehicle.</p>';
       return;
     }
   });
@@ -975,24 +901,6 @@ class Component extends DCLogic {
     }
   });
 
-  // 10% ribbon on top of every pricing block — inserted post-render at stable anchors
-  // (the template runtime re-parents source-injected nodes, so we add them from JS).
-  function bldRibbon(){
-    return '<span class="ribbon"><svg class="i" aria-hidden="true"><use href="#i-bolt"/></svg>New customers save ' + bldOff() + '% on the first wash</span>';
-  }
-  function bldAddRibbon(anchor, id){
-    if (!anchor || !anchor.parentNode || document.getElementById(id)) return;
-    var r = document.createElement('div');
-    r.id = id; r.innerHTML = bldRibbon();
-    anchor.parentNode.insertBefore(r, anchor);
-  }
-  function bldPlaceRibbons(){
-    bldSyncPromo(); // the template may render after the catalog arrives
-    bldAddRibbon(document.querySelector('#services .sv-grid'), 'bld-ribbon-services');
-    bldAddRibbon(document.querySelector('#packages .pk-toggle'), 'bld-ribbon-packages');
-  }
-  window.addEventListener('load', function(){ setTimeout(bldPlaceRibbons, 300); setTimeout(bldPlaceRibbons, 1200); });
-  setTimeout(bldPlaceRibbons, 1500);
 })();
 </script>
 </body>

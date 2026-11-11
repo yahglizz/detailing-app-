@@ -1,5 +1,8 @@
-import * as fs from 'fs';
-import * as path from 'path';
+// The app's tsconfig has no node types; this test reads the migration file with plain require.
+declare const require: (m: string) => any;
+declare const __dirname: string;
+const fs = require('fs');
+const path = require('path');
 import {
   DEFAULT_DETAIL_PRICING as CFG,
   DetailPricing,

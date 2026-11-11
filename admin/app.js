@@ -947,7 +947,7 @@ function Leads({ onChange }) {
             <small>${l.phone && html`<a href=${`tel:${l.phone}`}><${Icon} name="phone" size=${13} /> ${l.phone}</a>`} ${l.email && html`<a href=${`mailto:${l.email}`}>${l.email}</a>`}</small>
             ${l.message && html`<small style="display:block;margin-top:4px;white-space:pre-wrap">“${l.message}”</small>`}
           </div></div></td>
-          <td><div class="when"><b>${SERVICE[l.service] || l.service || '—'}</b><small>${[SIZE[l.size] || l.size, l.vehicle].filter(Boolean).join(' · ')}</small></div></td>
+          <td><div class="when"><b>${SERVICE[l.service] || DETAIL_SERVICE[l.service] || l.service || '—'}</b><small>${[SIZE[l.size] || DETAIL_VEHICLE[l.size] || l.size, l.vehicle].filter(Boolean).join(' · ')}</small></div></td>
           <td class="hide-sm"><div class="when">${l.quoted_price ? html`<b>${money(l.discounted_price ?? l.quoted_price)}</b><small>${l.accepted ? 'Accepted' : 'Declined'} · was ${money(l.quoted_price)}</small>` : html`<span class="muted small">Asked for a quote</span>`}</div></td>
           <td class="hide-sm muted small">${ago(l.created_at)}</td>
           <td><select class="input" style="min-height:36px;padding:6px 10px;width:auto" value=${l.status} onChange=${(e) => setStatus(l, e.target.value)} aria-label="Lead status">
