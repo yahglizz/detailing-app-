@@ -16,7 +16,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { ALL_SLOTS } from '../_shared/bump.ts';
 import { validateReserve } from '../_shared/detail_booking.ts';
 import {
-  DEFAULT_DETAIL_PRICING, isService, isVehicle, quoteDetail, validateDetailPricing, type DetailPricing,
+  DEFAULT_DETAIL_PRICING, isService, isVehicle, membershipView, quoteDetail, validateDetailPricing, type DetailPricing,
 } from '../_shared/detail_pricing.ts';
 import { adminLink, button, esc, ownerEmail, sendEmail } from '../_shared/notify.ts';
 
@@ -72,7 +72,10 @@ async function pricing(): Promise<DetailPricing> {
 }
 
 const handlers: Record<string, (b: Obj, req: Request) => Promise<Response>> = {
-  config: async () => json({ pricing: await pricing(), slots: ALL_SLOTS, today: todayISO() }),
+  config: async () => {
+    const p = await pricing();
+    return json({ pricing: p, membership: membershipView(p), slots: ALL_SLOTS, today: todayISO() });
+  },
 
   quote: async (b) => {
     if (!isService(b.service)) return bad('bad_service');
@@ -155,7 +158,7 @@ const handlers: Record<string, (b: Obj, req: Request) => Promise<Response>> = {
       confirm_token: crypto.randomUUID().replaceAll('-', '') + crypto.randomUUID().replaceAll('-', ''),
       detail: {
         payKey, ipHash, name: r.name, phone: r.phone, vehicle: r.vehicle, vehicleType: r.vehicleType, service: r.service,
-        condition: r.condition, petHair: r.petHair, water: r.water, power: r.power, zip: r.zip, notes: r.notes, photos,
+        condition: r.condition, petHair: r.petHair, zip: r.zip, notes: r.notes, photos,
       },
     });
     if (insErr) {
@@ -215,16 +218,15 @@ async function notify(row: any, cfg: DetailPricing) {
   const q = row.quote ?? {};
   const svc = cfg.services[d.service as keyof DetailPricing['services']]?.name ?? d.service;
   const veh = cfg.vehicleTypes[d.vehicleType as keyof DetailPricing['vehicleTypes']] ?? d.vehicleType;
-  const car = `${d.vehicle?.year ?? ''} ${d.vehicle?.make ?? ''} ${d.vehicle?.model ?? ''}`.trim();
+  const car = `${d.vehicle?.year ?? ''} ${d.vehicle?.make ?? ''}`.trim();
   const when = `${row.preferred_day}${row.time_slot ? ` at ${row.time_slot}` : ''}`;
-  const flags = [!d.water && 'No water on site', !d.power && 'No power on site'].filter(Boolean) as string[];
   try {
     await sendEmail(ownerEmail(), `New detail request: ${svc}, ${when}`,
       `<h2 style="margin:0 0 8px">New detail request</h2>
        <p><b>${esc(d.name)}</b> · ${esc(d.phone)} · ${esc(row.customers?.email)}</p>
        <p>${esc(svc)} · ${esc(veh)}<br>${esc(car)}<br>${esc(when)}<br>${esc(row.address)}</p>
        <p>Starting at ${money(q.total)}. Deposit ${money(q.deposit)} (<b>demo, no money taken</b>).</p>
-       <p>Interior: ${esc(d.condition)} · Pet hair: ${d.petHair ? 'yes' : 'no'}${flags.length ? `<br><b>${esc(flags.join('. '))}.</b>` : ''}</p>
+       <p>Interior: ${esc(d.condition)} · Pet hair: ${d.petHair ? 'yes' : 'no'}</p>
        ${d.notes ? `<p>Notes: ${esc(d.notes)}</p>` : ''}
        ${button(adminLink(row.id), 'Open in dashboard')}`);
   } catch (e) {

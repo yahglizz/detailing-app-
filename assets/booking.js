@@ -53,8 +53,8 @@
   }
 
   const fresh = () => ({
-    step: 0, service: '', vehicleType: '', year: '', make: '', model: '', condition: '', petHair: null,
-    name: '', phone: '', email: '', street: '', zip: '', water: null, power: null, notes: '', files: [],
+    step: 0, service: '', vehicleType: '', year: '', make: '', condition: '', petHair: null,
+    name: '', phone: '', email: '', street: '', zip: '', notes: '', files: [],
     day: '', slot: '', days: null, slots: [], taken: null, loadingDays: false, loadingSlots: false,
     minSlot: '00:00', quote: null, quoteFor: '', quoting: false, quoteErr: '', booking: null, busy: false, err: '', errs: {}, warn: '',
   });
@@ -77,8 +77,37 @@
       if (b) { b.classList.toggle('btn-primary', !!s.popular); b.classList.toggle('btn-secondary', !s.popular); }
     });
   }
+  // ——— membership plans (static markup is the fallback; the server's numbers replace it) ———
+  let mem = null, memVeh = 'sedan';
+  function memHTML(t) {
+    const m = mem[t], p = m.prices[memVeh];
+    return '<img src="assets/ui/tiers/web/' + t + '.jpg" alt="" width="84" height="84" loading="lazy" />' +
+      '<span class="tier-name">' + esc(m.name) + '</span><p class="mem-tag">' + esc(m.tagline) + '</p>' +
+      '<div class="tier-price">$<span class="mem-price">' + p.price + '</span><small>/mo</small></div>' +
+      (p.save > 0 ? '<p class="mem-save">Worth ' + money(p.worth) + ' booked one at a time. You save ' + money(p.save) + ' a month.</p>' : '') +
+      '<div class="mem-lbl">Every month</div><ul class="mem-list">' + m.includes.map((x) => '<li>' + icon('check') + '<span>' + esc(x) + '</span></li>').join('') + '</ul>' +
+      '<div class="mem-lbl">Member perks</div><ul class="mem-list">' + m.perks.map((x) => '<li>' + icon('check') + '<span>' + esc(x) + '</span></li>').join('') + '</ul>' +
+      '<button type="button" class="btn btn-secondary btn-sm" data-mem-ask="' + t + '">Ask about ' + esc(m.name) + '</button>';
+  }
+  function patchMembership() {
+    const root = $('#bld-tiers');
+    if (!mem || !cfg || !root) return;
+    ['bronze', 'silver', 'gold'].forEach((t) => {
+      if (!mem[t]) return;
+      let card = $('[data-mem-tier="' + t + '"]', root);
+      if (!card) { card = document.createElement('article'); card.className = 'tier mem-tier'; card.setAttribute('data-mem-tier', t); root.appendChild(card); }
+      const sig = JSON.stringify(mem[t]) + memVeh;
+      if (card.getAttribute('data-sig') !== sig) { card.innerHTML = memHTML(t); card.setAttribute('data-sig', sig); }
+    });
+    document.querySelectorAll('[data-mem-veh]').forEach((b) => {
+      const v = b.getAttribute('data-mem-veh');
+      if (cfg.vehicleTypes[v] && b.textContent !== cfg.vehicleTypes[v]) b.textContent = cfg.vehicleTypes[v];
+      b.setAttribute('aria-pressed', String(v === memVeh));
+    });
+    window.__BLD_MEM_FROM = Math.min.apply(null, ['bronze', 'silver', 'gold'].filter((t) => mem[t]).map((t) => mem[t].prices.sedan.price));
+  }
   function loadConfig() {
-    return call('config').then((r) => { cfg = r.pricing; patchCards(); if (S && !$('#bk').hidden) render(); }).catch(() => { /* static fallbacks stay */ });
+    return call('config').then((r) => { cfg = r.pricing; mem = r.membership || null; patchCards(); patchMembership(); if (S && !$('#bk').hidden) render(); }).catch(() => { /* static fallbacks stay */ });
   }
 
   // ——— quote (server is the only source of numbers) ———
@@ -151,7 +180,7 @@
     }
     if (st === 1) {
       return '<div class="bk-fields">' + field('year', 'Year', { mode: 'numeric', max: 4, ph: '2021', auto: 'off' }) +
-        field('make', 'Make', { ph: 'Cadillac', max: 40 }) + field('model', 'Model', { ph: 'Escalade', max: 40, full: true }) + '</div>' +
+        field('make', 'Car brand', { ph: 'Toyota', max: 40 }) + '</div>' +
         '<div class="bk-group"><label style="display:block;font:600 12px/1 \'Hanken Grotesk\',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Vehicle type</label>' +
         '<div class="bk-opts cols3" role="group" aria-label="Vehicle type">' + Object.keys(cfg.vehicleTypes).map((v) =>
           '<button type="button" class="bk-opt" data-set="vehicleType" data-v="' + v + '" aria-pressed="' + (S.vehicleType === v) + '">' + esc(cfg.vehicleTypes[v]) +
@@ -170,10 +199,6 @@
         '<h3 style="margin:28px 0 12px;font-size:16px">Service address</h3><div class="bk-fields">' +
         field('street', 'Street address', { auto: 'street-address', max: 120, full: true }) +
         field('zip', 'ZIP code', { mode: 'numeric', auto: 'postal-code', max: 5, ph: '19801' }) + '</div>' +
-        yesno('water', 'Is water available at the location?') +
-        (S.water === false ? '<div class="bk-note">' + icon('drop') + '<span>No problem. We’ll plan for it and let you know if anything changes.</span></div>' : '') +
-        yesno('power', 'Is electricity available at the location?') +
-        (S.power === false ? '<div class="bk-note">' + icon('bolt') + '<span>No problem. We’ll plan for it and let you know if anything changes.</span></div>' : '') +
         '<div class="bk-fields" style="margin-top:22px"><div class="field full"><label for="bk-notes">Special instructions (optional)</label>' +
         '<textarea id="bk-notes" data-k="notes" rows="3" maxlength="500" placeholder="Gate code, where to park, areas to focus on">' + esc(S.notes) + '</textarea></div>' +
         '<div class="field full"><label for="bk-files">Vehicle photos (optional, up to 4)</label><input id="bk-files" type="file" accept="image/*" multiple' + (S.files.length >= MAX_FILES ? ' disabled' : '') + '>' +
@@ -212,7 +237,7 @@
     return '<div class="bk-done"><span class="ok-mark">' + icon('check') + '</span>' +
       '<p class="bk-sub" style="margin-bottom:8px">Thanks, ' + esc(S.name.split(' ')[0]) + '. We’ll email <b style="color:var(--text)">' + esc(S.email) + '</b> once we confirm your exact time.</p>' +
       '<div class="bk-ref">REFERENCE BLD-' + esc(S.booking.bookingId.slice(0, 6).toUpperCase()) + '</div></div>' +
-      '<div class="bk-review">' + [['Package', svc().name], ['Vehicle', vname(S.vehicleType) + ' · ' + [S.year, S.make, S.model].join(' ')],
+      '<div class="bk-review">' + [['Package', svc().name], ['Vehicle', vname(S.vehicleType) + ' · ' + [S.year, S.make].join(' ')],
         ['Requested', fmtDay(S.day) + ' at ' + fmtSlot(S.slot)], ['Address', S.street + ', ' + S.zip]].map((r) => '<span class="k">' + r[0] + '</span><span class="v">' + esc(r[1]) + '</span><span></span>').join('') + '</div>' +
       '<div class="bk-price"><div class="r"><span>Starting price</span><b>' + money(q.startingPrice) + '</b></div>' +
       '<div class="r"><span>Booking deposit (demo, no money taken)</span><b>' + money(q.deposit) + '</b></div>' +
@@ -226,9 +251,9 @@
 
   function reviewHTML() {
     const rows = [
-      ['Package', svc().name, 0], ['Vehicle type', vname(S.vehicleType), 1], ['Vehicle', [S.year, S.make, S.model].join(' '), 1],
+      ['Package', svc().name, 0], ['Vehicle type', vname(S.vehicleType), 1], ['Vehicle', [S.year, S.make].join(' '), 1],
       ['Interior', S.condition.charAt(0).toUpperCase() + S.condition.slice(1) + (S.petHair ? ' · pet hair' : ''), 1],
-      ['Address', S.street + ', ' + S.zip, 2], ['Water / power', (S.water ? 'Water yes' : 'No water') + ' · ' + (S.power ? 'power yes' : 'no power'), 2],
+      ['Address', S.street + ', ' + S.zip, 2],
       ['Contact', S.name + ' · ' + S.phone + ' · ' + S.email, 2], ['Appointment', fmtDay(S.day) + ' at ' + fmtSlot(S.slot), 3],
       ['Photos', S.files.length ? S.files.length + ' attached' : 'None', 2],
     ];
@@ -307,7 +332,7 @@
     if (step === 0 && !S.service) e.service = 'Pick a package to continue.';
     if (step === 1) {
       if (!/^(19|20)\d{2}$/.test(S.year.trim())) e.year = 'Enter a 4-digit year, like 2021.';
-      need('make', 'Enter the make.'); need('model', 'Enter the model.');
+      need('make', 'Enter the car brand, like Toyota.');
       if (!S.vehicleType) e.vehicleType = 'Choose your vehicle type.';
       if (!S.condition) e.condition = 'Choose the interior condition.';
       if (S.petHair === null) e.petHair = 'Tell us if there is pet hair.';
@@ -319,8 +344,6 @@
       if (!EMAIL.test(S.email.trim())) e.email = 'Enter a valid email address.';
       need('street', 'Enter the street address.');
       if (!/^\d{5}$/.test(S.zip.trim())) e.zip = 'Enter a 5-digit ZIP code.';
-      if (S.water === null) e.water = 'Tell us if water is available.';
-      if (S.power === null) e.power = 'Tell us if electricity is available.';
     }
     if (step === 3) {
       if (!S.day) e.day = 'Pick a day.';
@@ -336,9 +359,9 @@
   // ——— actions ———
   function payload() {
     return {
-      name: S.name.trim(), phone: S.phone.trim(), email: S.email.trim(), vehicle: { year: S.year.trim(), make: S.make.trim(), model: S.model.trim() },
+      name: S.name.trim(), phone: S.phone.trim(), email: S.email.trim(), vehicle: { year: S.year.trim(), make: S.make.trim() },
       vehicleType: S.vehicleType, service: S.service, condition: S.condition, petHair: S.petHair, day: S.day, slot: S.slot,
-      street: S.street.trim(), zip: S.zip.trim(), water: S.water, power: S.power, notes: S.notes.trim(),
+      street: S.street.trim(), zip: S.zip.trim(), notes: S.notes.trim(),
       photoExts: S.files.map((f) => extOf(f.name)),
     };
   }
@@ -421,6 +444,10 @@
     if (!t) return;
     const openBtn = t.closest('[data-bk-open]');
     if (openBtn) { open(openBtn.getAttribute('data-service') || ''); return; }
+    const vehBtn = t.closest('[data-mem-veh]');
+    if (vehBtn) { memVeh = vehBtn.getAttribute('data-mem-veh'); patchMembership(); return; }
+    // Joining is by request for now: reuse the page's quote request form.
+    if (t.closest('[data-mem-ask]')) { const q = document.getElementById('open-quote'); if (q) q.click(); return; }
     const root = t.closest('#bk');
     if (!root || !S) return;
     const get = (a) => { const el = t.closest('[' + a + ']'); return el ? el.getAttribute(a) : null; };
@@ -474,5 +501,5 @@
   // Static pricing cards: patch from the server. The page runtime may redraw them, so re-patch.
   loadConfig();
   window.addEventListener('load', () => { setTimeout(patchCards, 400); setTimeout(patchCards, 1500); });
-  setInterval(() => { if (cfg) patchCards(); }, 4000);
+  setInterval(() => { if (cfg) { patchCards(); patchMembership(); } }, 4000);
 })();

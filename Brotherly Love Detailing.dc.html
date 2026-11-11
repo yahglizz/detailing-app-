@@ -326,7 +326,7 @@ h1 em{font-style:normal;color:var(--violet)}
         <a href="#reviews">Reviews</a>
         <a href="#quote">Contact</a>
       </div>
-      <button type="button" class="btn btn-primary" onClick="{{ openModal }}">Get a Quote</button>
+      <button type="button" class="btn btn-primary" id="open-quote" onClick="{{ openModal }}">Get a Quote</button>
     </nav>
   </header>
 
@@ -440,22 +440,17 @@ h1 em{font-style:normal;color:var(--violet)}
         <h2>Save with a membership</h2>
       </div>
       <!-- MEMBERSHIP -->
-      <div class="card mb">
-        <div>
-          <p class="eyebrow">Membership</p>
-          <h3>The Brotherhood Club</h3>
-          <ul class="perks">
-            <li><svg class="i" aria-hidden="true"><use href="#i-calendar"></use></svg>Monthly washes</li>
-            <li><svg class="i" aria-hidden="true"><use href="#i-clock"></use></svg>Priority booking</li>
-            <li><svg class="i" aria-hidden="true"><use href="#i-star"></use></svg>Member pricing</li>
-            <li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg>Cancel anytime</li>
-          </ul>
+      <div class="card mb mem" id="mem-root">
+        <div class="mem-top">
+          <div>
+            <p class="eyebrow">Membership</p>
+            <h3>The Brotherhood Club</h3>
+            <p class="mem-lede">Monthly visits for less than booking them one at a time. Pick your vehicle to see your price.</p>
+          </div>
+          <div class="mem-veh" role="group" aria-label="Vehicle type"><button type="button" class="chip" data-mem-veh="sedan" aria-pressed="true">Sedan</button><button type="button" class="chip" data-mem-veh="suv" aria-pressed="false">SUV / Truck</button><button type="button" class="chip" data-mem-veh="large" aria-pressed="false">Large SUV / 3-Row</button></div>
         </div>
-        <div id="bld-tiers" class="tiers">
-          <div class="tier"><img src="assets/ui/tiers/web/bronze.jpg" alt="" width="84" height="84" loading="lazy" /><div><span class="tier-name">Bronze</span><div class="tier-price">$<span id="bld-tier-bronze">79</span><small>/mo</small></div><div id="bld-tier-bronze-inc" class="tier-inc">2 outside details</div></div><a id="bld-join-bronze" class="btn btn-secondary btn-sm" href="https://buy.stripe.com/00w4gAgbJ2pm4WF5MBgjC00" target="_blank" rel="noopener">Join Bronze <svg class="i" aria-hidden="true"><use href="#i-arrow-up-right"></use></svg></a></div>
-          <div class="tier"><img src="assets/ui/tiers/web/silver.jpg" alt="" width="84" height="84" loading="lazy" /><div><span class="tier-name">Silver</span><div class="tier-price">$<span id="bld-tier-silver">99</span><small>/mo</small></div><div id="bld-tier-silver-inc" class="tier-inc">2 inside details</div></div><a id="bld-join-silver" class="btn btn-secondary btn-sm" href="https://buy.stripe.com/bJe9AU0cL2pm74N6QFgjC01" target="_blank" rel="noopener">Join Silver <svg class="i" aria-hidden="true"><use href="#i-arrow-up-right"></use></svg></a></div>
-          <div class="tier"><img src="assets/ui/tiers/web/gold.jpg" alt="" width="84" height="84" loading="lazy" /><div><span class="tier-name">Gold</span><div class="tier-price">$<span id="bld-tier-gold">199</span><small>/mo</small></div><div id="bld-tier-gold-inc" class="tier-inc">2 full details</div></div><a id="bld-join-gold" class="btn btn-secondary btn-sm" href="https://buy.stripe.com/eVqdRa4t10he1Kta2RgjC02" target="_blank" rel="noopener">Join Gold <svg class="i" aria-hidden="true"><use href="#i-arrow-up-right"></use></svg></a></div>
-        </div>
+        <div id="bld-tiers" class="tiers"><article class="tier mem-tier" data-mem-tier="bronze"><img src="assets/ui/tiers/web/bronze.jpg" alt="" width="84" height="84" loading="lazy" /><span class="tier-name">Bronze</span><p class="mem-tag">Keep it clean between details.</p><div class="tier-price">$<span class="mem-price">65</span><small>/mo</small></div><p class="mem-save">Worth $80 booked one at a time. You save $15 a month.</p><div class="mem-lbl">Every month</div><ul class="mem-list"><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>2 × Exterior Wash</span></li></ul><div class="mem-lbl">Member perks</div><ul class="mem-list"><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>Priority booking over non-members</span></li><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>10% off any other service</span></li><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>Cancel anytime</span></li></ul><button type="button" class="btn btn-secondary btn-sm" data-mem-ask="bronze">Ask about Bronze</button></article><article class="tier mem-tier" data-mem-tier="silver"><img src="assets/ui/tiers/web/silver.jpg" alt="" width="84" height="84" loading="lazy" /><span class="tier-name">Silver</span><p class="mem-tag">Clean inside and out, every month.</p><div class="tier-price">$<span class="mem-price">125</span><small>/mo</small></div><p class="mem-save">Worth $160 booked one at a time. You save $35 a month.</p><div class="mem-lbl">Every month</div><ul class="mem-list"><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>2 × Exterior Wash</span></li><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>1 × Interior Refresh</span></li></ul><div class="mem-lbl">Member perks</div><ul class="mem-list"><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>Priority booking ahead of Bronze</span></li><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>15% off any other service</span></li><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>Cancel anytime</span></li></ul><button type="button" class="btn btn-secondary btn-sm" data-mem-ask="silver">Ask about Silver</button></article><article class="tier mem-tier" data-mem-tier="gold"><img src="assets/ui/tiers/web/gold.jpg" alt="" width="84" height="84" loading="lazy" /><span class="tier-name">Gold</span><p class="mem-tag">A full detail every month, with washes in between.</p><div class="tier-price">$<span class="mem-price">190</span><small>/mo</small></div><p class="mem-save">Worth $255 booked one at a time. You save $65 a month.</p><div class="mem-lbl">Every month</div><ul class="mem-list"><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>2 × Exterior Wash</span></li><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>1 × Full Detail</span></li></ul><div class="mem-lbl">Member perks</div><ul class="mem-list"><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>First priority booking</span></li><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>20% off any other service</span></li><li><svg class="i" aria-hidden="true"><use href="#i-check"></use></svg><span>Cancel anytime</span></li></ul><button type="button" class="btn btn-secondary btn-sm" data-mem-ask="gold">Ask about Gold</button></article></div>
+        <p class="mem-note">Prices are per month for the vehicle type shown. We set your plan up with you directly, and you can cancel anytime. Anything beyond your plan is quoted and approved before work begins.</p>
       </div>
     </div>
   </section>
@@ -577,7 +572,7 @@ h1 em{font-style:normal;color:var(--violet)}
               <div class="field"><label for="m-email">Email</label><input id="m-email" type="email" value="{{ email }}" onInput="{{ onEmail }}" autocomplete="email" placeholder="you@email.com" /></div>
               <div class="f-row">
                 <div class="field"><label for="m-vehicle">Vehicle</label><input id="m-vehicle" value="{{ vehicle }}" onInput="{{ onVehicle }}" placeholder="Year, make, model" /></div>
-                <div class="field"><label for="m-service">Service</label><select id="m-service" value="{{ service }}" onChange="{{ onService }}"><option>Express Shine</option><option>Signature Detail</option><option>Ministry Full Detail</option><option>Ceramic Coating</option><option>Membership</option><option>Not sure — help me choose</option></select></div>
+                <div class="field"><label for="m-service">Service</label><select id="m-service" value="{{ service }}" onChange="{{ onService }}"><option>Exterior Wash</option><option>Interior Refresh</option><option>Interior Deep Clean</option><option>Full Detail</option><option>Premium Full Detail</option><option>Membership</option><option>Not sure — help me choose</option></select></div>
               </div>
               <div class="field"><label for="m-msg">Details</label><textarea id="m-msg" value="{{ message }}" onInput="{{ onMessage }}" placeholder="Condition, location, what you need" rows="3"></textarea></div>
               <div class="q-err">{{ quoteErr }}</div>
@@ -654,7 +649,7 @@ class Component extends DCLogic {
     { name:'Ministry Full Detail', tagline:'Showroom-level treatment.', isPopular:false,
       features:['Everything in Signature','Clay bar & machine polish','Ceramic spray coating','Engine bay & headlights'] },
   ];
-  state = { name:'', phone:'', email:'', vehicle:'', service:'Express Wash', message:'', submitted:false, quoteErr:'', isMember:false, disp:[45,120,220], modalOpen:false };
+  state = { name:'', phone:'', email:'', vehicle:'', service:'Full Detail', message:'', submitted:false, quoteErr:'', isMember:false, disp:[45,120,220], modalOpen:false };
   // Live prices from the catalog (the owner's dashboard): Express = Outside, Signature =
   // Full, Ministry = its package price; member price = the best tier's discount.
   componentDidMount(){
@@ -742,7 +737,7 @@ class Component extends DCLogic {
       onVehicle:set('vehicle'), onService:set('service'), onMessage:set('message'),
       quoteErr: s.quoteErr,
       submit: () => this.sendQuote(),
-      reset: () => this.setState({ name:'', phone:'', email:'', vehicle:'', service:'Express Wash', message:'', submitted:false, quoteErr:'' }),
+      reset: () => this.setState({ name:'', phone:'', email:'', vehicle:'', service:'Full Detail', message:'', submitted:false, quoteErr:'' }),
       plans,
       isMember: s.isMember,
       oneTimePressed: !s.isMember,
@@ -850,7 +845,7 @@ class Component extends DCLogic {
       var svc = iqPick('iq-service'), size = iqPick('iq-size') || 'sedan';
       if (!svc){ showErr('Pick a service to see your price.'); return; }
       if (svc === 'membership'){
-        var bc = window.__BLD_CFG, mp = (bc && bc.plans && bc.plans.bronze && bc.plans.bronze.price) || 79;
+        var mp = window.__BLD_MEM_FROM || 65;
         priceEl.innerHTML = '<div class="q-meta">Membership</div><div class="q-now" style="margin-top:6px">$' + mp + '<span class="pk-unit"> /mo and up</span></div>' +
           '<a href="#packages" class="btn btn-ghost" style="margin-top:8px;padding-left:0">View plans <svg class="i" aria-hidden="true"><use href="#i-arrow-right"/></svg></a>';
         actEl.style.display = 'none'; resEl.style.display = 'block'; return;

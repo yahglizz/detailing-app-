@@ -12,7 +12,7 @@ export interface ReserveInput {
   name: string;
   phone: string;
   email: string;
-  vehicle: { year: string; make: string; model: string };
+  vehicle: { year: string; make: string };
   vehicleType: VehicleType;
   service: DetailService;
   condition: typeof CONDITIONS[number];
@@ -21,8 +21,6 @@ export interface ReserveInput {
   slot: string;
   street: string;
   zip: string;
-  water: boolean;
-  power: boolean;
   notes: string;
   photoExts: string[];
 }
@@ -60,8 +58,7 @@ export function validateReserve(body: unknown, cfg: DetailPricing, today: string
   const slot = str(b.slot, 5);
   const year = str(b.vehicle?.year, 4);
   const make = str(b.vehicle?.make, 40);
-  const model = str(b.vehicle?.model, 40);
-  if (!name || !phone || !email || !street || !zip || !day || !slot || !year || !make || !model) {
+  if (!name || !phone || !email || !street || !zip || !day || !slot || !year || !make) {
     return fail('missing_fields');
   }
 
@@ -75,7 +72,7 @@ export function validateReserve(body: unknown, cfg: DetailPricing, today: string
   if (!validDay(day) || day < today || day > addDays(today, cfg.bookingWindowDays)) return fail('bad_day');
   if (!ALL_SLOTS.includes(slot) || (opts.minSlot && day === today && slot < opts.minSlot)) return fail('bad_slot');
   if (!/^\d{5}$/.test(zip)) return fail('bad_zip');
-  if (typeof b.petHair !== 'boolean' || typeof b.water !== 'boolean' || typeof b.power !== 'boolean') {
+  if (typeof b.petHair !== 'boolean') {
     return fail('bad_answer');
   }
 
@@ -88,9 +85,9 @@ export function validateReserve(body: unknown, cfg: DetailPricing, today: string
     ok: true,
     value: {
       name, phone, email, street, zip, day, slot,
-      vehicle: { year, make, model },
+      vehicle: { year, make },
       vehicleType: b.vehicleType, service: b.service, condition: b.condition,
-      petHair: b.petHair, water: b.water, power: b.power,
+      petHair: b.petHair,
       notes: str(b.notes, 500), photoExts,
     },
   };

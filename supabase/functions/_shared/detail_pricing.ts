@@ -19,11 +19,26 @@ export interface DetailServiceConfig {
   prices: Record<VehicleType, number>;
 }
 
+export const TIERS = ['bronze', 'silver', 'gold'] as const;
+export type MemberTier = typeof TIERS[number];
+
+// A monthly plan: which services are included each month, the monthly price per vehicle type,
+// and the perks. The worth and the saving are derived from the service prices (membershipView),
+// never typed in, so they can't drift when a service price changes.
+export interface MembershipTierConfig {
+  name: string;
+  tagline: string;
+  visits: Partial<Record<DetailService, number>>;
+  perks: string[];
+  prices: Record<VehicleType, number>;
+}
+
 export interface DetailPricing {
   vehicleTypes: Record<VehicleType, string>;
   deposits: Record<VehicleType, number>;
   bookingWindowDays: number;
   services: Record<DetailService, DetailServiceConfig>;
+  membership: Record<MemberTier, MembershipTierConfig>;
 }
 
 // Prices and deposits are the owner's. Inclusions, blurbs and durations are DRAFT copy:
@@ -74,6 +89,31 @@ export const DEFAULT_DETAIL_PRICING: DetailPricing = {
       prices: { sedan: 260, suv: 295, large: 335 },
     },
   },
+  // DRAFT membership: about 20% (Bronze), 22% (Silver) and 25% (Gold) under paying for the same
+  // visits one at a time. Names, visits, perks and monthly prices are for the owner to confirm.
+  membership: {
+    bronze: {
+      name: 'Bronze',
+      tagline: 'Keep it clean between details.',
+      visits: { exterior: 2 },
+      perks: ['Priority booking over non-members', '10% off any other service', 'Cancel anytime'],
+      prices: { sedan: 65, suv: 80, large: 95 },
+    },
+    silver: {
+      name: 'Silver',
+      tagline: 'Clean inside and out, every month.',
+      visits: { exterior: 2, refresh: 1 },
+      perks: ['Priority booking ahead of Bronze', '15% off any other service', 'Cancel anytime'],
+      prices: { sedan: 125, suv: 150, large: 180 },
+    },
+    gold: {
+      name: 'Gold',
+      tagline: 'A full detail every month, with washes in between.',
+      visits: { full: 1, exterior: 2 },
+      perks: ['First priority booking', '20% off any other service', 'Cancel anytime'],
+      prices: { sedan: 190, suv: 230, large: 265 },
+    },
+  },
 };
 
 // Membership test against a fixed list, so '__proto__', 'constructor' and 'toString' never pass.
@@ -96,6 +136,33 @@ export function quoteDetail(cfg: DetailPricing, s: DetailService, v: VehicleType
   const price = startingPrice(cfg, s, v);
   const deposit = depositFor(cfg, s, v);
   return { startingPrice: price, deposit, balance: price - deposit };
+}
+
+export const isTier = (x: unknown): x is MemberTier =>
+  typeof x === 'string' && (TIERS as readonly string[]).includes(x);
+
+// What the website shows for the plans: per vehicle type the monthly price, what the same visits
+// cost one at a time (worth) and the saving (never negative). All derived here, none typed in.
+export function membershipView(cfg: DetailPricing) {
+  const out = {} as Record<MemberTier, {
+    name: string; tagline: string; perks: string[]; includes: string[];
+    prices: Record<VehicleType, { price: number; worth: number; save: number }>;
+  }>;
+  for (const t of TIERS) {
+    const m = cfg.membership[t];
+    const entries = SERVICES.filter((s) => (m.visits[s] ?? 0) > 0);
+    const prices = {} as Record<VehicleType, { price: number; worth: number; save: number }>;
+    for (const v of VEHICLES) {
+      const worth = entries.reduce((sum, s) => sum + (m.visits[s] as number) * cfg.services[s].prices[v], 0);
+      prices[v] = { price: m.prices[v], worth, save: Math.max(0, worth - m.prices[v]) };
+    }
+    out[t] = {
+      name: m.name, tagline: m.tagline, perks: m.perks,
+      includes: entries.map((s) => `${m.visits[s]} × ${cfg.services[s].name}`),
+      prices,
+    };
+  }
+  return out;
 }
 
 // ——— owner edits ———
@@ -145,7 +212,32 @@ export function validateDetailPricing(next: unknown): PricingResult {
     };
   }
   if (popular !== 1) return bad('services.popular');
-  return { ok: true, value: { vehicleTypes, deposits, bookingWindowDays: n.bookingWindowDays, services } };
+
+  const membership = {} as Record<MemberTier, MembershipTierConfig>;
+  for (const t of TIERS) {
+    const m = n.membership?.[t];
+    if (!m || typeof m !== 'object') return bad(`membership.${t}`);
+    if (!text(m.name, 30)) return bad(`membership.${t}.name`);
+    if (!text(m.tagline, 80)) return bad(`membership.${t}.tagline`);
+    if (!Array.isArray(m.perks) || m.perks.length < 1 || m.perks.length > 8 || !m.perks.every((p: unknown) => text(p, 80))) {
+      return bad(`membership.${t}.perks`);
+    }
+    const visits: Partial<Record<DetailService, number>> = {};
+    for (const s of SERVICES) {
+      const c = m.visits?.[s];
+      if (c === undefined) continue;
+      if (!whole(c, 1, 8)) return bad(`membership.${t}.visits.${s}`);
+      visits[s] = c;
+    }
+    if (Object.keys(visits).length < 1) return bad(`membership.${t}.visits`);
+    const prices = {} as Record<VehicleType, number>;
+    for (const v of VEHICLES) {
+      if (!whole(m.prices?.[v], 1, 10000)) return bad(`membership.${t}.prices.${v}`);
+      prices[v] = m.prices[v];
+    }
+    membership[t] = { name: m.name.trim(), tagline: m.tagline.trim(), visits, perks: m.perks.map((p: string) => p.trim()), prices };
+  }
+  return { ok: true, value: { vehicleTypes, deposits, bookingWindowDays: n.bookingWindowDays, services, membership } };
 }
 
 // ——— the in-person invoice ———

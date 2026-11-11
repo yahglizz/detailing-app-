@@ -49,7 +49,8 @@ Expo ~57, React Native 0.86, React 19.2, React Navigation 7, supabase-js 2, Jest
 - Prices live in `catalog.config.detailPricing`; maths in `supabase/functions/_shared/detail_pricing.ts` (Jest: `bld-app/__tests__/detail_*.test.ts`). The website (`assets/booking.js`) and dashboard never compute prices.
 - Backend: edge function `detail` (quote / availability / reserve / pay-demo), admin actions `detail_get`, `invoice_save`, `invoice_approve`, `invoice_pay`, `detail_pricing_get/save`, migration `0015`. Live proof: `scripts/e2e-detail.mjs`.
 - Payments for this flow are a **demo** (`app_config.payments_mode`). Nothing may write `deposit_status = 'paid'` without a confirmed Stripe payment.
-- No travel fees, no distance lookup, no $100 minimum, no first-wash discount in the website quote. The Expo app and memberships still use the old catalog.
+- No travel fees, no distance lookup, no $100 minimum, no first-wash discount in the website quote. The booking form asks only the car's year and brand (no model, no water/electricity questions).
+- Website membership plans (Bronze / Silver / Gold, monthly by vehicle type, worth and saving derived) live in `detailPricing.membership`; joining is by quote request, no checkout. The Expo app and its memberships still use the old catalog and old Stripe links.
 
 ## Run it
 ```bash

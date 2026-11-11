@@ -141,7 +141,8 @@ set config = case
   when config ? 'detailPricing' then config
   else config || jsonb_build_object('detailPricing',
 -- detailPricing:begin
-$json${
+$json$
+{
   "vehicleTypes": {
     "sedan": "Sedan",
     "suv": "SUV / Truck",
@@ -243,8 +244,64 @@ $json${
         "large": 335
       }
     }
+  },
+  "membership": {
+    "bronze": {
+      "name": "Bronze",
+      "tagline": "Keep it clean between details.",
+      "visits": {
+        "exterior": 2
+      },
+      "perks": [
+        "Priority booking over non-members",
+        "10% off any other service",
+        "Cancel anytime"
+      ],
+      "prices": {
+        "sedan": 65,
+        "suv": 80,
+        "large": 95
+      }
+    },
+    "silver": {
+      "name": "Silver",
+      "tagline": "Clean inside and out, every month.",
+      "visits": {
+        "exterior": 2,
+        "refresh": 1
+      },
+      "perks": [
+        "Priority booking ahead of Bronze",
+        "15% off any other service",
+        "Cancel anytime"
+      ],
+      "prices": {
+        "sedan": 125,
+        "suv": 150,
+        "large": 180
+      }
+    },
+    "gold": {
+      "name": "Gold",
+      "tagline": "A full detail every month, with washes in between.",
+      "visits": {
+        "full": 1,
+        "exterior": 2
+      },
+      "perks": [
+        "First priority booking",
+        "20% off any other service",
+        "Cancel anytime"
+      ],
+      "prices": {
+        "sedan": 190,
+        "suv": 230,
+        "large": 265
+      }
+    }
   }
-}$json$::jsonb
+}
+$json$::jsonb
 -- detailPricing:end
   )
 end

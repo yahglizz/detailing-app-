@@ -37,11 +37,10 @@ Design: [`docs/superpowers/specs/2026-11-10-bld-starting-prices-design.md`](docs
   the final bill** (never added on top). Example: Large SUV Full Detail = $235 starting, $45 today,
   $190 balance.
 - **Customer flow:** Package > Vehicle > Address > Appointment > Review > Deposit > Confirmation
-  (`assets/booking.js`). It collects name, phone, email, vehicle year/make/model, vehicle type,
-  interior condition, pet hair, address + ZIP, water and electricity, optional special
-  instructions and up to 4 photos. Condition and pet hair are saved for the inspection and **never
-  change the price**. Water or electricity "No" warns the customer and flags the booking; it
-  doesn't block it.
+  (`assets/booking.js`). It collects name, phone, email, vehicle year and car brand, vehicle type,
+  interior condition, pet hair, address + ZIP, optional special instructions and up to 4 photos.
+  Condition and pet hair are saved for the inspection and **never change the price**. It does not
+  ask about water or electricity (the crew brings its own) or the car model.
 - **Server:** the `detail` edge function (`quote`, `availability`, `reserve`, `pay-demo`) validates
   everything, re-computes the price, checks the day is open and not full and the slot is free,
   and holds the slot for 45 minutes (`sweep` releases unpaid holds). Capacity, one-booking-per-slot
@@ -57,6 +56,21 @@ Design: [`docs/superpowers/specs/2026-11-10-bld-starting-prices-design.md`](docs
   was really paid** (a demo deposit took no money, so the full total is collected), the balance is
   calculated, any deposit above the final total is shown as a refund due, changing the numbers voids the approval, and **Mark paid stays
   locked until approval is recorded**.
+- **Website membership plans (draft, owner to confirm):** three monthly plans priced off the table
+  above and kept in `detailPricing.membership` (edit in the dashboard, Pricing > Starting prices >
+  Memberships). The worth and the saving are worked out from the service prices, never typed in.
+
+  | Plan | Every month | Sedan | SUV / Truck | Large SUV | Perks |
+  |---|---|---:|---:|---:|---|
+  | Bronze | 2 Exterior Washes | $65 (worth $80, save $15) | $80 (worth $100, save $20) | $95 (worth $120, save $25) | Priority booking, 10% off any other service, cancel anytime |
+  | Silver | 2 Exterior Washes + 1 Interior Refresh | $125 (worth $160, save $35) | $150 (worth $195, save $45) | $180 (worth $230, save $50) | Priority ahead of Bronze, 15% off, cancel anytime |
+  | Gold | 2 Exterior Washes + 1 Full Detail | $190 (worth $255, save $65) | $230 (worth $305, save $75) | $265 (worth $355, save $90) | First priority, 20% off, cancel anytime |
+
+  The website shows these with a vehicle picker. **Joining is by request** (the button opens the
+  quote request form); there is no membership checkout on the website yet. The old Stripe payment
+  links for the $79 / $99 / $199 plans are no longer linked from the site, and they still exist in
+  Stripe at the old prices. The Expo app still runs the old plans (Bronze $79 / Silver $99 /
+  Gold $199, two credits each); decide whether to move it to these before the plans are sold.
 - **Not built (owner decision, 2026-11-10):** travel fees / distance lookup, the $100 Exterior Wash
   minimum, and any first-wash discount in the website quote. The Expo app and memberships still
   use the old catalog (Outside $45 / Inside $60 / Full $120 x size multiplier), so **the app and

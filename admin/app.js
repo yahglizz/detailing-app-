@@ -131,6 +131,7 @@ const DETAIL_SERVICE = { exterior: 'Exterior Wash', refresh: 'Interior Refresh',
 const DETAIL_VEHICLE = { sedan: 'Sedan', suv: 'SUV / Truck', large: 'Large SUV / 3-Row' };
 const D_SERVICES = Object.keys(DETAIL_SERVICE);
 const D_VEHICLES = Object.keys(DETAIL_VEHICLE);
+const D_TIERS = ['bronze', 'silver', 'gold'];
 const STATUS = { requested: 'Awaiting', confirmed: 'Confirmed', done: 'Done', paid: 'Paid', refunded: 'Cancelled', declined: 'Cancelled', pending_payment: 'Checking out' };
 const CATEGORIES = [['note', 'Note'], ['damage', 'Damage'], ['complaint', 'Complaint'], ['no_show', 'No-show'], ['payment', 'Payment issue'], ['other', 'Other']];
 const CAT_LABEL = Object.fromEntries(CATEGORIES);
@@ -500,14 +501,10 @@ function DetailPanel({ b, onChanged }) {
     <div class="section"><h4>What the customer chose</h4>
       <dl class="kv">
         <dt>Phone</dt><dd><a href=${`tel:${info.phone}`}>${info.phone}</a></dd>
-        <dt>Vehicle</dt><dd>${[info.vehicle?.year, info.vehicle?.make, info.vehicle?.model].filter(Boolean).join(' ')}</dd>
+        <dt>Vehicle</dt><dd>${[info.vehicle?.year, info.vehicle?.make].filter(Boolean).join(' ')}</dd>
         <dt>Interior condition</dt><dd style="text-transform:capitalize">${info.condition}</dd>
         <dt>Pet hair</dt><dd>${YESNO(info.petHair)}</dd>
-        <dt>Water on site</dt><dd>${YESNO(info.water)}</dd>
-        <dt>Power on site</dt><dd>${YESNO(info.power)}</dd>
       </dl>
-      ${(!info.water || !info.power) && html`<div class="banner" style="margin-top:12px"><${Icon} name="alert" />
-        <div><b>${[!info.water && 'No water', !info.power && 'No power'].filter(Boolean).join(' · ')}</b> on site. Plan for it before you go.</div></div>`}
       <p class="muted small" style="margin:12px 0 0">Condition and pet hair are for your inspection. They do not change the price.</p>
       ${d.photos.length > 0 ? html`<div class="photo-grid" style="margin-top:12px">${d.photos.map((u) => html`
         <a href=${u} target="_blank" rel="noopener"><img src=${u} alt="Customer vehicle photo" loading="lazy" /></a>`)}</div>`
@@ -1029,6 +1026,11 @@ function DetailPricing() {
     try {
       const clean = JSON.parse(JSON.stringify(d));
       for (const k of D_SERVICES) clean.services[k].includes = clean.services[k].includes.map((x) => x.trim()).filter(Boolean);
+      for (const t of D_TIERS) {
+        const m = clean.membership[t];
+        m.perks = m.perks.map((x) => x.trim()).filter(Boolean);
+        m.visits = Object.fromEntries(Object.entries(m.visits).filter(([, c]) => Number(c) > 0));
+      }
       const r = await api('detail_pricing_save', { detailPricing: clean });
       setOrig(r.detailPricing); setD(r.detailPricing);
       toast('Starting prices saved. The website uses them now.');
@@ -1055,6 +1057,20 @@ function DetailPricing() {
           <label class="switch"><input type="radio" name="dp-popular" checked=${d.services[k].popular}
             onChange=${() => setD({ ...d, services: Object.fromEntries(D_SERVICES.map((s) => [s, { ...d.services[s], popular: s === k }])) })} /> Show “Most Popular” on this one</label>
         </div></div>`)}
+      <div><h4 class="sub" style="font-size:13px">Memberships (monthly price by vehicle, what is included, perks)</h4>
+        <p class="muted small" style="margin:-4px 0 12px">The website shows the value of the included visits at your one-time prices and the saving, worked out for you. Set a visit count to 0 to leave a service out. These plans were drafted for you. Check them.</p>
+        <div class="stack" style="gap:18px">${D_TIERS.map((t) => html`<div class="section" style="padding-bottom:0"><h4 style="text-transform:capitalize">${t}</h4>
+          <div class="price-grid">${D_VEHICLES.map((v) => money0(['membership', t, 'prices', v], DETAIL_VEHICLE[v] + ' per month'))}</div>
+          <div class="stack" style="gap:10px;margin-top:12px">
+            <div class="row">
+              <label class="field"><span>Name</span><input class="input" value=${d.membership[t].name} onInput=${(e) => set(['membership', t, 'name'], e.target.value)} /></label>
+              <label class="field"><span>One-line pitch</span><input class="input" value=${d.membership[t].tagline} onInput=${(e) => set(['membership', t, 'tagline'], e.target.value)} /></label>
+            </div>
+            <div class="price-grid">${D_SERVICES.map((k) => html`<label class="field"><span>${DETAIL_SERVICE[k]} per month</span><input class="input" inputmode="numeric"
+              value=${d.membership[t].visits[k] ?? 0} onInput=${(e) => set(['membership', t, 'visits', k], Number(e.target.value.replace(/[^\d]/g, '')) || 0)} /></label>`)}</div>
+            <label class="field"><span>Perks (one per line)</span><textarea class="input" rows="4" value=${d.membership[t].perks.join('\n')}
+              onInput=${(e) => set(['membership', t, 'perks'], e.target.value.split('\n'))}></textarea></label>
+          </div></div>`)}</div></div>
       <div class="row"><button class="btn sm" disabled=${!dirty || busy} onClick=${() => setD(orig)}>Undo</button>
         <button class="btn primary sm" disabled=${!dirty || busy} onClick=${save}>${busy ? 'Saving…' : 'Save starting prices'}</button></div>
     </div></section>`;

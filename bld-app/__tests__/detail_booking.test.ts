@@ -6,7 +6,7 @@ const good = () => ({
   name: '  Jordan Lee ',
   phone: '(302) 555-0148',
   email: 'Jordan@Example.com ',
-  vehicle: { year: '2021', make: 'Cadillac', model: 'Escalade' },
+  vehicle: { year: '2021', make: 'Cadillac' },
   vehicleType: 'large',
   service: 'full',
   condition: 'moderate',
@@ -15,8 +15,6 @@ const good = () => ({
   slot: '10:00',
   street: '12 Market St',
   zip: '19801',
-  water: true,
-  power: false,
   notes: 'Gate code 4411',
   photoExts: ['jpg', 'png'],
 });
@@ -29,7 +27,7 @@ test('a valid body passes and is trimmed / normalised', () => {
   expect(r.value.email).toBe('jordan@example.com');
   expect(r.value.vehicleType).toBe('large');
   expect(r.value.petHair).toBe(true);
-  expect(r.value.power).toBe(false);
+  expect(r.value.vehicle).toEqual({ year: '2021', make: 'Cadillac' });
 });
 
 test.each(['name', 'phone', 'email', 'vehicle', 'street', 'zip', 'day', 'slot'])('missing %s', (k) => {
@@ -89,9 +87,19 @@ test('today: a start time that has passed or is inside the lead time is refused'
   expect(validateReserve({ ...good(), day: TODAY, slot: '17:00' }, CFG, TODAY, { minSlot: '24:00' }).ok).toBe(false);
 });
 
-test('booleans must be real booleans, not strings', () => {
-  const r = validateReserve({ ...good(), water: 'yes' }, CFG, TODAY);
+test('pet hair must be a real boolean, not a string', () => {
+  const r = validateReserve({ ...good(), petHair: 'yes' }, CFG, TODAY);
   expect(r.ok).toBe(false);
+});
+
+test('only year and brand are asked: no model, water or power needed, and extras are dropped', () => {
+  const r = validateReserve({ ...good(), vehicle: { year: '2021', make: 'Toyota', model: 'Camry' }, water: false, power: false }, CFG, TODAY);
+  expect(r.ok).toBe(true);
+  if (!r.ok) return;
+  expect(r.value.vehicle).toEqual({ year: '2021', make: 'Toyota' });
+  expect('water' in r.value).toBe(false);
+  expect('power' in r.value).toBe(false);
+  expect((validateReserve({ ...good(), vehicle: { year: '2021' } }, CFG, TODAY) as any).error).toBe('missing_fields');
 });
 
 test('client-supplied money fields are dropped', () => {

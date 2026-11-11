@@ -60,9 +60,9 @@ const cleanup = [];
 
 const body = (over = {}) => ({
   name: 'E2E TEST Customer', phone: '(302) 555-0148', email: emailOf('a'),
-  vehicle: { year: '2021', make: 'Cadillac', model: 'Escalade' }, vehicleType: 'sedan', service: 'full',
+  vehicle: { year: '2021', make: 'Cadillac' }, vehicleType: 'sedan', service: 'full',
   condition: 'moderate', petHair: true, day: '', slot: '', street: '1 Test St', zip: '19801',
-  water: true, power: false, notes: 'E2E TEST', photoExts: [], ...over,
+  notes: 'E2E TEST', photoExts: [], ...over,
 });
 
 async function main() {

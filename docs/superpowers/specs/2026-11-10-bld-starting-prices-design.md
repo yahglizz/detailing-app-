@@ -91,8 +91,8 @@ hardcodes a price. Jest tests import the module the same way `pricing.test.ts` d
 Migration `0015_detail_booking.sql`:
 
 - `catalog.config` gets `detailPricing` (jsonb merge, old keys untouched).
-- `bookings` gets `detail jsonb` (full name, phone, vehicle year/make/model, vehicle type,
-  service, interior condition, pet hair, water, power, ZIP, special instructions, photo paths),
+- `bookings` gets `detail jsonb` (full name, phone, vehicle year and brand, vehicle type,
+  service, interior condition, pet hair, ZIP, special instructions, photo paths),
   `deposit_status text` (`pending` | `demo` | `paid` | `refunded`, default `pending`), and
   `flow text` (`detail_v2` for new rows, so the app's rows are never mixed up).
 - New table `booking_invoices`: `booking_id` (unique), `service_price`, `extras jsonb`
@@ -137,8 +137,8 @@ Double booking: the slot check plus a unique partial index on
   a compact bar with package, vehicle type and "Starting at $X . Deposit $Y" is pinned to the
   bottom. The disclaimer text from the brief appears on the pricing section, the review step,
   and the confirmation.
-- Fields and validation follow the brief. Water/power "No" does not block: it shows a plain
-  note and is flagged for the owner (builder's call).
+- Fields and validation follow the brief, as changed by the owner on 2026-11-11 (see "Owner changes
+  after the build"): year and car brand only, no water or electricity questions.
 - Demo payment screen carries a visible "Demo payment, no card is charged" label and a button
   named for what it does.
 - Brand: existing tokens only, no new fonts, no emoji.
@@ -146,7 +146,7 @@ Double booking: the slot check plus a unique partial index on
 ### Dashboard (`admin/`)
 
 - Booking detail for `detail_v2` rows gets an "Inspection and invoice" panel under the existing
-  details: customer's choices (condition, pet hair, water, power, notes), photo grid, then
+  details: customer's choices (condition, pet hair, notes), photo grid, then
   final service price, extras list, "Customer approved" checkbox with note, deposit credit,
   balance, and a Mark paid button that stays disabled until approval is recorded.
 - Pricing tab gets a "Detail pricing" editor for the 5 x 3 table, the deposit row, and the
@@ -249,7 +249,7 @@ booking flow off the public site.
 1. The brief's $100 minimum for Exterior Wash under $80 sits inside the travel-fee section, so
    it is skipped with travel fees. One config number and one check to add back.
 2. One vehicle per booking.
-3. Water/power "No" warns and flags, does not block.
+3. (Superseded 2026-11-11: the water and electricity questions were removed.)
 4. Inclusions and durations are drafts.
 5. Photos: 4 max, 5 MB each, private bucket.
 6. "Customer approval" is recorded by the owner in the dashboard (name/note + timestamp), not
@@ -262,7 +262,27 @@ booking flow off the public site.
    **drop the first-wash percent discount**. Old size multipliers go away on the website.
 2. The $100 Exterior Wash minimum is dropped for now, with travel fees.
 
+## Owner changes after the build (2026-11-11)
+
+- **Vehicle step asks only the year and the car brand.** No model. The booking stores
+  `vehicle: { year, make }`. The vehicle type (Sedan / SUV / Large) is still asked, because it
+  sets the price.
+- **No water or electricity questions**, on the form, in the data, in the owner email or in the
+  dashboard. The crew brings its own. A client that still sends `water` / `power` is ignored.
+- **Membership plans re-priced from the new table** (the owner asked for a matching breakdown and
+  perks). Stored as `detailPricing.membership` (bronze / silver / gold): visits per month, monthly
+  price per vehicle type, name, one-line pitch, perks. The website shows worth and saving, both
+  derived by `membershipView` from the service prices. Draft numbers, about 20% / 22% / 25% under
+  booking the same visits one at a time (table in the README). Perks are limited to what the
+  existing app already does (priority booking by tier, a percent off other services) plus
+  "cancel anytime"; the owner confirms them.
+- **Joining is by request.** The plan buttons open the existing quote request form. There is no
+  membership checkout on the site, and the old Stripe join links ($79 / $99 / $199) are removed
+  from the page because they would charge the old prices. The quote request form's service list
+  now uses the five new package names plus Membership.
+
 ## Known mismatch after this ships
 
 The Expo app and members still use the old prices (Outside $45, Inside $60, Full $120 x size
-multiplier). Website and app will show different prices until the app is moved over.
+multiplier), and the app's Bronze $79 / Silver $99 / Gold $199 plans. Website and app will show
+different prices until the app is moved over.

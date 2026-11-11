@@ -12,6 +12,7 @@ import {
   invoiceTotals,
   isService,
   isVehicle,
+  membershipView,
   quoteDetail,
   startingPrice,
   validateDetailPricing,
@@ -99,6 +100,54 @@ describe('validateDetailPricing', () => {
   test('rejects non-objects', () => {
     expect(validateDetailPricing(null).ok).toBe(false);
     expect(validateDetailPricing('x').ok).toBe(false);
+  });
+});
+
+describe('membership', () => {
+  const view = membershipView(CFG);
+  // [tier, vehicle, monthly price, worth booked one at a time, saving]
+  const EXPECT: [string, VehicleType, number, number, number][] = [
+    ['bronze', 'sedan', 65, 80, 15], ['bronze', 'suv', 80, 100, 20], ['bronze', 'large', 95, 120, 25],
+    ['silver', 'sedan', 125, 160, 35], ['silver', 'suv', 150, 195, 45], ['silver', 'large', 180, 230, 50],
+    ['gold', 'sedan', 190, 255, 65], ['gold', 'suv', 230, 305, 75], ['gold', 'large', 265, 355, 90],
+  ];
+  test.each(EXPECT)('%s / %s: $%i a month, worth $%i, save $%i', (t, v, price, worth, save) => {
+    expect((view as any)[t].prices[v]).toEqual({ price, worth, save });
+  });
+  test('every plan saves money at every vehicle size, and higher tiers cost more', () => {
+    for (const v of ['sedan', 'suv', 'large'] as VehicleType[]) {
+      for (const t of ['bronze', 'silver', 'gold'] as const) expect(view[t].prices[v].save).toBeGreaterThan(0);
+      expect(view.bronze.prices[v].price).toBeLessThan(view.silver.prices[v].price);
+      expect(view.silver.prices[v].price).toBeLessThan(view.gold.prices[v].price);
+    }
+  });
+  test('what is included is spelled out from the visits', () => {
+    expect(view.bronze.includes).toEqual(['2 × Exterior Wash']);
+    expect(view.silver.includes).toEqual(['2 × Exterior Wash', '1 × Interior Refresh']);
+    expect(view.gold.includes).toEqual(['2 × Exterior Wash', '1 × Full Detail']);
+  });
+  test('worth follows the service prices: raise a service and the plan worth moves, the saving is never negative', () => {
+    const c = clone();
+    c.services.exterior.prices.sedan = 100;
+    expect(membershipView(c).bronze.prices.sedan.worth).toBe(200);
+    c.membership.bronze.prices.sedan = 999;
+    expect(membershipView(c).bronze.prices.sedan.save).toBe(0);
+  });
+  test('validation: needs a visit, whole prices, a known service, and drops unknown keys', () => {
+    const bad = (mut: (c: any) => void) => { const c: any = clone(); mut(c); return validateDetailPricing(c); };
+    expect(validateDetailPricing(CFG).ok).toBe(true);
+    expect(bad((c) => { delete c.membership; }).ok).toBe(false);
+    expect(bad((c) => { c.membership.gold.visits = {}; }).ok).toBe(false);
+    expect(bad((c) => { c.membership.gold.visits = { full: 0 }; }).ok).toBe(false);
+    expect(bad((c) => { c.membership.gold.visits.full = 1.5; }).ok).toBe(false);
+    expect(bad((c) => { c.membership.gold.prices.suv = 0; }).ok).toBe(false);
+    expect(bad((c) => { c.membership.gold.prices.suv = 12.5; }).ok).toBe(false);
+    expect(bad((c) => { c.membership.gold.perks = []; }).ok).toBe(false);
+    const ok: any = bad((c) => { c.membership.gold.visits.ceramic = 3; c.membership.gold.extra = 'x'; c.membership.platinum = {}; });
+    expect(ok.ok).toBe(true);
+    expect(Object.keys(ok.value.membership)).toEqual(['bronze', 'silver', 'gold']);
+    expect('ceramic' in ok.value.membership.gold.visits).toBe(false);
+    expect('extra' in ok.value.membership.gold).toBe(false);
   });
 });
 
