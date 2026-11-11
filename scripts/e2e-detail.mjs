@@ -55,7 +55,8 @@ const owner = (action, payload = {}) => post('admin', { 'x-staff-code': OWNER },
 const setup = (action, payload = {}) => post('e2e-setup', {}, { token: OWNER, action, ...payload });
 
 const stamp = Date.now();
-const runStart = new Date(stamp - 60_000).toISOString(); // member-reset removes test credits made after this
+const runStart = new Date(stamp - 60_000).toISOString(); // member-reset only touches rows made after this
+let testCredits = 0; // test_balance top-ups this run made; member-reset removes exactly this many
 const prefix = `e2e-detail-${stamp}`;
 const emailOf = (tag) => `${prefix}-${tag}@bldtest.co`;
 const cleanup = [];
@@ -314,6 +315,9 @@ async function pickSlot() {
 
 // E2E_ONLY=16,17,18 runs just those app-sync steps (each one books, and the IP cap is 10/hour).
 const ONLY = (process.env.E2E_ONLY || '').split(',').map((s) => s.trim()).filter(Boolean);
+// 19 pays step 18's booking and 20 checks 19's stamps: pull the prerequisites in
+if (ONLY.includes('20') && !ONLY.includes('19')) ONLY.push('19');
+if (ONLY.includes('19') && !ONLY.includes('18')) ONLY.push('18');
 async function step(name, fn) {
   if (ONLY.length && !ONLY.includes(name.split('.')[0])) return console.log(`SKIP: ${name} (not in E2E_ONLY)`);
   try {
@@ -483,6 +487,7 @@ async function extra() {
   await step('18. balance deposit', async () => {
     const top = await post('member', {}, { code: MC, action: 'test_balance' });
     assert(top.status === 200 && top.body.ok, `test_balance: ${top.status} ${JSON.stringify(top.body)}`);
+    testCredits++;
     const w0 = (await profile()).wallet;
     const p = await pickSlot();
     const cars = [car('premium', 'sedan')]; // not a plan visit, so there is a deposit to take
@@ -509,7 +514,8 @@ async function extra() {
     // fund the test wallet (+$50 a call, test accounts only) until it covers the bill, so this
     // step always proves a real balance payment; the main thread restores the wallet afterwards
     for (let i = 0; i < 12 && dg.body.wallet < owing; i++) {
-      await post('member', {}, { code: MC, action: 'test_balance' });
+      const t = await post('member', {}, { code: MC, action: 'test_balance' });
+      if (t.status === 200 && t.body.ok) testCredits++;
       dg = await owner('detail_get', { id: paidBooking.id });
     }
     assert(dg.body.wallet >= owing, `could not fund test wallet: ${dg.body.wallet} < ${owing}`);
@@ -556,12 +562,19 @@ try {
 } finally {
   console.log('\n--- cleanup ---');
   for (const fn of cleanup.reverse()) { try { await fn(); } catch (e) { console.error(`cleanup step failed: ${e.message}`); } }
+  // both cleanups always run; either one failing fails the run (leftover data is a failure)
   if (MC) {
-    const r = await setup('member-reset', { code: MC, bookingIds: memberBookings, since: runStart });
-    console.log(r.status === 200 && r.body.ok ? `member reset (${r.body.bookings} bookings, ${r.body.testCredits} test credits)` : `member reset failed: ${r.status} ${JSON.stringify(r.body)}`);
+    try {
+      const r = await setup('member-reset', { code: MC, bookingIds: memberBookings, since: runStart, testCredits });
+      if (r.status === 200 && r.body.ok) console.log(`member reset (${r.body.bookings} bookings, ${r.body.testCredits} test credits)`);
+      else { failed = true; console.error(`member reset failed: ${r.status} ${JSON.stringify(r.body)}`); }
+    } catch (e) { failed = true; console.error(`member reset failed: ${e.message}`); }
   }
-  const c = await setup('cleanup', { emailLike: prefix });
-  console.log(c.status === 200 && c.body.ok ? `removed test data (${c.body.bookings ?? 0} bookings)` : `cleanup failed: ${c.status} ${JSON.stringify(c.body)}`);
+  try {
+    const c = await setup('cleanup', { emailLike: prefix });
+    if (c.status === 200 && c.body.ok) console.log(`removed test data (${c.body.deleted?.bookings ?? 0} bookings)`);
+    else { failed = true; console.error(`cleanup failed: ${c.status} ${JSON.stringify(c.body)}`); }
+  } catch (e) { failed = true; console.error(`cleanup failed: ${e.message}`); }
 }
 console.log(failed ? `\nFAILED after ${passes} passing steps` : `\nALL ${passes} STEPS PASSED`);
 process.exit(failed ? 1 : 0);

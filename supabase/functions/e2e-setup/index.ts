@@ -123,18 +123,38 @@ Deno.serve(async (req) => {
       ? await db.from('bookings').select('id').in('id', wanted).eq('customer_id', m.customer_id)
       : { data: [] };
     const ids = (bk ?? []).map((b) => b.id);
+    const fail = (t: string, e: { message: string }) => Response.json({ error: `${t}: ${e.message}` }, { status: 500 });
     if (ids.length) {
-      for (const t of ['payments', 'customer_reports', 'reward_ledger', 'redemptions', 'credit_ledger', 'wallet_ledger']) {
+      // a voucher that existed before the run goes back to the member; one made during the run goes
+      const { error: re } = await db.from('redemptions').update({ status: 'issued', booking_id: null })
+        .in('booking_id', ids).lt('created_at', since);
+      if (re) return fail('redemptions', re);
+      for (const t of ['payments', 'customer_reports', 'reward_ledger', 'redemptions', 'credit_ledger']) {
         const { error } = await db.from(t).delete().in('booking_id', ids);
-        if (error) return Response.json({ error: `${t}: ${error.message}` }, { status: 500 });
+        if (error) return fail(t, error);
       }
+      // only this run's balance moves on these bookings; anything older is kept (and blocks the delete)
+      const { error: we } = await db.from('wallet_ledger').delete().in('booking_id', ids).gte('created_at', since);
+      if (we) return fail('wallet_ledger', we);
       const { error } = await db.from('bookings').delete().in('id', ids);
-      if (error) return Response.json({ error: `bookings: ${error.message}` }, { status: 500 });
+      if (error) return fail('bookings', error);
     }
-    const { data: credits, error: ce } = await db.from('wallet_ledger').delete()
-      .eq('customer_id', m.customer_id).eq('reason', 'test credit').is('booking_id', null).gte('created_at', since).select('id');
-    if (ce) return Response.json({ error: `wallet_ledger: ${ce.message}` }, { status: 500 });
-    return Response.json({ ok: true, bookings: ids.length, testCredits: credits?.length ?? 0 });
+    // exactly the test credits this run made (newest first), never another run's
+    const n = Math.max(0, Math.min(50, Number(body.testCredits) || 0));
+    let credits = 0;
+    if (n) {
+      const { data: rows, error: le } = await db.from('wallet_ledger').select('id')
+        .eq('customer_id', m.customer_id).eq('reason', 'test credit').is('booking_id', null).gte('created_at', since)
+        .order('created_at', { ascending: false }).limit(n);
+      if (le) return fail('wallet_ledger', le);
+      const del = (rows ?? []).map((r) => r.id);
+      if (del.length) {
+        const { error: de } = await db.from('wallet_ledger').delete().in('id', del);
+        if (de) return fail('wallet_ledger', de);
+      }
+      credits = del.length;
+    }
+    return Response.json({ ok: true, bookings: ids.length, testCredits: credits });
   }
 
   return Response.json({ error: 'unknown action' }, { status: 400 });
