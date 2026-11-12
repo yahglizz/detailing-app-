@@ -30,6 +30,7 @@ type DayInfo = { taken: string[]; minSlot?: string; holders?: Record<string, num
 type Paid = { ok?: boolean; day?: string | null; slot?: string | null };
 type Reserved = { bookingId: string; payKey: string; uploads?: ({ path: string; signedUrl: string } | null)[]; escalated?: boolean; paidFromBalance?: boolean };
 
+const STEPS = ['YOUR CARS', 'WHERE & WHEN', 'YOU', 'PHOTOS', 'REVIEW'];
 export const DISCLAIMER = 'Prices shown are starting estimates. Final pricing is confirmed after an in-person vehicle inspection. Your booking deposit is applied toward your final service total. Any additional charges must be approved before work begins.';
 const CONDITIONS: [Condition, string, string][] = [['light', 'LIGHT', 'Mostly clean'], ['moderate', 'MODERATE', 'Everyday dirt'], ['heavy', 'HEAVY', 'Stains or odor']];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -63,6 +64,9 @@ export default function Build({ navigation }: Props) {
   const [useBalance, setUseBalance] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [step, setStep] = useState(0);
+  const scroller = useRef<ScrollView>(null);
+  const goStep = (n: number) => { setError(''); setStep(n); scroller.current?.scrollTo({ y: 0, animated: false }); };
   // A reserved-but-unpaid booking holds its time slot; leaving this screen frees it.
   const hold = useRef<{ bookingId: string; payKey: string } | null>(null);
   const mounted = useRef(true);
@@ -154,27 +158,35 @@ export default function Build({ navigation }: Props) {
   const payWithBalance = useBalance && canUseBalance;
   const savings = quote?.member?.savings ?? 0;
 
-  const validate = () => {
-    for (const [i, c] of state.cars.entries()) {
+  // one list per step so NEXT only checks what's on screen
+  const checks = (n: number) => {
+    if (n === 0) for (const [i, c] of state.cars.entries()) {
       const which = state.cars.length > 1 ? ` for car ${i + 1}` : '';
       if (!/^(19|20)\d{2}$/.test(c.year)) return `Enter the year${which}, like 2019.`;
       if (!c.make.trim()) return `Enter the brand${which}.`;
       if (!c.condition) return `Choose the interior condition${which}.`;
       if (c.petHair === null) return `Tell us if there is pet hair${which}.`;
     }
+    if (n === 1) {
     if (!state.street.trim()) return 'Enter the street address.';
     if (!/^\d{5}$/.test(state.zip.trim())) return 'Enter a 5-digit ZIP code.';
     if (!state.day) return 'Choose a day.';
     if (!state.slot) return 'Choose a time.';
+    }
+    if (n !== 2) return '';
     if (!state.name.trim()) return 'Enter your name.';
     const digits = state.phone.replace(/\D/g, '');
     if (digits.length < 10 || digits.length > 15) return 'Enter a phone number we can text.';
     if (!profile && !looksLikeEmail(state.email)) return "That email doesn't look right.";
     return '';
   };
+  const validate = () => { for (let n = 0; n < 3; n++) { const m = checks(n); if (m) { goStep(n); return m; } } return ''; };
+  const next = () => { const m = checks(step); if (m) setError(m); else goStep(step + 1); };
 
   // Server error code -> what to tell the customer (and fix what we can).
   const explain = async (err: string): Promise<string> => {
+    const at = ({ bad_vehicle: 0, slot_taken: 1, day_full: 1, day_closed: 1, bad_day: 1, bad_slot: 1, bad_zip: 1, bad_email: 2, bad_phone: 2, bad_photos: 3 } as Record<string, number>)[err];
+    if (at !== undefined) goStep(at);
     switch (err) {
       case 'slot_taken': set('slot')(''); if (state.day) void loadDay(state.day); return 'That time just got booked. Pick another time.';
       case 'day_full': case 'day_closed': case 'bad_day':
@@ -310,15 +322,17 @@ export default function Build({ navigation }: Props) {
       <StatusBar style={t.statusBar} />
       <LinearGradient colors={t.bg} style={StyleSheet.absoluteFill} />
       <View style={{ flex: 1, opacity: busy ? 0.6 : 1 }} pointerEvents={busy ? 'none' : 'auto'}>
-      <ScrollView contentContainerStyle={u.content} keyboardShouldPersistTaps="handled">
+      <ScrollView ref={scroller} contentContainerStyle={u.content} keyboardShouldPersistTaps="handled">
         <View style={u.topbar}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Back" disabled={busy} onPress={() => navigation.goBack()} style={u.topButton}><Text style={u.topButtonText}>‹</Text></Pressable>
-          <View style={{ alignItems: 'center' }}><Text style={u.topTitle}>BOOK YOUR DETAIL</Text><Text style={u.topSub}>Everything in one place</Text></View>
+          <Pressable accessibilityRole="button" accessibilityLabel="Back" disabled={busy} onPress={() => step ? goStep(step - 1) : navigation.goBack()} style={u.topButton}><Text style={u.topButtonText}>‹</Text></Pressable>
+          <View style={{ alignItems: 'center' }}><Text style={u.topTitle}>BOOK YOUR DETAIL</Text><Text style={u.topSub}>STEP {step + 1} OF {STEPS.length} · {STEPS[step]}</Text></View>
           <Image source={require('../../assets/bld-logo.png')} style={u.logo} resizeMode="contain" />
         </View>
+        <View style={s.progress}>{STEPS.map((_, i) => <View key={i} style={[s.progressBar, i <= step && s.progressOn]} />)}</View>
+        {step === 0 && <>
         <Text style={u.eyebrow}>THE BROTHERLY LOVE EXPERIENCE</Text>
         <Text style={u.title}>A FRESH START{'\n'}FOR YOUR RIDE.</Text>
-        <Text style={u.intro}>Pick your cars and your package, choose a time, and reserve below.</Text>
+        <Text style={u.intro}>Pick your cars and your package, then tap next.</Text>
         <TestTierSwitch mode={mode} />
 
         <View style={u.sectionHead}><Text style={u.sectionNum}>01</Text><Text style={u.sectionTitle}>YOUR CARS</Text></View>
@@ -376,6 +390,8 @@ export default function Build({ navigation }: Props) {
         </View>)}
         {state.cars.length < MAX_CARS && <Pressable accessibilityRole="button" onPress={() => dispatch({ type: 'ADD_CAR' })} style={s.addCar}><Text style={s.addCarText}>+ ADD ANOTHER CAR</Text></Pressable>}
 
+        </>}
+        {step === 1 && <>
         <View style={u.sectionHead}><Text style={u.sectionNum}>02</Text><Text style={u.sectionTitle}>WHERE & WHEN</Text></View>
         <View style={u.sheet}>
           <Text style={u.fieldHeading}>WHERE SHOULD WE MEET YOU?</Text>
@@ -412,6 +428,8 @@ export default function Build({ navigation }: Props) {
           <TextInput accessibilityLabel="Booking notes" style={[u.input, s.notes]} multiline maxLength={500} placeholder="Gate code, parking, or a quick note" placeholderTextColor={t.faint} keyboardAppearance={mode} value={state.notes} onChangeText={set('notes')} />
         </View>
 
+        </>}
+        {step === 2 && <>
         <View style={u.sectionHead}><Text style={u.sectionNum}>03</Text><Text style={u.sectionTitle}>YOU</Text></View>
         <View style={u.sheet}>
           <Text style={[u.fieldLabel, s.tight]}>YOUR NAME</Text>
@@ -424,6 +442,8 @@ export default function Build({ navigation }: Props) {
             : <TextInput accessibilityLabel="Email address" style={u.input} placeholder="you@email.com" placeholderTextColor={t.faint} keyboardAppearance={mode} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} autoComplete="email" maxLength={254} value={state.email} onChangeText={set('email')} />}
         </View>
 
+        </>}
+        {step === 3 && <>
         <View style={u.sectionHead}><Text style={u.sectionNum}>04</Text><Text style={u.sectionTitle}>PHOTOS</Text></View>
         <View style={u.sheet}>
           <Text style={u.fieldHeading}>OPTIONAL, BUT HELPFUL.</Text>
@@ -437,6 +457,8 @@ export default function Build({ navigation }: Props) {
           {state.photos.length < MAX_PHOTOS && <Pressable accessibilityRole="button" onPress={addPhotos} style={s.addCar}><Text style={s.addCarText}>+ ADD PHOTOS</Text></Pressable>}
         </View>
 
+        </>}
+        {step === 4 && <>
         <View style={u.sectionHead}><Text style={u.sectionNum}>05</Text><Text style={u.sectionTitle}>REVIEW & DEPOSIT</Text></View>
         <LinearGradient colors={brandGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[u.summary, s.summaryTop]}>
           <Text style={u.summaryOverline}>YOUR DETAIL AT A GLANCE</Text>
@@ -480,11 +502,13 @@ export default function Build({ navigation }: Props) {
         </Pressable>}
         {deposit > 0 && !payWithBalance && <Text style={u.hint}>Demo deposit: no money is taken yet.</Text>}
         <Text style={[u.hint, s.disclaimer]}>{DISCLAIMER}</Text>
+        </>}
       </ScrollView>
       </View>
       <SafeAreaView edges={['bottom']} style={u.footer}>
         <View><Text style={u.footerLabel}>{payWithBalance ? 'FROM BALANCE' : 'DEPOSIT TODAY'}</Text><Text style={u.footerAmount}>{quote ? `$${deposit}` : '—'}</Text>{savings > 0 && <Text style={s.footerSave}>SAVING ${savings}</Text>}</View>
-        <Pressable accessibilityRole="button" disabled={busy || !quote} onPress={reserve} style={[u.button, s.footerButton, (busy || !quote) && { opacity: 0.65 }]}>{busy ? <ActivityIndicator color="#fff" /> : <Text style={u.buttonText}>{buttonLabel}</Text>}</Pressable>
+        {step < STEPS.length - 1 ? <Pressable accessibilityRole="button" onPress={next} style={[u.button, s.footerButton]}><Text style={u.buttonText}>NEXT · {STEPS[step + 1]}</Text></Pressable>
+        : <Pressable accessibilityRole="button" disabled={busy || !quote} onPress={reserve} style={[u.button, s.footerButton, (busy || !quote) && { opacity: 0.65 }]}>{busy ? <ActivityIndicator color="#fff" /> : <Text style={u.buttonText}>{buttonLabel}</Text>}</Pressable>}
         {!!error && <Text style={[u.error, s.footerError]}>{error}</Text>}
       </SafeAreaView>
     </SafeAreaView>
@@ -512,6 +536,7 @@ const make = (t: Theme) => StyleSheet.create({
   check: { flexDirection: 'row', gap: 11, alignItems: 'center', minHeight: 64, padding: 12, borderRadius: 17, backgroundColor: t.chip, borderWidth: 1, borderColor: t.chip, marginTop: 14 }, checkOn: { backgroundColor: t.soft, borderColor: t.primary },
   checkCircle: { width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, borderColor: t.faint, alignItems: 'center', justifyContent: 'center' }, checkCircleOn: { backgroundColor: t.primary, borderColor: t.primary }, checkMark: { color: '#FFFFFF', fontWeight: '700' },
   checkTitle: { color: t.text, fontSize: 15, fontWeight: '600' }, checkSub: { color: t.muted, fontSize: 12, marginTop: 2 },
+  progress: { flexDirection: 'row', gap: 6, marginBottom: 18 }, progressBar: { flex: 1, height: 4, borderRadius: 2, backgroundColor: t.chip }, progressOn: { backgroundColor: t.primary },
   disclaimer: { marginTop: 14, fontSize: 11, lineHeight: 16 },
   footerButton: { flexShrink: 1, paddingHorizontal: 16 }, footerError: { width: '100%', textAlign: 'center' }, footerSave: { color: '#F5B942', fontFamily: fonts.heading, fontSize: 10, letterSpacing: 0.8 },
 });
